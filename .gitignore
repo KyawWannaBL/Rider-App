@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+build/
+.next/
+.vercel/
+
+# generated mobile web assets
+android/app/src/main/assets/public/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# customer/demo/data dumps
+*.csv
+*.xlsx
+*.xls
+*Pasted*
+data/raw/
+data/uploads/
+data/backups/
+demo-data/
+mock-data/
+sample-data/
+patch_backups/
+docs/archive/
