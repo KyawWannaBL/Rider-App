@@ -152,7 +152,7 @@ const translations: Record<string, Record<Language, string>> = {
   'driver.toBranch':         { en: 'To Branch',              my: 'ဌာနခွဲသို့' },
   'driver.toRider':          { en: 'To Rider',               my: 'ရိုက်ဒါသို့' },
   'pickup.scan':             { en: 'Scan',                   my: 'စကင်' },
-  'route.totalStops':        { en: 'Total Stops',            my: 'စုစုပေါင်း မှတ်တိုင်' },
+  'route.totalStops':        { en: 'Assigned Stops',            my: 'စုစုပေါင်း မှတ်တိုင်' },
   'route.completeRoute':     { en: 'Complete Route',         my: 'လမ်းကြောင်းပြီးဆုံး' },
   // Helper-specific
   'helper.teamId':           { en: 'Team ID',                my: 'အဖွဲ့ ID' },
