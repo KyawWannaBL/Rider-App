@@ -378,3 +378,174 @@ button[type="submit"] {
     border-radius: 18px;
   }
 }
+
+/* ------------------------------------------------------------------
+   EMERGENCY LOGIN + FIELD APP READABILITY OVERRIDE
+   This overrides old hard-coded dark Tailwind classes in Rider App.
+------------------------------------------------------------------- */
+
+body,
+#root {
+  background: #f4f7fb !important;
+  color: #0f172a !important;
+}
+
+/* Kill old dark blocks from previous Rider App theme */
+[class*="bg-black"],
+[class*="bg-slate-900"],
+[class*="bg-slate-950"],
+[class*="bg-gray-900"],
+[class*="bg-gray-950"],
+[class*="bg-neutral-900"],
+[class*="bg-neutral-950"],
+[class*="bg-zinc-900"],
+[class*="bg-zinc-950"] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #d8e0ec !important;
+}
+
+/* Auth/login panel rescue */
+form,
+form > div,
+form section,
+form article,
+[role="tabpanel"],
+[role="tablist"] {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #d8e0ec !important;
+}
+
+form h1,
+form h2,
+form h3,
+form p,
+form span,
+form label,
+form div {
+  color: #0f172a !important;
+}
+
+/* Login tabs */
+[role="tablist"] {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr);
+  overflow: hidden;
+  border: 1px solid #d8e0ec !important;
+  border-radius: 16px 16px 0 0 !important;
+  background: #eef4fb !important;
+}
+
+[role="tab"],
+form button[role="tab"] {
+  min-height: 44px !important;
+  border: 0 !important;
+  border-right: 1px solid #d8e0ec !important;
+  background: #eef4fb !important;
+  color: #64748b !important;
+  font-weight: 800 !important;
+}
+
+[role="tab"][data-state="active"],
+[role="tab"][aria-selected="true"] {
+  background: #ffffff !important;
+  color: #1d4ed8 !important;
+}
+
+/* Inputs */
+input,
+select,
+textarea {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: none !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Login button must stay blue with white text */
+button[type="submit"],
+form button[type="submit"],
+button:has(svg) {
+  color: inherit;
+}
+
+form button[type="submit"],
+button.bg-blue-600,
+button.bg-blue-700,
+button[class*="bg-blue"] {
+  background: #1d4ed8 !important;
+  color: #ffffff !important;
+  border: 0 !important;
+  border-radius: 16px !important;
+  font-weight: 900 !important;
+}
+
+/* Small login links */
+form a,
+form .text-yellow-500,
+form .text-yellow-400,
+form [class*="text-yellow"] {
+  color: #b77900 !important;
+  font-weight: 700 !important;
+}
+
+/* Main login card shape */
+form {
+  max-width: 520px;
+  margin: 0 auto;
+  border: 1px solid #d8e0ec !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.10) !important;
+  overflow: hidden;
+}
+
+/* Top left Myanmar language chip */
+button,
+a {
+  text-decoration: none;
+}
+
+button[class*="yellow"],
+[class*="text-yellow"] {
+  color: #b77900 !important;
+}
+
+/* Inside screens readability */
+main,
+section,
+article,
+.card,
+.rider-card,
+.job-card,
+.route-card,
+.cod-card,
+.proof-card,
+.form-card {
+  background-color: #ffffff;
+  color: #0f172a !important;
+}
+
+main h1,
+main h2,
+main h3,
+main p,
+main span,
+main div,
+main label {
+  color: inherit;
+}
+
+/* Do not make route body black */
+.min-h-screen,
+.rider-app-shell,
+.field-app-shell {
+  background: #f4f7fb !important;
+  color: #0f172a !important;
+}
