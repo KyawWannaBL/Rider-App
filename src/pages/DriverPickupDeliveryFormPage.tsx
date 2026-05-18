@@ -1,5 +1,5 @@
-import MobileWorkforceGoLivePage from "@/pages/shared/MobileWorkforceGoLivePage";
+import MobileGoLivePage from "@/pages/shared/MobileGoLivePage";
 
 export default function DriverPickupDeliveryFormPage() {
-  return <MobileWorkforceGoLivePage role="driver" mode="pickupForm" />;
+  return <MobileGoLivePage role="driver" mode="pickupForm" />;
 }

@@ -1,8 +1,5 @@
-import { useState } from 'react';
-import { AppShell } from '@/components/AppShell';
-import { ProfileDrawer } from '@/components/ProfileDrawer';
-import PickupDeliveryMobileForm from '@/components/shared/PickupDeliveryMobileForm';
+import MobileGoLivePage from "@/pages/shared/MobileGoLivePage";
+
 export default function RiderPickupDeliveryFormPage() {
-  const [profileOpen, setProfileOpen] = useState(false);
-  return (<><AppShell role="rider" onOpenProfile={() => setProfileOpen(true)}><PickupDeliveryMobileForm sourcePortal="rider" /></AppShell><ProfileDrawer open={profileOpen} onClose={() => setProfileOpen(false)} /></>);
+  return <MobileGoLivePage role="rider" mode="pickupForm" />;
 }

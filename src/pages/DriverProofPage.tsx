@@ -1,5 +1,5 @@
-import MobileWorkforceGoLivePage from "@/pages/shared/MobileWorkforceGoLivePage";
+import MobileGoLivePage from "@/pages/shared/MobileGoLivePage";
 
 export default function DriverProofPage() {
-  return <MobileWorkforceGoLivePage role="driver" mode="proof" />;
+  return <MobileGoLivePage role="driver" mode="proof" />;
 }

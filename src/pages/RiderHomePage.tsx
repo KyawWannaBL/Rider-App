@@ -1,8 +1,5 @@
-import { useState } from 'react';
-import { AppShell } from '@/components/AppShell';
-import { ProfileDrawer } from '@/components/ProfileDrawer';
-import { RiderDashboard } from '@/components/rider/RiderDashboard';
+import MobileGoLivePage from "@/pages/shared/MobileGoLivePage";
+
 export default function RiderHomePage() {
-  const [profileOpen, setProfileOpen] = useState(false);
-  return (<><AppShell role="rider" onOpenProfile={() => setProfileOpen(true)}><RiderDashboard /></AppShell><ProfileDrawer open={profileOpen} onClose={() => setProfileOpen(false)} /></>);
+  return <MobileGoLivePage role="rider" mode="home" />;
 }

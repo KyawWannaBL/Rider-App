@@ -1,5 +1,5 @@
-import MobileWorkforceGoLivePage from "@/pages/shared/MobileWorkforceGoLivePage";
+import MobileGoLivePage from "@/pages/shared/MobileGoLivePage";
 
 export default function DriverSyncPage() {
-  return <MobileWorkforceGoLivePage role="driver" mode="sync" />;
+  return <MobileGoLivePage role="driver" mode="sync" />;
 }

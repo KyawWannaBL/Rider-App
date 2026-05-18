@@ -1,551 +1,316 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* This line tells Vite to compile your Tailwind v4 utility classes */
+@import "tailwindcss";
 
 :root {
-  --be-navy: #0f172a;
-  --be-sidebar: #101827;
-  --be-blue: #1d4ed8;
-  --be-blue-soft: #eff6ff;
-  --be-gold: #f59e0b;
-  --be-green: #059669;
-  --be-red: #dc2626;
-  --be-bg: #f4f7fb;
-  --be-card: #ffffff;
-  --be-border: #d8e0ec;
-  --be-text: #0f172a;
-  --be-muted: #64748b;
+  /* High-End Enterprise Design Tokens */
+  --bg-app: #FAFAFA;               /* Clean off-white background for auth pages */
+  --bg-dashboard: #F8FAFC;         /* Soft, premium slate for interior dashboard */
+  --bg-surface: #FFFFFF;           /* Pure white container surfaces */
+  --bg-input: #F4F4F5;             /* Subtle resting state for inputs */
+  
+  --text-primary: #09090B;         /* Dark onyx for sharp structural typography */
+  --text-secondary: #71717A;       /* Standard muted slate for labels and text */
+  --text-tertiary: #A1A1AA;        /* Lighter tone for metadata/footers */
+  
+  --border-soft: rgba(0, 0, 0, 0.06);
+  --border-internal: #E2E8F0;      /* Clean, razor-thin panel separations */
+  --border-focus: rgba(37, 99, 235, 0.4);
+  
+  --brand-blue: #2563EB;
+  --brand-blue-hover: #1D4ED8;
+  --brand-gold: #F59E0B;
+  
+  /* Micro-depth spatial layer mechanics */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0px 1px 2px rgba(0, 0, 0, 0.02), 
+                 0px 4px 12px rgba(0, 0, 0, 0.03), 
+                 0px 12px 24px -4px rgba(0, 0, 0, 0.04);
+  --shadow-btn: 0px 1px 2px rgba(0, 0, 0, 0.05), 
+                0px 2px 4px rgba(37, 99, 235, 0.1);
 }
 
-* {
+/* ---------------------------------------------------
+   BASE STYLES & LAYOUT WRAPPERS
+--------------------------------------------------- */
+
+body {
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Outer Flexbox Context for Authentication Views */
+.enterprise-auth-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+  background: radial-gradient(circle at top center, rgba(37, 99, 235, 0.03) 0%, transparent 40%), var(--bg-app);
+}
+
+/* ---------------------------------------------------
+   PREMIUM PLATFORM COMPONENT PACK
+--------------------------------------------------- */
+
+/* Structural Elevated Container */
+.premium-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 20px;
+  box-shadow: var(--shadow-card);
+  padding: 2.5rem;
+}
+
+/* Segmented Toggle Control Bar */
+.segmented-control {
+  display: flex;
+  background: var(--bg-input);
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+}
+
+.segment-btn {
+  flex: 1;
+  text-align: center;
+  padding: 0.6rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.segment-btn:hover {
+  color: var(--text-primary);
+}
+
+.segment-btn[data-active="true"] {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Role Profile Grid Matrix */
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.role-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 0.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.role-card:hover {
+  border-color: #D4D4D8;
+  background: var(--bg-app);
+}
+
+.role-card[data-selected="true"] {
+  border-color: var(--brand-blue);
+  background: #F0F5FF;
+}
+
+.role-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+}
+
+.role-card[data-selected="true"] .role-label {
+  color: var(--brand-blue);
+}
+
+/* Input Fields and Typographic Labels */
+.premium-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.premium-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0.875rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
   box-sizing: border-box;
 }
 
-html,
-body,
-#root {
-  min-height: 100%;
+.premium-input:focus {
+  outline: none;
+  background: var(--bg-surface);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-html {
-  background: var(--be-bg);
-  color-scheme: light;
+/* Tactile Gradient Interactive Actions */
+.btn-luxury {
+  width: 100%;
+  padding: 0.875rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #FFFFFF;
+  background: linear-gradient(180deg, var(--brand-blue) 0%, var(--brand-blue-hover) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), var(--shadow-btn);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  margin-top: 1rem;
 }
 
-body {
-  margin: 0;
-  background: var(--be-bg) !important;
-  color: var(--be-text) !important;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+.btn-luxury:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
 }
 
-/* Force readable app even if old dark class remains */
-html.dark,
-body.dark,
-.dark body {
-  background: var(--be-bg) !important;
-  color: var(--be-text) !important;
-  color-scheme: light !important;
+/* ---------------------------------------------------
+   ICON OVERLAP OVERRIDES (UX FIXES)
+--------------------------------------------------- */
+
+/* Forces the text to start well after any absolutely positioned left icons */
+.relative:has(.pointer-events-none) .premium-input,
+.relative:has(.pointer-events-none) input {
+  padding-left: 2.75rem !important; 
 }
 
-/* Do not allow invisible dark-on-dark operational screens */
-main,
-section,
-article,
-.rider-page,
-.field-page,
+/* Prevents password values from clipping behind visibility toggle buttons */
+.relative:has(button) .premium-input,
+.relative:has(button) input {
+  padding-right: 2.75rem !important; 
+}
+
+/* ---------------------------------------------------
+   DASHBOARD LIGHT SYSTEM UPGRADE
+--------------------------------------------------- */
+
+/* Hard-override pitch-black or raw oklch voids on core app shells */
+.min-h-screen,
 .rider-app-shell,
-.rider-enterprise-shell,
-.field-app-shell {
-  color: var(--be-text);
-}
-
-/* Corporate page background */
-.rider-app-shell,
-.rider-enterprise-shell,
 .field-app-shell,
-.min-h-screen {
-  background: var(--be-bg) !important;
+div[style*="background: oklch"] {
+  background-color: var(--bg-dashboard) !important;
+  background: var(--bg-dashboard) !important;
+  color: var(--text-primary) !important;
 }
 
-/* Header / navigation */
+/* Clean White Navigation Headers */
+header, 
 .rider-topbar,
-.field-topbar,
-.mobile-topbar,
-header {
-  background: #ffffff !important;
-  color: var(--be-text) !important;
-  border-bottom: 1px solid var(--be-border);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+.field-topbar {
+  background-color: #FFFFFF !important;
+  border-bottom: 1px solid var(--border-internal) !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
 }
 
-.rider-brand-title,
-.field-brand-title,
-.rider-brand-subtitle,
-.field-brand-subtitle {
-  color: var(--be-text) !important;
-}
-
-.rider-brand-mark,
-.field-brand-mark {
-  background: linear-gradient(135deg, var(--be-blue), #3b82f6);
-  color: #ffffff;
-  border-radius: 14px;
-  font-weight: 900;
-}
-
-/* Top tab/icon nav seen in current Rider App */
-nav,
-.nav,
-.top-nav,
-.rider-nav,
-.mobile-nav {
-  background: #ffffff !important;
-  border-bottom: 1px solid var(--be-border);
-}
-
-nav a,
-nav button,
-.nav a,
-.nav button,
-.top-nav a,
-.top-nav button,
-.rider-nav a,
-.rider-nav button {
-  color: var(--be-text) !important;
-  background: #ffffff;
-  border-color: var(--be-border);
-  font-weight: 800;
-}
-
-nav a:hover,
-nav button:hover,
-.nav a:hover,
-.nav button:hover {
-  background: var(--be-blue-soft);
-  color: var(--be-blue) !important;
-}
-
-nav .active,
-.nav .active,
-.top-nav .active,
-.rider-nav .active,
-[aria-current="page"] {
-  background: var(--be-blue-soft) !important;
-  color: var(--be-blue) !important;
-  border-color: #bfdbfe !important;
-}
-
-/* Typography */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  color: var(--be-text) !important;
-  font-weight: 900;
-  letter-spacing: -0.035em;
-}
-
-p,
-span,
-label,
-td,
-th,
-li,
-div {
-  color: inherit;
-}
-
-.text-muted,
-.text-slate-500,
-.text-gray-500 {
-  color: var(--be-muted) !important;
-}
-
-/* Cards */
+/* Convert Dark Metric Panels into High-End Surface Cards */
+.card,
 .rider-card,
 .job-card,
-.route-card,
-.cod-card,
-.proof-card,
-.form-card,
-.enterprise-card,
-.card,
-[data-card] {
-  background: var(--be-card) !important;
-  color: var(--be-text) !important;
-  border: 1px solid var(--be-border) !important;
-  border-radius: 22px;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
-}
-
-.job-card,
-.route-stop-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.job-card::before,
-.route-stop-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: linear-gradient(180deg, var(--be-blue), var(--be-gold));
-}
-
-/* Empty states must be readable */
-.empty-state,
-.no-data,
-.no-active-stops,
-.no-jobs {
-  color: var(--be-muted) !important;
-}
-
-/* Form controls */
-input,
-select,
-textarea {
-  background: #ffffff !important;
-  color: var(--be-text) !important;
-  border: 1px solid var(--be-border) !important;
-  border-radius: 14px;
-  min-height: 44px;
-}
-
-input::placeholder,
-textarea::placeholder {
-  color: #94a3b8 !important;
-}
-
-button,
-a {
-  touch-action: manipulation;
-}
-
-button {
-  color: inherit;
-}
-
-/* Buttons */
-.btn-primary,
-.rider-btn-primary,
-.primary-action,
-button[type="submit"] {
-  background: var(--be-blue) !important;
-  color: #ffffff !important;
-  border: 0 !important;
-  border-radius: 14px;
-  font-weight: 900;
-  box-shadow: 0 10px 24px rgba(29, 78, 216, 0.24);
-}
-
-.btn-secondary,
-.rider-btn-secondary {
-  background: #ffffff !important;
-  color: var(--be-text) !important;
-  border: 1px solid var(--be-border) !important;
-  border-radius: 14px;
-}
-
-/* Badges */
-.badge,
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  border-radius: 999px;
-  padding: 0 0.7rem;
-  font-size: 0.75rem;
-  font-weight: 900;
-}
-
-.status-assigned,
-.badge-assigned {
-  background: #dbeafe !important;
-  color: #1d4ed8 !important;
-}
-
-.status-pending,
-.badge-pending {
-  background: #fef3c7 !important;
-  color: #92400e !important;
-}
-
-.status-delivered,
-.status-completed,
-.badge-completed {
-  background: #d1fae5 !important;
-  color: #047857 !important;
-}
-
-.status-failed,
-.badge-failed {
-  background: #fee2e2 !important;
-  color: #b91c1c !important;
-}
-
-/* Route / progress */
-.route-progress,
-.progress-track {
-  height: 10px;
-  border-radius: 999px;
-  background: #dbe4f0 !important;
-  overflow: hidden;
-}
-
-.route-progress-bar,
-.progress-bar {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--be-blue), var(--be-gold)) !important;
-}
-
-.route-stop-index,
-.stop-index {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
-  background: var(--be-navy) !important;
-  color: #ffffff !important;
-  font-family: "JetBrains Mono", monospace;
-  font-weight: 900;
-}
-
-/* Bottom nav, if present */
-.rider-bottom-nav,
-.mobile-bottom-nav,
-.bottom-nav {
-  background: rgba(255, 255, 255, 0.96) !important;
-  border-top: 1px solid var(--be-border);
-  box-shadow: 0 -12px 32px rgba(15, 23, 42, 0.12);
-}
-
-.rider-bottom-nav a,
-.rider-bottom-nav button,
-.mobile-bottom-nav a,
-.mobile-bottom-nav button,
-.bottom-nav a,
-.bottom-nav button {
-  color: var(--be-muted) !important;
-}
-
-.rider-bottom-nav .active,
-.mobile-bottom-nav .active,
-.bottom-nav .active {
-  background: var(--be-blue-soft) !important;
-  color: var(--be-blue) !important;
-}
-
-/* Utility rescue for old hard-coded dark containers */
-.bg-black,
-.bg-slate-950,
-.bg-gray-950,
-.bg-neutral-950 {
-  background-color: var(--be-bg) !important;
-}
-
-.text-black,
-.text-slate-950,
-.text-gray-950 {
-  color: var(--be-text) !important;
-}
-
-/* Mobile spacing */
-@media (max-width: 640px) {
-  main,
-  .rider-page,
-  .field-page {
-    padding-left: 0.9rem;
-    padding-right: 0.9rem;
-  }
-
-  .rider-card,
-  .job-card,
-  .route-card,
-  .cod-card,
-  .proof-card,
-  .form-card,
-  .card {
-    border-radius: 18px;
-  }
-}
-
-/* ------------------------------------------------------------------
-   EMERGENCY LOGIN + FIELD APP READABILITY OVERRIDE
-   This overrides old hard-coded dark Tailwind classes in Rider App.
-------------------------------------------------------------------- */
-
-body,
-#root {
-  background: #f4f7fb !important;
-  color: #0f172a !important;
-}
-
-/* Kill old dark blocks from previous Rider App theme */
-[class*="bg-black"],
-[class*="bg-slate-900"],
-[class*="bg-slate-950"],
-[class*="bg-gray-900"],
-[class*="bg-gray-950"],
-[class*="bg-neutral-900"],
-[class*="bg-neutral-950"],
-[class*="bg-zinc-900"],
-[class*="bg-zinc-950"] {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #d8e0ec !important;
-}
-
-/* Auth/login panel rescue */
-form,
-form > div,
-form section,
-form article,
-[role="tabpanel"],
-[role="tablist"] {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #d8e0ec !important;
-}
-
-form h1,
-form h2,
-form h3,
-form p,
-form span,
-form label,
-form div {
-  color: #0f172a !important;
-}
-
-/* Login tabs */
-[role="tablist"] {
-  display: grid !important;
-  grid-template-columns: repeat(3, 1fr);
-  overflow: hidden;
-  border: 1px solid #d8e0ec !important;
-  border-radius: 16px 16px 0 0 !important;
-  background: #eef4fb !important;
-}
-
-[role="tab"],
-form button[role="tab"] {
-  min-height: 44px !important;
-  border: 0 !important;
-  border-right: 1px solid #d8e0ec !important;
-  background: #eef4fb !important;
-  color: #64748b !important;
-  font-weight: 800 !important;
-}
-
-[role="tab"][data-state="active"],
-[role="tab"][aria-selected="true"] {
-  background: #ffffff !important;
-  color: #1d4ed8 !important;
-}
-
-/* Inputs */
-input,
-select,
-textarea {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  border: 1px solid #cbd5e1 !important;
-  box-shadow: none !important;
-}
-
-input::placeholder,
-textarea::placeholder {
-  color: #94a3b8 !important;
-}
-
-/* Login button must stay blue with white text */
-button[type="submit"],
-form button[type="submit"],
-button:has(svg) {
-  color: inherit;
-}
-
-form button[type="submit"],
-button.bg-blue-600,
-button.bg-blue-700,
-button[class*="bg-blue"] {
-  background: #1d4ed8 !important;
-  color: #ffffff !important;
-  border: 0 !important;
+div[style*="background: oklch(0.12"] {
+  background: var(--bg-surface) !important;
+  background-color: var(--bg-surface) !important;
+  border: 1px solid var(--border-internal) !important;
   border-radius: 16px !important;
-  font-weight: 900 !important;
+  box-shadow: var(--shadow-card) !important;
+  padding: 1.5rem !important;
 }
 
-/* Small login links */
-form a,
-form .text-yellow-500,
-form .text-yellow-400,
-form [class*="text-yellow"] {
-  color: #b77900 !important;
+/* High Contrast Dashboard Typography Restructuring */
+h1, h2, h3, h4, h5, h6,
+.text-foreground,
+div[style*="color: oklch(0.96"] {
+  color: var(--text-primary) !important;
   font-weight: 700 !important;
 }
 
-/* Main login card shape */
-form {
-  max-width: 520px;
-  margin: 0 auto;
-  border: 1px solid #d8e0ec !important;
-  border-radius: 20px !important;
-  background: #ffffff !important;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.10) !important;
-  overflow: hidden;
+p, span, label,
+div[style*="color: oklch(0.50"] {
+  color: var(--text-secondary) !important;
 }
 
-/* Top left Myanmar language chip */
-button,
-a {
-  text-decoration: none;
+/* Secondary Actions / Quick Menu Items Rows */
+.quick-action-btn,
+div[style*="border: 1px solid oklch(0.22"] {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-internal) !important;
+  border-radius: 12px !important;
+  color: var(--text-primary) !important;
+  transition: all 0.2s ease !important;
 }
 
-button[class*="yellow"],
-[class*="text-yellow"] {
-  color: #b77900 !important;
+.quick-action-btn:hover {
+  background: var(--bg-input) !important;
+  border-color: #CBD5E1 !important;
 }
 
-/* Inside screens readability */
-main,
-section,
-article,
-.card,
-.rider-card,
-.job-card,
-.route-card,
-.cod-card,
-.proof-card,
-.form-card {
-  background-color: #ffffff;
-  color: #0f172a !important;
+/* Premium Opaque Desktop/Mobile Bottom Navigation Bar */
+nav,
+.bottom-nav,
+div[style*="background: linear-gradient(155deg"] + div {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border-internal) !important;
+  box-shadow: 0 -4px 12px 0 rgba(0, 0, 0, 0.03) !important;
 }
 
-main h1,
-main h2,
-main h3,
-main p,
-main span,
-main div,
-main label {
-  color: inherit;
+/* Standard Bottom Route Item Hooks */
+nav button,
+.bottom-nav a {
+  color: var(--text-secondary) !important;
 }
 
-/* Do not make route body black */
-.min-h-screen,
-.rider-app-shell,
-.field-app-shell {
-  background: #f4f7fb !important;
-  color: #0f172a !important;
+/* Active Highlight Focus Indicators */
+nav button[style*="color: oklch(0.83"],
+.bottom-nav .active-tab,
+.bottom-nav [style*="color: oklch(0.83"] {
+  color: var(--brand-blue) !important;
+  font-weight: 700 !important;
+}
+
+/* Empty Workspace States Layout Rescue */
+.no-jobs,
+div:has(> .animate-spin),
+div[style*="color: oklch(0.35"] {
+  color: var(--text-secondary) !important;
+}
+
+/* Standalone Primary Metric Action Buttons */
+.refresh-btn,
+button[style*="color: oklch(0.09"] {
+  background: var(--brand-blue) !important;
+  color: #FFFFFF !important;
+  border-radius: 10px !important;
+  padding: 0.5rem 1.5rem !important;
+  font-weight: 600 !important;
+  box-shadow: var(--shadow-btn) !important;
+  border: none !important;
 }

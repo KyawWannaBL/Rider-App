@@ -1,5 +1,5 @@
-import MobileWorkforceGoLivePage from "@/pages/shared/MobileWorkforceGoLivePage";
+import MobileGoLivePage from "@/pages/shared/MobileGoLivePage";
 
 export default function HelperJobsPage() {
-  return <MobileWorkforceGoLivePage role="helper" mode="jobs" />;
+  return <MobileGoLivePage role="helper" mode="jobs" />;
 }

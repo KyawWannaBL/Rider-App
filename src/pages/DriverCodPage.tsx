@@ -1,5 +1,5 @@
-import MobileWorkforceGoLivePage from "@/pages/shared/MobileWorkforceGoLivePage";
+import MobileGoLivePage from "@/pages/shared/MobileGoLivePage";
 
 export default function DriverCodPage() {
-  return <MobileWorkforceGoLivePage role="driver" mode="cod" />;
+  return <MobileGoLivePage role="driver" mode="cod" />;
 }

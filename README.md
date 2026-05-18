@@ -1,27 +1,146 @@
-# 技术栈
+# Final Rider App ↔ Enterprise Portal Go-Live Wire-Up
 
-该项目使用以下技术栈
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+This patch fixes the uploaded `App.tsx` and rewires the Rider App mobile runtime for:
 
+- Rider
+- Driver
+- Helper
 
-# 开发流程
+It follows the Spec-12 go-live workflow:
 
-1. 参考用户需求，调整 src/index.css 与 tailwind.config.ts 的主题风格
-2. 根据用户需求，划分出所需要实现的页面
-3. 整理好每个页面需要实现的功能，在 pages 下创建对应的文件夹及其下入口 Index.tsx
-4. 在 App.tsx 中创建路由配置，引入刚才的各个入口文件 Index.tsx
-5. 根据刚才整理的需求，如果需求简单，可以直接在 Index.tsx 中完成该页面的全部工作
-6. 如果需求复杂，可以将 page 拆分为若干个组件来实现，目录结构如下：
-    - Index.tsx 入口
-    - /components/ 组件
-    - /hooks/ 钩子
-    - /stores/ 如果有复杂交互通信时，可以使用 zustand 进行通信
-7. 在完成需求后，需要进行 pnpm i 安装依赖，并使用 npm run lint & npx tsc --noEmit -p tsconfig.app.json --strict 进行检查，并修复问题
+- one canonical pickup record
+- role-specific mobile screens
+- backend-only synchronized assignments
+- no mock/local runtime data
+- Rider/Driver/Helper jobs from Data Entry waybill rows
+- order-picker verification visible to Data Entry
+- COD, route, proof, support, sync all updating Enterprise Portal rows
 
-# 接入后端接口
-- 当需要新增接口或者操作 supabase 时，需要先在 src/api 新增对应 api 文件，并导出对应的数据类型，可以参考 src/demo.ts 文件，如果是 supabase 还需要做好实现
-- 前端与 supabase 做实现时，都需要完全按照数据类型进行实现，尽可能避免修改定好的数据类型，如果出现修改，需要检查所有引用该类型的文件
+## Source of truth
+
+```text
+be_portal_pickup_requests
+be_portal_cargo_events
+be_mobile_workforce_accounts
+be_app_notifications
+```
+
+## Required ID format
+
+```text
+Pickup Way ID   = P0518-MEL-010
+Delivery Way ID = D0518-MEL-001
+```
+
+## Included files
+
+```text
+sql/01_final_mobile_go_live_wireup.sql
+src/App.tsx
+src/lib/mobileGoLiveApi.ts
+src/pages/shared/MobileGoLivePage.tsx
+src/pages/Rider*.tsx
+src/pages/Driver*.tsx
+src/pages/Helper*.tsx
+apply_final_rider_app_wireup.sh
+```
+
+## Apply order
+
+### 1) Supabase SQL Editor
+
+Run:
+
+```text
+sql/01_final_mobile_go_live_wireup.sql
+```
+
+This creates:
+
+```text
+be_mobile_go_live_resolve_account
+be_mobile_go_live_snapshot
+be_mobile_go_live_waybill_status
+be_mobile_go_live_verify_pickup_parcel
+be_mobile_go_live_cod_handover
+be_mobile_go_live_support_request
+```
+
+### 2) Git Bash
+
+From the extracted patch folder:
+
+```bash
+bash apply_final_rider_app_wireup.sh "/d/Britium_No_Demo_Deployment/rider-app/Rider App"
+```
+
+### 3) Build
+
+```bash
+cd "/d/Britium_No_Demo_Deployment/rider-app/Rider App"
+npm run build
+```
+
+### 4) Commit and push
+
+```bash
+git status --short
+git add src/App.tsx src/lib/mobileGoLiveApi.ts src/pages/shared/MobileGoLivePage.tsx src/pages/Rider*.tsx src/pages/Driver*.tsx src/pages/Helper*.tsx
+git commit -m "Final wire-up Rider App with Enterprise Portal go-live workflow"
+git push
+```
+
+## Expected behavior
+
+### Supervisor assignment
+
+When Supervisor assigns a pickup to rider/driver/helper:
+
+```text
+be_portal_pickup_requests.assigned_rider_code
+be_portal_pickup_requests.assigned_driver_code
+be_portal_pickup_requests.assigned_helper_code
+```
+
+### Rider / Driver / Helper mobile app
+
+Mobile pages load through:
+
+```text
+be_mobile_go_live_snapshot
+```
+
+They should show:
+
+```text
+Assigned pickups
+Data Entry delivery waybills
+Notifications
+COD records
+Route stops
+Order-picker verification status
+```
+
+### Field pickup verification
+
+When rider/driver/helper verifies a parcel:
+
+```text
+be_portal_cargo_events.field_pickup_checked = true
+be_portal_cargo_events.pickup_verification_status = verified
+be_portal_cargo_events.field_pickup_weight_kg = actual weight
+be_portal_cargo_events.field_pickup_photo_url = cargo photo
+```
+
+Data Entry can then use the checked parcel as its registration reference.
+
+## Go-live dry run
+
+1. Customer Service creates pickup: `P0518-MEL-010`
+2. Data Entry prepares waybills: `D0518-MEL-001...`
+3. Supervisor assigns Rider/Driver/Helper.
+4. Rider/Driver/Helper opens mobile app and syncs.
+5. Assigned pickups and waybills appear.
+6. Field team verifies parcel photo + weight.
+7. Data Entry sees `field_pickup_checked = true`.
+8. Status/COD/proof updates sync to Enterprise Portal.

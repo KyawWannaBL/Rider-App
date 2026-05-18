@@ -1,5 +1,5 @@
-import MobileWorkforceGoLivePage from "@/pages/shared/MobileWorkforceGoLivePage";
+import MobileGoLivePage from "@/pages/shared/MobileGoLivePage";
 
 export default function HelperPickupVerificationPage() {
-  return <MobileWorkforceGoLivePage role="helper" mode="pickup" />;
+  return <MobileGoLivePage role="helper" mode="pickup" />;
 }
