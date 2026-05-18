@@ -1,16 +1,5 @@
-import { useState } from 'react';
-import { AppShell } from '@/components/AppShell';
-import { ProfileDrawer } from '@/components/ProfileDrawer';
-import PickupDeliveryMobileForm from '@/components/shared/PickupDeliveryMobileForm';
+import MobileWorkforceGoLivePage from "@/pages/shared/MobileWorkforceGoLivePage";
 
 export default function DriverPickupVerificationPage() {
-  const [profileOpen, setProfileOpen] = useState(false);
-  return (
-    <>
-      <AppShell role="driver" onOpenProfile={() => setProfileOpen(true)}>
-        <PickupDeliveryMobileForm sourcePortal="driver" />
-      </AppShell>
-      <ProfileDrawer open={profileOpen} onClose={() => setProfileOpen(false)} />
-    </>
-  );
+  return <MobileWorkforceGoLivePage role="driver" mode="pickup" />;
 }

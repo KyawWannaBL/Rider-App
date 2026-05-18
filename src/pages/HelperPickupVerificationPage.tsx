@@ -1,8 +1,5 @@
-import { useState } from 'react';
-import { AppShell } from '@/components/AppShell';
-import { ProfileDrawer } from '@/components/ProfileDrawer';
-import PickupDeliveryMobileForm from '@/components/shared/PickupDeliveryMobileForm';
+import MobileWorkforceGoLivePage from "@/pages/shared/MobileWorkforceGoLivePage";
+
 export default function HelperPickupVerificationPage() {
-  const [o, setO] = useState(false);
-  return (<><AppShell role="helper" onOpenProfile={() => setO(true)}><PickupDeliveryMobileForm sourcePortal="helper" /></AppShell><ProfileDrawer open={o} onClose={() => setO(false)} /></>);
+  return <MobileWorkforceGoLivePage role="helper" mode="pickup" />;
 }

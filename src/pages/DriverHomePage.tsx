@@ -1,8 +1,5 @@
-import { useState } from 'react';
-import { AppShell } from '@/components/AppShell';
-import { ProfileDrawer } from '@/components/ProfileDrawer';
-import { DriverDashboard } from '@/components/driver/DriverDashboard';
+import MobileWorkforceGoLivePage from "@/pages/shared/MobileWorkforceGoLivePage";
+
 export default function DriverHomePage() {
-  const [profileOpen, setProfileOpen] = useState(false);
-  return (<><AppShell role="driver" onOpenProfile={() => setProfileOpen(true)}><DriverDashboard /></AppShell><ProfileDrawer open={profileOpen} onClose={() => setProfileOpen(false)} /></>);
+  return <MobileWorkforceGoLivePage role="driver" mode="home" />;
 }
