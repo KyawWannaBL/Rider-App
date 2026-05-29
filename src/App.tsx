@@ -11,7 +11,7 @@ import History   from '@/pages/History';
 import Profile   from '@/pages/Profile';
 import RiderPickupPhotoQrPortal from "./pages/RiderPickupPhotoQrPortal";
 import DeliveryPage from "./pages/DeliveryPage";
-import CodSettlementPage from "./pages/CodSettlementPage";
+import CodSettlementPage from "./pages/CodSettlementPageForVercel";
 import WalletPage from "./pages/WalletPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import AvailabilityPage from "./pages/AvailabilityPage";
