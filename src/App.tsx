@@ -10,6 +10,12 @@ import JobDetail from '@/pages/JobDetail';
 import History   from '@/pages/History';
 import Profile   from '@/pages/Profile';
 import RiderPickupPhotoQrPortal from "./pages/RiderPickupPhotoQrPortal";
+import DeliveryPage from "./pages/DeliveryPage";
+import CodSettlementPage from "./pages/CodSettlementPage";
+import WalletPage from "./pages/WalletPage";
+import DocumentsPage from "./pages/DocumentsPage";
+import AvailabilityPage from "./pages/AvailabilityPage";
+import SupportPage from "./pages/SupportPage";
 
 function Splash() {
   return (
@@ -62,6 +68,13 @@ export default function App() {
             <Route path="pickup-verification" element={<RiderPickupPhotoQrPortal />} />
             <Route path="history"      element={<History />} />
             <Route path="profile"      element={<Profile />} />
+            <Route path="delivery" element={<DeliveryPage />} />
+            <Route path="cod-settlement" element={<CodSettlementPage />} />
+            <Route path="wallet" element={<WalletPage />} />
+            <Route path="documents" element={<DocumentsPage />} />
+            <Route path="availability" element={<AvailabilityPage />} />
+            <Route path="support" element={<SupportPage />} />
+
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
