@@ -16,6 +16,7 @@ import WalletPage from "./pages/WalletPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import AvailabilityPage from "./pages/AvailabilityPage";
 import SupportPage from "./pages/SupportPage";
+import BranchOfficeSyncPage from "./pages/BranchOfficeSyncPage";
 
 function Splash() {
   return (
@@ -69,6 +70,7 @@ export default function App() {
             <Route path="history"      element={<History />} />
             <Route path="profile"      element={<Profile />} />
             <Route path="delivery" element={<DeliveryPage />} />
+            <Route path="branch-sync" element={<BranchOfficeSyncPage />} />
             <Route path="cod-settlement" element={<CodSettlementPage />} />
             <Route path="wallet" element={<WalletPage />} />
             <Route path="documents" element={<DocumentsPage />} />
