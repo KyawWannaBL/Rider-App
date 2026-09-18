@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "VITE_ENABLE_ROUTE_MESSAGING=true vite",
-    "build": "vite build",
+    "build": "npm run verify:preferred-rider-modern-delivery-v51 && vite build",
     "build:dev": "VITE_ENABLE_ROUTE_MESSAGING=true vite build --mode development --sourcemap",
     "build:map": "VITE_ENABLE_ROUTE_MESSAGING=true vite build --sourcemap",
     "lint": "eslint .",
     "preview": "vite preview",
     "preview:dev": "npm run build:dev && npm run preview",
-    "test:edge-functions": "cd supabase/edge_function && deno task test"
+    "test:edge-functions": "cd supabase/edge_function && deno task test",
+    "verify:preferred-rider-modern-delivery-v51": "node scripts/verify-preferred-rider-modern-delivery-v51.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -82,7 +83,6 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react-swc": "^3.5.0",
-
     "eslint": "^9.9.0",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.9",
