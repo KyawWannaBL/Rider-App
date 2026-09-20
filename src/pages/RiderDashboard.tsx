@@ -161,27 +161,21 @@ async function rpcSnapshot(): Promise<Snapshot> {
   return data || { ok: true, pickups: [], jobs: [], notifications: [] };
 }
 
-async function updateWaybillStatus(job: RiderJob, nextStatus: string, payload: Record<string, unknown> = {}) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_update_waybill_status", {
-    p_tracking_no: job.deliver_way_id || job.tracking_no,
-    p_status: nextStatus,
-    p_payload: {
-      pickup_id: job.pickup_id,
-      deliver_way_id: job.deliver_way_id,
-      ...payload,
-    },
+function openDeliveryVerification(job: RiderJob, action?: string) {
+  const params = new URLSearchParams({
+    deliveryWayId: job.deliver_way_id || job.tracking_no || "",
+    ...(action ? { action } : {}),
   });
-
-  if (error) throw error;
-  return data;
+  window.location.assign(`/delivery?${params.toString()}`);
 }
 
 async function submitCodHandover(payload: Record<string, unknown>) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_cod_handover", {
+  const { data, error } = await (supabase as any).rpc("be_cod_handover_submit", {
     p_payload: payload,
   });
 
   if (error) throw error;
+  if (data?.ok === false) throw new Error(data?.error || "COD handover failed.");
   return data;
 }
 
@@ -236,19 +230,12 @@ export default function RiderDashboard() {
     }
   }
 
-  async function handleStatus(job: RiderJob, nextStatus: string, payload: Record<string, unknown> = {}) {
-    setLoading(true);
-    setNotice(null);
-
-    try {
-      await updateWaybillStatus(job, nextStatus, payload);
-      await refresh();
-      setNotice({ type: "success", text: `${job.deliver_way_id} updated to ${nextStatus}.` });
-    } catch (err: any) {
-      setNotice({ type: "error", text: err?.message || "Status update failed." });
-    } finally {
-      setLoading(false);
-    }
+  async function handleStatus(job: RiderJob, nextStatus: string) {
+    setNotice({
+      type: "success",
+      text: `${job.deliver_way_id}: opening strict delivery verification. Direct status completion is disabled.`,
+    });
+    openDeliveryVerification(job, nextStatus);
   }
 
   useEffect(() => {
@@ -466,17 +453,10 @@ function RouteTab({ jobs, handleStatus }: TabProps) {
                     )}
                     <button
                       type="button"
-                      onClick={() => void handleStatus(job, "out_for_delivery")}
-                      className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white"
+                      onClick={() => void handleStatus(job, "open")}
+                      className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-black text-white"
                     >
-                      Start Stop
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleStatus(job, "delivered")}
-                      className="rounded-xl bg-green-600 px-3 py-2 text-xs font-black text-white"
-                    >
-                      Delivered
+                      Open Delivery Verification
                     </button>
                   </div>
                 </div>
@@ -489,16 +469,25 @@ function RouteTab({ jobs, handleStatus }: TabProps) {
   );
 }
 
-function CodTab({ jobs, loading, refresh, setNotice }: TabProps) {
-  const codJobs = jobs.filter((job) => Number(job.cod_amount || job.final_cod || 0) > 0);
+function CodTab({ snapshot, jobs, loading, refresh, setNotice }: TabProps) {
+  const codJobs = jobs.filter((job) =>
+    String(job.status || "").toLowerCase() === "delivered" &&
+    Number(job.cod_amount || job.final_cod || 0) > 0
+  );
   const total = codJobs.reduce((sum, job) => sum + Number(job.cod_amount || job.final_cod || 0), 0);
 
   async function handoverAll() {
     try {
+      const riderCode = snapshot.account?.workforce_code;
+      if (!riderCode) throw new Error("Authenticated Rider workforce code is required for COD handover.");
       await submitCodHandover({
+        rider_code: riderCode,
+        route_zone: snapshot.account?.branch_code || snapshot.account?.assigned_branch || null,
+        total_delivered_parcels: codJobs.length,
+        total_cod_expected: total,
+        total_cash_received: total,
+        notes: "Rider COD handover submitted from strict mobile workflow.",
         tracking_numbers: codJobs.map((job) => job.deliver_way_id),
-        total_amount: total,
-        remarks: "Mobile COD handover submitted by rider.",
       });
       await refresh();
       setNotice({ type: "success", text: "COD handover submitted to Finance." });
@@ -696,14 +685,8 @@ function JobList({
 
           {onStatus && (
             <div className="mt-4 flex flex-wrap gap-2">
-              <button onClick={() => void onStatus(job, "in_transit")} className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white">
-                In Transit
-              </button>
-              <button onClick={() => void onStatus(job, "delivered")} className="rounded-xl bg-green-600 px-3 py-2 text-xs font-black text-white">
-                Delivered
-              </button>
-              <button onClick={() => void onStatus(job, "failed")} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white">
-                Failed
+              <button onClick={() => void onStatus(job, "open")} className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-black text-white">
+                Open Delivery Verification
               </button>
             </div>
           )}
