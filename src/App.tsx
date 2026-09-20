@@ -17,6 +17,7 @@ import DocumentsPage from "./pages/DocumentsPage";
 import AvailabilityPage from "./pages/AvailabilityPage";
 import SupportPage from "./pages/SupportPage";
 import BranchOfficeSyncPage from "./pages/BranchOfficeSyncPage";
+import PendingApprovalPage from "./pages/PendingApprovalPage";
 
 function Splash() {
   return (
@@ -42,16 +43,18 @@ function Splash() {
 }
 
 function Guard({ children }) {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   if (loading) return <Splash />;
-  if (!user)   return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!profile) return <Navigate to="/pending-approval" replace />;
   return children;
 }
 
 function LoginPage() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   if (loading) return <Splash />;
-  if (user)    return <Navigate to="/dashboard" replace />;
+  if (user && profile) return <Navigate to="/dashboard" replace />;
+  if (user && !profile) return <Navigate to="/pending-approval" replace />;
   return <Login />;
 }
 
@@ -61,6 +64,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/pending-approval" element={<PendingApprovalPage />} />
           <Route path="/" element={<Guard><Layout /></Guard>}>
             <Route index               element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"    element={<Dashboard />} />
