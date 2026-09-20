@@ -36,14 +36,16 @@ function mapJob(row: any): Job {
 }
 
 function mapCod(row: any): CodRecord {
+  const settlementStatus = String(row.settlement_status || row.status || "").toUpperCase();
+  const collectedAmount = Number(row.reported_collected ?? row.cod_collected ?? row.amount ?? row.cod_amount ?? 0);
   return {
-    id: String(row.id),
-    trackingNumber: String(row.trackingNumber || row.tracking_no || "-"),
-    recipientName: row.recipientName || row.receiver_name || "-",
-    amount: Number(row.amount || row.cod_amount || 0),
-    collected: Boolean(row.collected),
-    handedOver: Boolean(row.handedOver || row.handed_over),
-    createdAt: row.createdAt || row.created_at || new Date().toISOString(),
+    id: String(row.delivery_way_id || row.id || row.tracking_no || ""),
+    trackingNumber: String(row.delivery_way_id || row.trackingNumber || row.tracking_no || "-"),
+    recipientName: row.recipient_name || row.recipientName || row.receiver_name || "-",
+    amount: collectedAmount,
+    collected: collectedAmount > 0 || Boolean(row.collected),
+    handedOver: ["SUBMITTED_TO_FINANCE","SETTLED","PAID","COMPLETED","POSTED"].includes(settlementStatus) || Boolean(row.handedOver || row.handed_over),
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
   };
 }
 
@@ -69,13 +71,26 @@ export async function fetchMobileAssignments(params: {
 
   const allJobs = Array.isArray(data?.jobs) ? data.jobs : [];
   const deliveryJobs = allJobs.filter((row: any) => String(row.job_kind || "").toUpperCase() === "DELIVERY");
-  const codRows = deliveryJobs.filter((row: any) => Number(row.cod_collected ?? row.cod_amount ?? 0) > 0);
+
+  const { data: financeData, error: financeError } = await (supabase as any).rpc("be_field_financial_snapshot_v91", {
+    p_days: 30,
+  });
+  if (financeError) throw financeError;
+
+  const commissionRows = Array.isArray(financeData?.commission?.rows) ? financeData.commission.rows : [];
+  const earnings: EarningsRecord[] = commissionRows.map((row: any) => ({
+    date: String(row.work_date || ""),
+    deliveries: Number(row.total_units || 0),
+    earnings: Number(row.commission_mmk || 0),
+    cod: 0,
+  }));
+  const codRows = Array.isArray(financeData?.cod_settlements) ? financeData.cod_settlements : [];
 
   return {
     account: data?.identity || null,
     jobs: deliveryJobs.map(mapJob),
     codRecords: codRows.map(mapCod),
-    earnings: [] as EarningsRecord[],
+    earnings,
     notifications: Array.isArray(data?.notifications) ? data.notifications : [],
   };
 }
