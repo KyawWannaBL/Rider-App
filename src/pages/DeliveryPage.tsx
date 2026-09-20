@@ -394,7 +394,9 @@ export default function DeliveryPage() {
   );
 
   useEffect(() => {
-    load();
+    const hashQuery = window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "";
+    const preferred = new URLSearchParams(hashQuery).get("deliveryWayId") || undefined;
+    load(preferred);
   }, []);
 
   return (
