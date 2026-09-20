@@ -32,8 +32,16 @@ const contracts = {
 };
 
 const forbidden = [
+  "be_mobile_app_my_assignments",
+  "be_mobile_app_update_job_status",
   "be_mobile_go_live_snapshot",
+  "be_mobile_go_live_waybill_status",
+  "be_mobile_go_live_verify_pickup_parcel",
+  "be_mobile_go_live_cod_handover",
+  "be_mobile_go_live_support_request",
+  "be_mobile_go_live_update_waybill_status",
   "be_mobile_rider_portal_snapshot",
+  "be_mobile_support_request",
   '.from("be_app_notifications")',
   ".from('be_app_notifications')"
 ];
@@ -65,3 +73,22 @@ for (const route of ["dashboard","jobs","delivery","cod-settlement","wallet","av
 
 if (failed) process.exit(1);
 console.log("Rider Enterprise integration contract passed.");
+
+
+function walk(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return walk(path);
+    return /\.(ts|tsx|js|jsx)$/.test(entry.name) ? [path] : [];
+  });
+}
+
+for (const file of walk("src")) {
+  const src = fs.readFileSync(file, "utf8");
+  for (const token of forbidden) {
+    if (src.includes(token)) {
+      console.error(`Enterprise integration contract failed: repository file ${file} contains retired path ${token}`);
+      failed = true;
+    }
+  }
+}
