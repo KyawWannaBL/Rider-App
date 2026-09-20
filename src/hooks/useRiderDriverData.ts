@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import type { CodRecord, EarningsRecord, Job, UserRole } from "@/lib/index";
-import { fetchMobileAssignments, updateMobileJobStatus } from "@/lib/riderEnterpriseApi";
+import { fetchMobileAssignments } from "@/lib/riderEnterpriseApi";
 import { supabase } from "@/integrations/supabase/client";
 import { useAppState } from "@/hooks/useAppState";
 
@@ -65,13 +65,8 @@ export function useRiderDriverData(_userId?: string): RiderDriverData {
     await fetchData();
   };
 
-  const updateJobStatus = async (trackingNumber: string, status: string) => {
-    if (["delivered","failed","rto","in_transit","picked_up"].includes(String(status).toLowerCase())) {
-      window.location.hash = `/delivery?deliveryWayId=${encodeURIComponent(trackingNumber)}`;
-      return;
-    }
-    await updateMobileJobStatus(trackingNumber, status, { action: "mobile_status_update" });
-    await fetchData();
+  const updateJobStatus = async (trackingNumber: string, _status: string) => {
+    window.location.hash = `/delivery?deliveryWayId=${encodeURIComponent(trackingNumber)}`;
   };
 
   return {
