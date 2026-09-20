@@ -71,10 +71,6 @@ for (const route of ["dashboard","jobs","delivery","cod-settlement","wallet","av
   }
 }
 
-if (failed) process.exit(1);
-console.log("Rider Enterprise integration contract passed.");
-
-
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = `${dir}/${entry.name}`;
@@ -92,3 +88,7 @@ for (const file of walk("src")) {
     }
   }
 }
+
+
+if (failed) process.exit(1);
+console.log("Rider Enterprise integration contract passed.");
