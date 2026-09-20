@@ -151,14 +151,21 @@ function statusClass(status?: string) {
 }
 
 async function rpcSnapshot(): Promise<Snapshot> {
-  const { data, error } = await (supabase as any).rpc("be_mobile_rider_portal_snapshot", {
-    p_workforce_code: null,
-    p_workforce_type: null,
-    p_limit: 200,
+  const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
+    p_payload: { limit: 200 },
   });
 
   if (error) throw error;
-  return data || { ok: true, pickups: [], jobs: [], notifications: [] };
+  const all = Array.isArray(data?.jobs) ? data.jobs : [];
+  return {
+    ok: Boolean(data?.ok ?? true),
+    account: data?.identity || {},
+    pickups: all.filter((row: any) => String(row.job_kind || "PICKUP").toUpperCase() === "PICKUP"),
+    jobs: all
+      .filter((row: any) => String(row.job_kind || "").toUpperCase() === "DELIVERY")
+      .map((row: any) => ({ ...row, deliver_way_id: row.delivery_way_id || row.tracking_no })),
+    notifications: Array.isArray(data?.notifications) ? data.notifications : [],
+  };
 }
 
 function openDeliveryVerification(job: RiderJob, action?: string) {
@@ -180,8 +187,14 @@ async function submitCodHandover(payload: Record<string, unknown>) {
 }
 
 async function submitSupport(payload: Record<string, unknown>) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_support_request", {
-    p_payload: payload,
+  const { data, error } = await (supabase as any).rpc("be_rider_support_ticket_save", {
+    p_payload: {
+      ticket_type: (payload as any).topic || "app_error",
+      priority: "normal",
+      subject: "Rider support request",
+      message: (payload as any).message || "",
+      pickup_id: (payload as any).pickup_id || null,
+    },
   });
 
   if (error) throw error;
