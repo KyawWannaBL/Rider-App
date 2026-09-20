@@ -16,7 +16,7 @@ export default function Profile() {
   async function load() {
     setLoading(true);
     setMessage("Refreshing Rider profile...");
-    const { data, error } = await (supabase as any).rpc("be_rider_profile_snapshot");
+    const { data, error } = await (supabase as any).rpc("be_field_profile_snapshot_v91");
     if (error) {
       setMessage(`Unable to load profile: ${error.message}`);
       setLoading(false);
@@ -51,20 +51,22 @@ export default function Profile() {
   const identity = snapshot.identity || {};
   const workforce = snapshot.workforce || {};
   const profile = snapshot.profile || {};
+  const canonical = snapshot.canonical || {};
   const counts = snapshot.counts || {};
 
   const displayName = useMemo(
-    () => value(identity.display_name, workforce.display_name, workforce.full_name, workforce.name, profile.full_name, identity.worker_code),
-    [identity, workforce, profile]
+    () => value(canonical.display_name, identity.display_name, workforce.display_name, workforce.full_name, workforce.name, profile.full_name, identity.worker_code),
+    [canonical, identity, workforce, profile]
   );
 
   const details = [
-    ["Workforce Code", value(identity.worker_code, workforce.workforce_code, workforce.worker_code, workforce.rider_code)],
-    ["Role", value(identity.role, workforce.role, workforce.role_type, profile.role)],
-    ["Email", value(identity.email, workforce.email, workforce.user_email, profile.email)],
+    ["Username", value(canonical.username, workforce.account, workforce.account_code, identity.worker_code)],
+    ["Email", value(canonical.email, identity.email, workforce.email, workforce.user_email, profile.email)],
+    ["Workforce Code", value(canonical.worker_code, identity.worker_code, workforce.workforce_code, workforce.worker_code, workforce.rider_code)],
+    ["Role", value(canonical.role, identity.role, workforce.role, workforce.role_type, profile.role)],
     ["Phone", value(workforce.phone_primary, workforce.phone_e164, workforce.phone, workforce.phone_number, profile.phone)],
-    ["Branch", value(identity.branch_code, workforce.branch_code, workforce.assigned_branch, profile.branch_name)],
-    ["Assigned Zone", value(identity.assigned_zone, workforce.assigned_zone, workforce.zone_code, workforce.zone, profile.zone)],
+    ["Branch", value(canonical.branch_code, identity.branch_code, workforce.branch_code, workforce.assigned_branch, profile.branch_name)],
+    ["Assigned Zone", value(canonical.assigned_zone, identity.assigned_zone, workforce.assigned_zone, workforce.zone_code, workforce.zone, profile.zone)],
     ["Employment Type", value(workforce.employment_type)],
     ["Account Status", value(workforce.status, profile.status, workforce.is_active === false ? "INACTIVE" : "ACTIVE")],
   ];
