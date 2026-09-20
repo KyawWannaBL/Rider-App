@@ -20,6 +20,8 @@ import {
 
 import { AppShell } from "@/components/AppShell";
 import { ProfileDrawer } from "@/components/ProfileDrawer";
+import { EarningsPanel } from "@/components/shared/EarningsPanel";
+import { SupportPanel } from "@/components/shared/SupportPanel";
 import {
   asMoney,
   codHandover,
@@ -29,7 +31,6 @@ import {
   MobilePickup,
   MobileRole,
   submitSupportRequest,
-  updateWaybillStatus,
   verifyPickupParcel,
 } from "@/lib/mobileGoLiveApi";
 
@@ -120,21 +121,13 @@ export default function MobileGoLivePage({ role, mode }: { role: MobileRole; mod
     }
   }
 
-  async function doStatus(job: MobileJob, status: string) {
-    setLoading(true);
-    try {
-      await updateWaybillStatus(job.id, status, {
-        role,
-        deliver_way_id: jobWayId(job),
-        pickup_id: job.pickup_id,
-      });
-      setMessage({ type: "success", text: `${jobWayId(job)} updated to ${status.replaceAll("_", " ")}.` });
-      await sync();
-    } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || "Status update failed." });
-    } finally {
-      setLoading(false);
-    }
+  function openDelivery(job: MobileJob) {
+    const wayId = jobWayId(job);
+    window.location.hash = `/delivery?deliveryWayId=${encodeURIComponent(wayId)}`;
+  }
+
+  function openPickupVerification() {
+    window.location.hash = "/pickup-verification";
   }
 
   async function doCodHandover(job: MobileJob) {
@@ -279,11 +272,7 @@ export default function MobileGoLivePage({ role, mode }: { role: MobileRole; mod
               jobs={jobs}
               emptyText="No delivery waybills found. Data Entry must prepare parcel rows first, then Supervisor must assign this workforce account."
               actions={(job) => (
-                <>
-                  <ActionButton label="Picked Up" onClick={() => doStatus(job, "picked_up")} />
-                  <ActionButton label="In Transit" onClick={() => doStatus(job, "in_transit")} />
-                  <ActionButton label="Delivered" onClick={() => doStatus(job, "delivered")} />
-                </>
+                <ActionButton label="Open Strict Delivery Verification" onClick={() => openDelivery(job)} />
               )}
             />
           )}
@@ -293,52 +282,23 @@ export default function MobileGoLivePage({ role, mode }: { role: MobileRole; mod
               jobs={jobs}
               emptyText="No route stops yet."
               titleIcon={<RouteIcon className="h-5 w-5 text-blue-700" />}
-              actions={(job) => <ActionButton label="Reached Stop" onClick={() => doStatus(job, "reached_stop")} />}
+              actions={(job) => <ActionButton label="Open Delivery / Arrival Verification" onClick={() => openDelivery(job)} />}
             />
           )}
 
           {mode === "pickup" && (
-            <JobList
-              jobs={jobs}
-              emptyText="No parcels to verify. Data Entry must prepare waybill rows first."
-              title="Field Pickup Verification"
-              titleIcon={<ClipboardCheck className="h-5 w-5 text-blue-700" />}
-              renderExtra={(job) => {
-                const key = jobWayId(job);
-                const draft = parcelDrafts[key] || {};
-                const verified = job.field_pickup_checked || job.pickup_verification_status === "verified";
-                return (
-                  <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-3">
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-black uppercase text-slate-500">Actual Weight KG</span>
-                      <input
-                        type="number"
-                        value={draft.weight_kg ?? job.weight_kg ?? ""}
-                        onChange={(event) => setDraft(job, { weight_kg: event.target.value })}
-                        className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm"
-                      />
-                    </label>
-
-                    <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white p-3">
-                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => readPhoto(job, event.target.files?.[0])} />
-                      <Camera className={`mb-1 h-5 w-5 ${draft.photo_url || job.photo_url ? "text-green-600" : "text-slate-500"}`} />
-                      <span className="text-xs font-black uppercase">{draft.photo_url || job.photo_url ? "Photo Ready" : "Capture Cargo Photo"}</span>
-                    </label>
-
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        disabled={loading || verified}
-                        onClick={() => void verifyParcel(job)}
-                        className="h-11 w-full rounded-xl bg-green-700 px-4 text-sm font-black uppercase text-white disabled:opacity-50"
-                      >
-                        {verified ? "Verified" : "Verify Parcel"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              }}
-            />
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="h-5 w-5 text-blue-700" />
+                <h2 className="text-lg font-black text-slate-950">Canonical Pickup Verification</h2>
+              </div>
+              <p className="mt-3 text-sm text-slate-600">
+                Weight, compressed cargo proof, temporary QR and Enterprise Data Entry review are handled in one shared Pickup Verification workflow for Rider / Driver / Helper.
+              </p>
+              <button type="button" onClick={openPickupVerification} className="mt-5 rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-black uppercase text-white">
+                Open Pickup Verification
+              </button>
+            </section>
           )}
 
           {mode === "pickupForm" && (
@@ -347,7 +307,7 @@ export default function MobileGoLivePage({ role, mode }: { role: MobileRole; mod
               title="Pickup Delivery Form"
               titleIcon={<PackageCheck className="h-5 w-5 text-blue-700" />}
               emptyText="No active pickup delivery forms."
-              actions={(job) => <ActionButton label="Mark Form Checked" onClick={() => doStatus(job, "form_checked")} />}
+              actions={() => <ActionButton label="Open Pickup Verification" onClick={openPickupVerification} />}
             />
           )}
 
@@ -357,7 +317,7 @@ export default function MobileGoLivePage({ role, mode }: { role: MobileRole; mod
               title="Proof of Delivery"
               titleIcon={<ShieldCheck className="h-5 w-5 text-blue-700" />}
               emptyText="No waybills requiring proof."
-              actions={(job) => <ActionButton label="Submit Proof" onClick={() => doStatus(job, "proof_submitted")} />}
+              actions={(job) => <ActionButton label="Open Strict Delivery Proof" onClick={() => openDelivery(job)} />}
             />
           )}
 
@@ -381,19 +341,7 @@ export default function MobileGoLivePage({ role, mode }: { role: MobileRole; mod
             </>
           )}
 
-          {mode === "earnings" && (
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2">
-                <CircleDollarSign className="h-5 w-5 text-blue-700" />
-                <h2 className="text-lg font-black text-slate-950">Estimated Earnings</h2>
-              </div>
-              <div className="mt-5 grid gap-4 md:grid-cols-3">
-                <Metric label="Delivered Jobs" value={String(deliveredCount)} />
-                <Metric label="Verified Parcels" value={String(verifiedJobs.length)} />
-                <Metric label="Estimated Incentive" value={`${asMoney(deliveredCount * 1000)} MMK`} />
-              </div>
-            </section>
-          )}
+          {mode === "earnings" && <EarningsPanel role={role} />}
 
           {mode === "sync" && (
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -418,32 +366,7 @@ export default function MobileGoLivePage({ role, mode }: { role: MobileRole; mod
             </section>
           )}
 
-          {mode === "support" && (
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2">
-                <Headphones className="h-5 w-5 text-blue-700" />
-                <h2 className="text-lg font-black text-slate-950">Enterprise Support</h2>
-              </div>
-
-              <textarea
-                value={supportText}
-                onChange={(event) => setSupportText(event.target.value)}
-                rows={6}
-                placeholder="Describe the issue, pickup ID, delivery ID, or COD problem..."
-                className="mt-4 w-full rounded-2xl border border-slate-300 p-4 text-sm"
-              />
-
-              <button
-                type="button"
-                onClick={() => void sendSupport()}
-                disabled={loading}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-blue-700 px-5 py-3 text-sm font-black uppercase text-white disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" />
-                Send Support Request
-              </button>
-            </section>
-          )}
+          {mode === "support" && <SupportPanel role={role} />}
         </main>
       </AppShell>
 
