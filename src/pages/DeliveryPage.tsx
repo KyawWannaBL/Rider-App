@@ -1,8 +1,60 @@
 // @ts-nocheck
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
 
 const PAYMENT_METHODS = ["CASH", "PREPAID", "QR", "BANK_TRANSFER", "MOBILE_WALLET"];
+const PROOF_MAX_BYTES = 950 * 1024;
+const UPLOAD_TIMEOUT_MS = 120_000;
+const FAILED_REASONS = [
+  ["PHONE_OFF", "ဖုန်းစက်ပိတ်ထားသည်။ / Phone switched off"],
+  ["PHONE_OUT_OF_COVERAGE", "ဖုန်းဆက်သွယ်မှုဧရိယာပြင်ပသို့ရောက်ရှိနေသည်။ / Outside coverage"],
+  ["NO_ANSWER", "ဖုန်းမကိုင်ပါ။ / Customer did not answer"],
+  ["CUSTOMER_NOT_AVAILABLE", "Customer not available"],
+  ["CUSTOMER_REFUSED", "Customer refused"],
+  ["WRONG_ADDRESS", "Wrong address"],
+  ["COD_NOT_READY", "COD not ready"],
+  ["NO_ACCESS_TO_BUILDING", "No access to building"],
+  ["PARCEL_DAMAGED", "Parcel damaged"],
+  ["WEATHER_TRAFFIC_ISSUE", "Weather / traffic issue"],
+  ["CUSTOMER_REQUESTED_RESCHEDULE", "Delivery date postponed / changed by customer"],
+  ["OTHER", "Other"],
+];
+
+async function compressImage(file: File, maxBytes = 950 * 1024): Promise<File> {
+  if (!file.type.startsWith("image/")) throw new Error("Select an image file.");
+  if (file.size <= maxBytes && file.size <= PROOF_MAX_BYTES) return file;
+  const worker = new Worker(new URL("../workers/proofCompressionWorker.ts", import.meta.url), { type: "module" });
+  try {
+    const buffer = await file.arrayBuffer();
+    return await new Promise<File>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error("Photo compression timed out.")), 30_000);
+      worker.onmessage = (event) => {
+        window.clearTimeout(timer);
+        if (!event.data?.ok) return reject(new Error(event.data?.error || "Photo compression failed."));
+        resolve(new File([event.data.buffer], event.data.name || "proof.jpg", { type: event.data.type || "image/jpeg" }));
+      };
+      worker.onerror = () => {
+        window.clearTimeout(timer);
+        reject(new Error("Photo compression failed."));
+      };
+      worker.postMessage({ buffer, type: file.type, name: file.name, maxBytes, maxWidth: 1280, maxHeight: 720 }, [buffer]);
+    });
+  } finally {
+    worker.terminate();
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms = UPLOAD_TIMEOUT_MS): Promise<T> {
+  let timer = 0;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error("Upload timed out. Check the mobile network and retry.")), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 function jobsFromResponse(data: any) {
   if (Array.isArray(data?.jobs)) return data.jobs;
@@ -30,10 +82,14 @@ export default function DeliveryPage() {
   const [pickups, setPickups] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
+  const [approvedProofFile, setApprovedProofFile] = useState<File | null>(null);
+  const [proofState, setProofState] = useState<"idle" | "compressing" | "ready" | "approved">("idle");
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [proofPreview, setProofPreview] = useState("");
   const [signaturePreview, setSignaturePreview] = useState("");
   const [busy, setBusy] = useState(false);
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRef = useRef(false);
   const [form, setForm] = useState({
     receiver_name: "",
     receiver_phone: "",
@@ -41,8 +97,9 @@ export default function DeliveryPage() {
     payment_method: "CASH",
     transaction_reference: "",
     cod_collected: "",
-    failed_reason: "CUSTOMER_UNREACHABLE",
+    failed_reason: "NO_ANSWER",
     signature_name: "",
+    reschedule_date: "",
   });
   const [msg, setMsg] = useState("Loading delivery jobs...");
 
@@ -53,6 +110,8 @@ export default function DeliveryPage() {
 
   function resetProofs() {
     setProofFile(null);
+    setApprovedProofFile(null);
+    setProofState("idle");
     setSignatureFile(null);
     setProofPreview("");
     setSignaturePreview("");
@@ -69,7 +128,7 @@ export default function DeliveryPage() {
       transaction_reference: "",
       remarks: "",
       signature_name: "",
-      failed_reason: "CUSTOMER_UNREACHABLE",
+      failed_reason: "NO_ANSWER",
     }));
   }
 
@@ -93,10 +152,89 @@ export default function DeliveryPage() {
     setMsg(`Loaded ${list.length} assigned delivery stop(s).`);
   }
 
-  function choosePhoto(file?: File) {
+  async function choosePhoto(file?: File) {
     if (!file) return;
-    setProofFile(file);
-    setProofPreview(URL.createObjectURL(file));
+    setProofState("compressing");
+    setApprovedProofFile(null);
+    try {
+      const compressed = await compressImage(file, 950 * 1024);
+      if (compressed.size > PROOF_MAX_BYTES) throw new Error("Proof photo remains larger than 950 KB after compression.");
+      setProofFile(compressed);
+      setProofPreview(URL.createObjectURL(compressed));
+      setProofState("ready");
+      setMsg(`Proof compressed to ${Math.ceil(compressed.size / 1024)} KB. Review it, then press “Approve photo & upload”.`);
+    } catch (error: any) {
+      setProofFile(null);
+      setProofPreview("");
+      setProofState("idle");
+      setMsg(error?.message || "Unable to prepare proof photo.");
+    }
+  }
+
+  function approveProofPhoto() {
+    if (!proofFile) return setMsg("Capture a proof photo first.");
+    setApprovedProofFile(proofFile);
+    setProofState("approved");
+    setMsg("Delivery proof approved. It will upload only when delivery is confirmed.");
+  }
+
+  function canvasPoint(event: any) {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const point = event.touches?.[0] || event;
+    return { x: (point.clientX - rect.left) * (canvas.width / rect.width), y: (point.clientY - rect.top) * (canvas.height / rect.height) };
+  }
+
+  function startSignature(event: any) {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    event.preventDefault();
+    drawingRef.current = true;
+    const p = canvasPoint(event);
+    const ctx = canvas.getContext("2d");
+    ctx?.beginPath();
+    ctx?.moveTo(p.x, p.y);
+  }
+
+  function drawSignature(event: any) {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas || !drawingRef.current) return;
+    event.preventDefault();
+    const p = canvasPoint(event);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+
+  function stopSignature(event?: any) {
+    event?.preventDefault?.();
+    drawingRef.current = false;
+  }
+
+  function clearSignatureCanvas() {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  async function signatureCanvasFile() {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return null;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let hasInk = false;
+    for (let i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] > 0) { hasInk = true; break; }
+    }
+    if (!hasInk) return null;
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    return blob ? new File([blob], "customer-signature.png", { type: "image/png" }) : null;
   }
 
   function chooseSignature(file?: File) {
@@ -109,10 +247,10 @@ export default function DeliveryPage() {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user?.id) throw new Error("Sign in before uploading proof.");
     const path = `${auth.user.id}/${prefix}/${safeName(file)}`;
-    const result = await supabase.storage.from(bucket).upload(path, file, {
+    const result = await withTimeout(supabase.storage.from(bucket).upload(path, file, {
       upsert: false,
       contentType: file.type || "image/jpeg",
-    });
+    }) as any, UPLOAD_TIMEOUT_MS);
     if (result.error) throw result.error;
     if (bucket === "rider-proofs") {
       return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
@@ -146,8 +284,9 @@ export default function DeliveryPage() {
     if (!selected) return setMsg("Select a delivery stop first.");
     if (!canDeliver) return setMsg("Record Arrived at Customer before confirming delivery.");
     if (!form.receiver_name.trim()) return setMsg("Receiver name is required.");
-    if (!proofFile) return setMsg("Delivery proof photo is required.");
-    if (!signatureFile && !form.signature_name.trim()) return setMsg("Customer electronic signature is required.");
+    if (!approvedProofFile) return setMsg("Capture, review and approve the delivery proof photo first.");
+    const drawnSignature = await signatureCanvasFile();
+    if (!signatureFile && !drawnSignature && !form.signature_name.trim()) return setMsg("Customer electronic signature is required.");
     if (requiredCod > 0 && Number(form.cod_collected || 0) !== requiredCod) {
       return setMsg(`COD collected must equal required COD: ${requiredCod.toLocaleString()} Ks.`);
     }
@@ -158,9 +297,10 @@ export default function DeliveryPage() {
     setBusy(true);
     try {
       const prefix = `${selected.wayplan_id}/${selected.delivery_way_id}`;
-      const proof_url = await upload("rider-proofs", proofFile, prefix);
-      const signature_path = signatureFile
-        ? await upload("ops-signatures", signatureFile, prefix)
+      const proof_url = await upload("rider-proofs", approvedProofFile, prefix);
+      const finalSignatureFile = signatureFile || drawnSignature;
+      const signature_path = finalSignatureFile
+        ? await upload("ops-signatures", finalSignatureFile, prefix)
         : null;
       const gps = await currentGps();
       const signature_payload = form.signature_name.trim()
@@ -199,6 +339,46 @@ export default function DeliveryPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function arriveAtCustomer() {
+    if (!selected) return setMsg("Select a delivery stop first.");
+    const gps = await currentGps();
+    if (!gps.gps_lat || !gps.gps_lng) return setMsg("GPS permission is required to record arrival.");
+    await act("arrived", gps);
+  }
+
+  async function failDelivery() {
+    if (!selected) return setMsg("Select a delivery stop first.");
+    if (form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE") {
+      if (!form.reschedule_date) return setMsg("Choose the customer’s dedicated delivery date.");
+      const today = new Date();
+      const selectedDate = new Date(`${form.reschedule_date}T00:00:00`);
+      if (selectedDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+        return setMsg("Dedicated delivery date cannot be in the past.");
+      }
+      setBusy(true);
+      try {
+        const { data, error } = await (supabase as any).rpc("be_set_delivery_reschedule_v71", {
+          p_way_id: selected.delivery_way_id,
+          p_delivery_date: form.reschedule_date,
+          p_reason_code: "CUSTOMER_REQUESTED_RESCHEDULE",
+          p_actor_email: null,
+          p_note: form.remarks.trim() || null,
+        });
+        if (error) throw error;
+        if (data?.ok === false) throw new Error(data?.error || "Unable to reschedule delivery.");
+        setMsg(`${selected.delivery_way_id}: rescheduled for ${form.reschedule_date}. It is held from Wayplan assignment until that date.`);
+        await load(selected.delivery_way_id);
+      } catch (error: any) {
+        setMsg(error?.message || "Unable to reschedule delivery.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    const gps = await currentGps();
+    await act("failed", { failed_reason: form.failed_reason, remark: form.remarks || null, ...gps });
   }
 
   async function sendGps() {
@@ -275,10 +455,30 @@ export default function DeliveryPage() {
                     Delivery proof photo
                     <input type="file" accept="image/*" capture="environment" onChange={(e) => choosePhoto(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
                     {proofPreview && <img src={proofPreview} className="mt-3 h-40 w-full rounded-2xl object-cover" />}
+                    {proofState === "compressing" && <p className="mt-2 text-sm text-blue-700">Compressing photo…</p>}
+                    {proofPreview && (
+                      <button type="button" disabled={proofState === "approved"} onClick={approveProofPhoto} className="mt-3 w-full rounded-xl bg-emerald-600 p-3 text-white disabled:opacity-50">
+                        {proofState === "approved" ? "Photo approved" : "Approve photo & upload"}
+                      </button>
+                    )}
                   </label>
                   <label className="rounded-2xl border p-3 font-bold">
                     Customer Electronic Signature
                     <input type="file" accept="image/*" onChange={(e) => chooseSignature(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
+                    <canvas
+                      ref={signatureCanvasRef}
+                      width={600}
+                      height={180}
+                      onMouseDown={startSignature}
+                      onMouseMove={drawSignature}
+                      onMouseUp={stopSignature}
+                      onMouseLeave={stopSignature}
+                      onTouchStart={startSignature}
+                      onTouchMove={drawSignature}
+                      onTouchEnd={stopSignature}
+                      className="mt-3 h-32 w-full touch-none rounded-xl border bg-white"
+                    />
+                    <button type="button" onClick={clearSignatureCanvas} className="mt-2 rounded-lg border px-3 py-2 text-xs">Clear drawn signature</button>
                     <input
                       className="mt-3 w-full rounded-xl border p-3"
                       placeholder="Or type signed customer name"
@@ -311,16 +511,18 @@ export default function DeliveryPage() {
                 <div className="mt-5 grid gap-3 md:grid-cols-3">
                   <button disabled={busy} onClick={() => act("accept")} className="rounded-2xl bg-slate-900 p-3 font-black text-white disabled:opacity-50">Accept</button>
                   <button disabled={busy} onClick={() => act("start_delivery")} className="rounded-2xl bg-blue-700 p-3 font-black text-white disabled:opacity-50">Start Delivery</button>
-                  <button disabled={busy} onClick={() => act("arrived")} className="rounded-2xl bg-indigo-700 p-3 font-black text-white disabled:opacity-50">Arrived at Customer</button>
+                  <button disabled={busy} onClick={arriveAtCustomer} className="rounded-2xl bg-indigo-700 p-3 font-black text-white disabled:opacity-50">Arrived at Customer</button>
                   <button disabled={busy || !canDeliver} onClick={deliver} className="rounded-2xl bg-emerald-600 p-3 font-black text-white disabled:opacity-50">Delivered</button>
                   <select className="rounded-2xl border p-3 font-bold" value={form.failed_reason} onChange={(e) => setForm({ ...form, failed_reason: e.target.value })}>
-                    <option value="CUSTOMER_UNREACHABLE">Customer unreachable</option>
-                    <option value="CUSTOMER_REFUSED">Customer refused</option>
-                    <option value="ADDRESS_NOT_FOUND">Address not found</option>
-                    <option value="RESCHEDULE_REQUESTED">Reschedule requested</option>
-                    <option value="OTHER">Other</option>
+                    {FAILED_REASONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
                   </select>
-                  <button disabled={busy} onClick={() => act("failed", { failed_reason: form.failed_reason, remark: form.remarks || null })} className="rounded-2xl bg-rose-600 p-3 font-black text-white disabled:opacity-50">Failed Delivery</button>
+                  {form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
+                    <label className="rounded-2xl border p-3 font-bold">
+                      Dedicated delivery date
+                      <input type="date" className="mt-1 w-full rounded-xl border p-2" value={form.reschedule_date} onChange={(e) => setForm({ ...form, reschedule_date: e.target.value })} />
+                    </label>
+                  )}
+                  <button disabled={busy} onClick={failDelivery} className="rounded-2xl bg-rose-600 p-3 font-black text-white disabled:opacity-50">Failed Delivery</button>
                   <button disabled={busy} onClick={() => act("return", { failed_reason: form.failed_reason, remark: form.remarks || null })} className="rounded-2xl bg-orange-600 p-3 font-black text-white disabled:opacity-50">Return to Warehouse</button>
                   <button disabled={busy} onClick={sendGps} className="rounded-2xl border p-3 font-black md:col-span-2 disabled:opacity-50">Check Current GPS</button>
                 </div>
