@@ -166,7 +166,7 @@ function openDeliveryVerification(job: RiderJob, action?: string) {
     deliveryWayId: job.deliver_way_id || job.tracking_no || "",
     ...(action ? { action } : {}),
   });
-  window.location.assign(`/delivery?${params.toString()}`);
+  window.location.hash = `/delivery?${params.toString()}`;
 }
 
 async function submitCodHandover(payload: Record<string, unknown>) {
