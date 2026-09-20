@@ -23,8 +23,9 @@ export default function CodSettlementPage() {
   });
 
   async function load() {
-    const { data, error } = await supabase.rpc("be_mobile_go_live_snapshot", {
-      p_payload: { p_limit: 200 },
+    const { data, error } = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs", {
+      p_rider_code: null,
+      p_limit: 200,
     });
 
     if (error) {
@@ -32,10 +33,13 @@ export default function CodSettlementPage() {
       return;
     }
 
-    const list = rows(data);
+    const list = rows(data).filter((job: any) =>
+      String(job.stop_status || job.rider_status || "").toUpperCase() === "DELIVERED" &&
+      Number(job.cod_collected || 0) > 0
+    );
     setPickups(list);
     setSelected(list[0] || null);
-    setMessage(`Loaded ${list.length} COD job(s).`);
+    setMessage(`Loaded ${list.length} delivered COD job(s) awaiting Rider settlement review.`);
   }
 
   function selectPhoto(file?: File) {
@@ -58,14 +62,36 @@ export default function CodSettlementPage() {
       return;
     }
 
-    const { error } = await supabase.rpc("be_rider_cod_handover_save", {
-      p_payload: {
-        pickup_id: selected.pickup_id || selected.pickup_way_id,
-        ...form,
-      },
+    const amount = Number(form.cod_handover_amount || form.cod_collected || selected.cod_collected || 0);
+    if (!(amount > 0)) {
+      setMessage("COD handover amount must be greater than zero.");
+      return;
+    }
+
+    const { data: identity, error: identityError } = await (supabase as any).rpc("be_current_field_team_identity");
+    if (identityError) {
+      setMessage(identityError.message);
+      return;
+    }
+
+    const { data, error } = await (supabase as any).rpc("be_rider_submit_cod_settlement", {
+      p_pickup_id: selected.pickup_id || null,
+      p_rider_email: identity?.email || null,
+      p_cod_amount: amount,
+      p_remark: `${form.handed_over_to || "Finance / Supervisor"}${form.proof_photo_name ? ` | proof: ${form.proof_photo_name}` : ""}`,
+      p_pickup_way_id: selected.pickup_way_id || null,
+      p_rider_code: identity?.worker_code || null,
+      p_delivery_way_id: selected.delivery_way_id || null,
+      p_waybill_no: selected.waybill_no || null,
+      p_invoice_no: selected.invoice_no || null,
     });
 
-    setMessage(error ? error.message : "COD handover saved.");
+    if (error || data?.ok === false) {
+      setMessage(error?.message || data?.error || "COD settlement submission failed.");
+      return;
+    }
+    setMessage("COD settlement submitted to Finance.");
+    await load();
   }
 
   useEffect(() => {
@@ -95,7 +121,8 @@ export default function CodSettlementPage() {
                   setForm((current) => ({
                     ...current,
                     cod_expected: String(pickup.cod_amount || pickup.cod_expected || 0),
-                    cod_collected: String(pickup.cod_amount || pickup.cod_collected || 0),
+                    cod_collected: String(pickup.cod_collected || pickup.cod_amount || 0),
+                    cod_handover_amount: String(pickup.cod_collected || pickup.cod_amount || 0),
                   }));
                 }}
                 className="w-full rounded-2xl border p-3 text-left hover:bg-slate-50"
@@ -105,7 +132,7 @@ export default function CodSettlementPage() {
                 </b>
                 <p className="font-black">{pickup.merchant_name || "-"}</p>
                 <p className="text-sm text-slate-500">
-                  COD: {Number(pickup.cod_amount || 0).toLocaleString()} MMK
+                  COD collected: {Number(pickup.cod_collected || pickup.cod_amount || 0).toLocaleString()} MMK
                 </p>
               </button>
             ))}
