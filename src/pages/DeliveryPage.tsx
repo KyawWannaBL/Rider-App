@@ -5,7 +5,7 @@ import { supabase } from "../integrations/supabase/client";
 const PAYMENT_METHODS = ["CASH", "PREPAID", "QR", "BANK_TRANSFER", "MOBILE_WALLET"];
 const PROOF_MAX_BYTES = 950 * 1024;
 const UPLOAD_TIMEOUT_MS = 120_000;
-const FAILED_REASONS = [
+const FALLBACK_FAILED_REASONS = [
   ["PHONE_OFF", "ဖုန်းစက်ပိတ်ထားသည်။ / Phone switched off"],
   ["PHONE_OUT_OF_COVERAGE", "ဖုန်းဆက်သွယ်မှုဧရိယာပြင်ပသို့ရောက်ရှိနေသည်။ / Outside coverage"],
   ["NO_ANSWER", "ဖုန်းမကိုင်ပါ။ / Customer did not answer"],
@@ -101,6 +101,7 @@ export default function DeliveryPage() {
     signature_name: "",
     reschedule_date: "",
   });
+  const [failureReasons, setFailureReasons] = useState<any[]>(FALLBACK_FAILED_REASONS);
   const [msg, setMsg] = useState("Loading delivery jobs...");
 
   const requiredCod = Number(selected?.cod_amount || 0);
@@ -134,13 +135,26 @@ export default function DeliveryPage() {
 
   async function load(preferredDeliveryWayId?: string) {
     setMsg("Loading assigned Wayplan deliveries...");
-    const { data, error } = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs", {
-      p_rider_code: null,
-      p_limit: 200,
-    });
-    if (error) return setMsg(error.message);
+    const [jobsResult, reasonResult] = await Promise.all([
+      (supabase as any).rpc("be_rider_delivery_wayplan_jobs", {
+        p_rider_code: null,
+        p_limit: 200,
+      }),
+      (supabase as any).rpc("be_field_delivery_failure_reasons_v92"),
+    ]);
+    if (jobsResult.error) return setMsg(jobsResult.error.message);
 
-    const list = jobsFromResponse(data);
+    const enterpriseReasons = Array.isArray(reasonResult.data?.reasons) ? reasonResult.data.reasons : [];
+    if (!reasonResult.error && enterpriseReasons.length) {
+      setFailureReasons(
+        enterpriseReasons.map((r: any) => [
+          r.code,
+          [r.name_mm, r.name_en].filter(Boolean).join(" / ") || r.code,
+        ])
+      );
+    }
+
+    const list = jobsFromResponse(jobsResult.data);
     setPickups(list);
     const next =
       list.find((job: any) => job.delivery_way_id === preferredDeliveryWayId) ||
@@ -378,7 +392,28 @@ export default function DeliveryPage() {
       return;
     }
     const gps = await currentGps();
-    await act("failed", { failed_reason: form.failed_reason, remark: form.remarks || null, ...gps });
+    if (!selected) return;
+    setBusy(true);
+    try {
+      const { data, error } = await (supabase as any).rpc("be_rider_wayplan_action", {
+        p_payload: {
+          wayplan_id: selected.wayplan_id,
+          delivery_way_id: selected.delivery_way_id,
+          action: "failed",
+          failed_reason: form.failed_reason,
+          remark: form.remarks || null,
+          ...gps,
+        },
+      });
+      if (error) throw error;
+      if (data?.ok === false) throw new Error(data?.error || "Failed delivery submission failed.");
+      setMsg(`${selected.delivery_way_id}: failed delivery saved. Enterprise synchronized Warehouse return queue, Customer Service follow-up, Finance exception review, Operations exception board and RTO tracking where applicable.`);
+      await load(selected.delivery_way_id);
+    } catch (error: any) {
+      setMsg(error?.message || "Failed delivery submission failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function sendGps() {
@@ -516,7 +551,7 @@ export default function DeliveryPage() {
                   <button disabled={busy} onClick={arriveAtCustomer} className="rounded-2xl bg-indigo-700 p-3 font-black text-white disabled:opacity-50">Arrived at Customer</button>
                   <button disabled={busy || !canDeliver} onClick={deliver} className="rounded-2xl bg-emerald-600 p-3 font-black text-white disabled:opacity-50">Delivered</button>
                   <select className="rounded-2xl border p-3 font-bold" value={form.failed_reason} onChange={(e) => setForm({ ...form, failed_reason: e.target.value })}>
-                    {FAILED_REASONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                    {failureReasons.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
                   </select>
                   {form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
                     <label className="rounded-2xl border p-3 font-bold">
