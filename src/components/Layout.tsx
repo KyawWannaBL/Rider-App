@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, LogOut, RefreshCw } from "lucide-react";
+import { Bell, CheckCheck, LogOut, RefreshCw } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
 
@@ -17,18 +17,44 @@ export function Layout() {
   const [openNotifications, setOpenNotifications] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
-  const unreadCount = notifications.filter((n) => !n.read_at).length;
+  const unreadCount = notifications.filter((n) => !(n.is_read || n.read_at)).length;
 
   async function loadNotifications() {
     setLoadingNotifications(true);
-    const { data } = await (supabase as any)
-      .from("be_app_notifications")
-      .select("*")
-      .or("target_role.eq.rider,target_role.eq.driver,target_role.eq.helper,target_role.eq.mobile,target_role.eq.general")
-      .order("created_at", { ascending: false })
-      .limit(50);
-    setNotifications(data || []);
-    setLoadingNotifications(false);
+    try {
+      const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
+        p_payload: { notification_limit: 50 },
+      });
+      if (error) throw error;
+      setNotifications(Array.isArray(data?.notifications) ? data.notifications : []);
+    } catch (error) {
+      console.error("Unable to load Rider notifications", error);
+      setNotifications([]);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }
+
+  async function markNotificationRead(notification: NotificationRow) {
+    if (!notification?.id || notification.is_read || notification.read_at) return;
+    const { error } = await (supabase as any).rpc("be_mark_app_notification_read", {
+      p_notification_id: notification.id,
+      p_login: null,
+    });
+    if (!error) {
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id
+            ? { ...item, is_read: true, read_at: new Date().toISOString() }
+            : item
+        )
+      );
+    }
+  }
+
+  async function markAllRead() {
+    const unread = notifications.filter((n) => n?.id && !(n.is_read || n.read_at));
+    await Promise.all(unread.map((n) => markNotificationRead(n)));
   }
 
   async function signOut() {
@@ -87,12 +113,19 @@ export function Layout() {
         <section className="fixed right-4 top-28 z-40 w-[calc(100vw-2rem)] max-w-md rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-black">Notifications</h2>
-            <button onClick={loadNotifications} disabled={loadingNotifications} className="rounded-xl border p-3"><RefreshCw className="h-4 w-4" /></button>
+            <div className="flex gap-2">
+              <button onClick={markAllRead} disabled={loadingNotifications || unreadCount === 0} className="rounded-xl border p-3 disabled:opacity-40" title="Mark all read"><CheckCheck className="h-4 w-4" /></button>
+              <button onClick={loadNotifications} disabled={loadingNotifications} className="rounded-xl border p-3"><RefreshCw className={`h-4 w-4 ${loadingNotifications ? "animate-spin" : ""}`} /></button>
+            </div>
           </div>
           <div className="mt-4 max-h-[60vh] space-y-3 overflow-y-auto">
             {notifications.length === 0 && <div className="rounded-2xl bg-slate-50 p-5 text-center font-black text-slate-500">No notifications yet.</div>}
             {notifications.map((n, i) => (
-              <article key={n.id || i} className={`rounded-2xl border p-4 ${n.read_at ? "bg-white" : "bg-blue-50"}`}>
+              <article
+                key={n.id || i}
+                onClick={() => markNotificationRead(n)}
+                className={`cursor-pointer rounded-2xl border p-4 transition hover:border-blue-300 ${n.is_read || n.read_at ? "bg-white" : "bg-blue-50"}`}
+              >
                 <h3 className="font-black">{n.title || "Workflow notification"}</h3>
                 <p className="mt-1 text-sm font-semibold text-slate-600">{n.message || "-"}</p>
                 <p className="mt-2 text-xs font-black text-slate-500">{n.pickup_id || ""} {n.created_at?.slice?.(0, 16) || ""}</p>
