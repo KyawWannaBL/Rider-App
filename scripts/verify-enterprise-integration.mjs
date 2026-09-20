@@ -11,7 +11,8 @@ const contracts = {
   "src/pages/DeliveryPage.tsx": [
     "be_rider_delivery_wayplan_jobs",
     "be_rider_wayplan_action",
-    "be_set_delivery_reschedule_v71"
+    "be_set_delivery_reschedule_v71",
+    "be_field_delivery_failure_reasons_v92"
   ],
   "src/pages/CodSettlementPageForVercel.tsx": [
     "be_rider_delivery_wayplan_jobs",
@@ -23,10 +24,15 @@ const contracts = {
   "src/pages/DocumentsPage.tsx": ["be_rider_document_snapshot","be_rider_document_save"],
   "src/pages/SupportPage.tsx": ["be_rider_support_snapshot","be_rider_support_ticket_save"],
   "src/pages/History.tsx": ["be_rider_history_snapshot"],
-  "src/pages/Profile.tsx": ["be_rider_profile_snapshot"],
+  "src/pages/Profile.tsx": ["be_field_profile_snapshot_v91","Username","Email"],
   "src/pages/BranchOfficeSyncPage.tsx": ["loadRiderBranchSnapshot"],
   "src/lib/branchOfficeSyncApi.ts": ["be_rider_branch_snapshot"],
   "src/components/Layout.tsx": ["be_field_team_mobile_snapshot_v77","be_mark_app_notification_read"],
+  "src/components/ProfileDrawer.tsx": ["be_field_profile_snapshot_v91","Username","Email"],
+  "src/components/shared/EarningsPanel.tsx": ["be_field_financial_snapshot_v91","Commission & Earnings"],
+  "src/components/shared/SupportPanel.tsx": ["be_rider_support_snapshot","be_rider_support_ticket_save"],
+  "src/components/shared/PortalSyncCenter.tsx": ["be_field_profile_snapshot_v91","be_rider_dashboard_snapshot","be_field_financial_snapshot_v91"],
+  "src/pages/shared/MobileGoLivePage.tsx": ["EarningsPanel","SupportPanel","Open Strict Delivery Verification","Canonical Pickup Verification"],
   "src/contexts/AuthContext.tsx": ["be_rider_profile_snapshot"],
   "src/App.tsx": ["pending-approval","profile"]
 };
@@ -43,7 +49,13 @@ const forbidden = [
   "be_mobile_rider_portal_snapshot",
   "be_mobile_support_request",
   '.from("be_app_notifications")',
-  ".from('be_app_notifications')"
+  ".from('be_app_notifications')",
+  '.from("support_tickets")',
+  ".from('support_tickets')",
+  '.from("jobs")',
+  ".from('jobs')",
+  '.from("cod_records")',
+  ".from('cod_records')"
 ];
 
 let failed=false;
@@ -89,6 +101,16 @@ for (const file of walk("src")) {
   }
 }
 
+
+
+
+const mobileGoLive = fs.readFileSync("src/pages/shared/MobileGoLivePage.tsx","utf8");
+for (const retiredUi of ["Estimated Earnings", 'label="Delivered"', 'label="In Transit"', 'label="Submit Proof"']) {
+  if (mobileGoLive.includes(retiredUi)) {
+    console.error(`Enterprise integration contract failed: MobileGoLivePage contains retired parallel UI ${retiredUi}`);
+    failed = true;
+  }
+}
 
 if (failed) process.exit(1);
 console.log("Rider Enterprise integration contract passed.");
