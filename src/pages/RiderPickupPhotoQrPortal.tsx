@@ -221,6 +221,20 @@ export default function RiderPickupPhotoQrPortal() {
     setMessage(`Saved ${okCount}/${parcels.length} parcel record(s).`);
   }
 
+  async function uploadAllPhotosForReview() {
+    const withPhotos = parcels.filter((parcel) => parcel.cargo_photo_data_url || parcel.cargo_photo_url);
+    if (withPhotos.length === 0) {
+      setMessage("Capture at least one cargo photo before using Upload All.");
+      return;
+    }
+    let okCount = 0;
+    for (const parcel of withPhotos) {
+      const ok = await saveParcel(parcel);
+      if (ok) okCount += 1;
+    }
+    setMessage(`Upload All completed: ${okCount}/${withPhotos.length} photo parcel(s) sent for review.`);
+  }
+
   function ensureQr(parcel: ParcelDraft) {
     if (parcel.temp_qr_code) return parcel.temp_qr_code;
     const pickupId = safeText(selectedPickup?.pickup_id || selectedPickup?.pickup_way_id, "");
@@ -387,6 +401,9 @@ export default function RiderPickupPhotoQrPortal() {
                   <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <button onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white">
                       Save All Parcel Records
+                    </button>
+                    <button onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white">
+                      Upload All Photos for Review
                     </button>
                     <button onClick={() => printQrCards(parcels)} className="rounded-2xl bg-slate-950 px-5 py-4 font-black text-white">
                       Print All Temporary QR Codes
