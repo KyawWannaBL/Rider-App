@@ -61,37 +61,25 @@ export async function fetchMobileAssignments(params: {
     };
   }
 
-  const { data: authData } = await supabase.auth.getUser();
-  const email = authData?.user?.email || "";
-  const workforceCode = codeFromEmail(email);
-  const workforceType = typeFromCode(workforceCode, params.role);
-
-  const { data, error } = await (supabase as any).rpc("be_mobile_app_my_assignments", {
-    p_workforce_code: workforceCode || null,
-    p_workforce_type: workforceType,
-    p_limit: params.limit || 100,
+  const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
+    p_payload: { limit: params.limit || 100 },
   });
 
   if (error) throw error;
 
+  const allJobs = Array.isArray(data?.jobs) ? data.jobs : [];
+  const deliveryJobs = allJobs.filter((row: any) => String(row.job_kind || "").toUpperCase() === "DELIVERY");
+  const codRows = deliveryJobs.filter((row: any) => Number(row.cod_collected ?? row.cod_amount ?? 0) > 0);
+
   return {
-    account: data?.account || null,
-    jobs: Array.isArray(data?.jobs) ? data.jobs.map(mapJob) : [],
-    codRecords: Array.isArray(data?.cod_records) ? data.cod_records.map(mapCod) : [],
+    account: data?.identity || null,
+    jobs: deliveryJobs.map(mapJob),
+    codRecords: codRows.map(mapCod),
     earnings: [] as EarningsRecord[],
     notifications: Array.isArray(data?.notifications) ? data.notifications : [],
   };
 }
 
-export async function updateMobileJobStatus(trackingNumber: string, status: string, payload: Record<string, unknown> = {}) {
-  if (!supabase) return null;
-
-  const { data, error } = await (supabase as any).rpc("be_mobile_app_update_job_status", {
-    p_tracking_no: trackingNumber,
-    p_status: status,
-    p_payload: payload,
-  });
-
-  if (error) throw error;
-  return data;
+export async function updateMobileJobStatus(_trackingNumber: string, _status: string, _payload: Record<string, unknown> = {}) {
+  throw new Error("Direct mobile status mutation is retired. Use Pickup Verification or strict Delivery Verification.");
 }
