@@ -1,118 +1,76 @@
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, LogOut, User, Mail, MapPin, Clock } from 'lucide-react';
-import { useAppState } from '@/hooks/useAppState';
-import { ROUTE_PATHS } from '@/lib/index';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Building2, LogOut, Mail, MapPin, RefreshCw, User, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
-interface ProfileDrawerProps {
-  open: boolean;
-  onClose: () => void;
+interface ProfileDrawerProps { open: boolean; onClose: () => void; }
+
+function text(...values: any[]) {
+  return String(values.find((value) => value !== null && value !== undefined && String(value).trim() !== "") || "-");
 }
 
 export function ProfileDrawer({ open, onClose }: ProfileDrawerProps) {
-  const { currentUser, language, setCurrentUser, setActiveRole } = useAppState();
   const navigate = useNavigate();
+  const [profile,setProfile]=useState<any>(null);
+  const [loading,setLoading]=useState(false);
+  const [message,setMessage]=useState("");
 
-  const handleLogout = async () => {
-    if (supabase) await supabase.auth.signOut();
-    setCurrentUser(null);
-    setActiveRole(null);
-    navigate(ROUTE_PATHS.LOGIN);
-  };
+  async function load(){
+    setLoading(true);
+    const {data,error}=await (supabase as any).rpc("be_field_profile_snapshot_v91");
+    if(error){setMessage(error.message);setProfile(null);} else {setProfile(data);setMessage("");}
+    setLoading(false);
+  }
 
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            className="fixed inset-0 z-50 bg-black/60"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onClose}
-          />
-          <motion.div
-            className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl border-t border-border overflow-hidden"
-            style={{ background: 'oklch(0.13 0.035 258)' }}
-            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 35 }}
-          >
-            {/* Handle */}
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-muted" />
-            </div>
+  useEffect(()=>{ if(open) void load(); },[open]);
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h2 className="text-base font-bold text-foreground">
-                {language === 'en' ? 'My Profile' : 'ကျွန်ုပ်၏ ပရိုဖိုင်'}
-              </h2>
-              <button onClick={onClose} className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-muted">
-                <X className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </div>
+  async function handleLogout(){
+    await supabase.auth.signOut();
+    navigate("/login",{replace:true});
+  }
 
-            {/* Profile body */}
-            <div className="px-5 py-5 space-y-4">
-              {currentUser ? (
-                <>
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="h-14 w-14 rounded-2xl flex items-center justify-center text-xl font-black"
-                      style={{ background: 'oklch(0.83 0.175 96 / 0.12)', color: 'oklch(0.83 0.175 96)' }}
-                    >
-                      {currentUser.nameEn.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-base font-bold text-foreground">{currentUser.nameEn}</p>
-                      <span
-                        className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
-                        style={{ background: 'oklch(0.83 0.175 96 / 0.15)', color: 'oklch(0.83 0.175 96)' }}
-                      >
-                        {currentUser.role}
-                      </span>
-                    </div>
-                  </div>
+  const canonical=profile?.canonical||{};
+  const workforce=profile?.workforce||{};
+  const name=text(canonical.display_name,workforce.display_name,workforce.full_name,canonical.username);
+  const role=text(canonical.role,workforce.role,workforce.role_type).toUpperCase();
 
-                  <div className="space-y-2.5">
-                    <ProfileRow icon={<User className="h-4 w-4" />} label="Employee ID" value={currentUser.id.slice(0, 8).toUpperCase()} />
-                    <ProfileRow icon={<MapPin className="h-4 w-4" />} label="Zone" value={currentUser.zoneEn} />
-                    <ProfileRow icon={<Clock className="h-4 w-4" />} label="Shift" value={currentUser.shift} />
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center gap-3 py-4">
-                  <User className="h-10 w-10 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Not logged in</p>
-                </div>
-              )}
-            </div>
+  return <AnimatePresence>{open&&<>
+    <motion.div className="fixed inset-0 z-50 bg-black/60" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={onClose}/>
+    <motion.div className="fixed bottom-0 left-0 right-0 z-50 max-h-[88vh] overflow-y-auto rounded-t-3xl border-t border-slate-700 bg-slate-950 text-white shadow-2xl"
+      initial={{y:"100%"}} animate={{y:0}} exit={{y:"100%"}} transition={{type:"spring",stiffness:300,damping:35}}>
+      <div className="flex justify-center pt-3"><div className="h-1 w-10 rounded-full bg-slate-600"/></div>
+      <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+        <div><p className="text-xs font-black uppercase tracking-[0.25em] text-cyan-300">Enterprise identity</p><h2 className="mt-1 text-lg font-black">My Profile</h2></div>
+        <div className="flex gap-2">
+          <button onClick={load} disabled={loading} className="grid h-9 w-9 place-items-center rounded-full bg-white/5"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/></button>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/5"><X className="h-4 w-4"/></button>
+        </div>
+      </div>
 
-            {/* Logout */}
-            <div className="px-5 pb-8">
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 w-full justify-center rounded-2xl py-3.5 text-sm font-bold transition-colors"
-                style={{ background: 'oklch(0.58 0.22 15 / 0.12)', color: 'oklch(0.72 0.15 15)', border: '1px solid oklch(0.58 0.22 15 / 0.25)' }}
-              >
-                <LogOut className="h-4 w-4" />
-                {language === 'en' ? 'Logout' : 'ထွက်'}
-              </button>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  );
+      <div className="space-y-4 px-5 py-5">
+        <div className="flex items-center gap-4 rounded-3xl bg-white/5 p-4">
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-amber-400/10 text-xl font-black text-amber-300">{name.charAt(0).toUpperCase()}</div>
+          <div className="min-w-0"><p className="truncate text-lg font-black">{name}</p><p className="mt-1 text-xs font-black uppercase tracking-wider text-cyan-300">{role}</p></div>
+        </div>
+
+        {message&&<div className="rounded-2xl bg-rose-500/10 p-3 text-sm font-bold text-rose-200">{message}</div>}
+
+        <div className="grid gap-2">
+          <ProfileRow icon={<User className="h-4 w-4"/>} label="Username" value={text(canonical.username,workforce.account,workforce.account_code)}/>
+          <ProfileRow icon={<Mail className="h-4 w-4"/>} label="Email" value={text(canonical.email,workforce.email,workforce.user_email)}/>
+          <ProfileRow icon={<User className="h-4 w-4"/>} label="Workforce Code" value={text(canonical.worker_code,workforce.workforce_code,workforce.worker_code)}/>
+          <ProfileRow icon={<Building2 className="h-4 w-4"/>} label="Branch" value={text(canonical.branch_code,workforce.branch_code,workforce.assigned_branch)}/>
+          <ProfileRow icon={<MapPin className="h-4 w-4"/>} label="Assigned Zone" value={text(canonical.assigned_zone,workforce.assigned_zone,workforce.zone_code,workforce.zone)}/>
+        </div>
+
+        <button onClick={()=>{onClose();navigate("/profile");}} className="w-full rounded-2xl bg-blue-600 py-3.5 text-sm font-black">Open Full Profile</button>
+        <button onClick={handleLogout} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-500/10 py-3.5 text-sm font-black text-rose-200 ring-1 ring-rose-400/20"><LogOut className="h-4 w-4"/>Sign Out</button>
+      </div>
+    </motion.div>
+  </>}</AnimatePresence>;
 }
 
-function ProfileRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-muted/30">
-      <span className="text-muted-foreground">{icon}</span>
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
-        <p className="text-sm font-semibold text-foreground">{value}</p>
-      </div>
-    </div>
-  );
+function ProfileRow({icon,label,value}:{icon:React.ReactNode;label:string;value:string}){
+  return <div className="flex items-center gap-3 rounded-2xl bg-white/5 px-4 py-3"><span className="text-slate-400">{icon}</span><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p><p className="mt-0.5 break-all text-sm font-bold text-slate-100">{value}</p></div></div>;
 }
