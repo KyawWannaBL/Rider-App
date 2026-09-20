@@ -14,6 +14,7 @@ type ParcelDraft = {
   remarks: string;
   cargo_photo_data_url?: string;
   cargo_photo_url?: string;
+  cargo_photo_file?: File;
   cargo_photo_name?: string;
   photo_status?: string;
   saved?: boolean;
@@ -48,6 +49,31 @@ function tempQrCode(pickupId: string, lineNo: number) {
 
 function qrImageUrl(value: string) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(value)}`;
+}
+
+async function compressPickupPhoto(file: File, maxBytes = 950 * 1024): Promise<File> {
+  if (!file.type.startsWith("image/")) throw new Error("Select an image file.");
+  if (file.size <= maxBytes) return file;
+
+  const worker = new Worker(new URL("../workers/proofCompressionWorker.ts", import.meta.url), { type: "module" });
+  try {
+    const buffer = await file.arrayBuffer();
+    return await new Promise<File>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error("Photo compression timed out.")), 30_000);
+      worker.onmessage = (event) => {
+        window.clearTimeout(timer);
+        if (!event.data?.ok) return reject(new Error(event.data?.error || "Photo compression failed."));
+        resolve(new File([event.data.buffer], event.data.name || "pickup-proof.jpg", { type: event.data.type || "image/jpeg" }));
+      };
+      worker.onerror = () => {
+        window.clearTimeout(timer);
+        reject(new Error("Photo compression failed."));
+      };
+      worker.postMessage({ buffer, type: file.type, name: file.name, maxBytes, maxWidth: 1280, maxHeight: 720 }, [buffer]);
+    });
+  } finally {
+    worker.terminate();
+  }
 }
 
 function buildParcels(pickup: PickupRow): ParcelDraft[] {
@@ -161,22 +187,62 @@ export default function RiderPickupPhotoQrPortal() {
   async function onPhotoSelected(lineNo: number, file?: File) {
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateParcel(lineNo, {
-        cargo_photo_data_url: String(reader.result || ""),
-        cargo_photo_name: file.name,
-        photo_status: "photo_captured",
-      });
-      setMessage(`Cargo photo captured for parcel ${lineNo}. Press “Save This Parcel” or “Save All Parcel Records”.`);
-    };
-    reader.readAsDataURL(file);
+    setMessage(`Preparing cargo photo for parcel ${lineNo}...`);
+    try {
+      const compressed = await compressPickupPhoto(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        updateParcel(lineNo, {
+          cargo_photo_data_url: String(reader.result || ""),
+          cargo_photo_file: compressed,
+          cargo_photo_url: "",
+          cargo_photo_name: compressed.name,
+          photo_status: "photo_ready_for_upload",
+        });
+        setMessage(`Cargo photo ready for parcel ${lineNo}. It will upload to Enterprise proof storage when saved.`);
+      };
+      reader.readAsDataURL(compressed);
+    } catch (error: any) {
+      setMessage(error?.message || `Unable to prepare parcel ${lineNo} photo.`);
+    }
+  }
+
+  async function ensurePhotoUploaded(parcel: ParcelDraft, pickupId: string) {
+    if (parcel.cargo_photo_url) return parcel.cargo_photo_url;
+    if (!parcel.cargo_photo_file) throw new Error(`Parcel ${parcel.line_no} requires an approved cargo photo.`);
+
+    const extension = parcel.cargo_photo_file.name.split(".").pop() || "jpg";
+    const path = `pickup/${pickupId}/${parcel.delivery_way_id}/${Date.now()}-${parcel.line_no}.${extension}`;
+    const { error } = await supabase.storage.from("rider-proofs").upload(path, parcel.cargo_photo_file, {
+      upsert: false,
+      contentType: parcel.cargo_photo_file.type || "image/jpeg",
+    });
+    if (error) throw error;
+
+    const { data } = supabase.storage.from("rider-proofs").getPublicUrl(path);
+    const url = data?.publicUrl;
+    if (!url) throw new Error("Unable to create Rider proof URL.");
+
+    updateParcel(parcel.line_no, {
+      cargo_photo_url: url,
+      cargo_photo_file: undefined,
+      photo_status: "photo_uploaded",
+    });
+    return url;
   }
 
   async function saveParcel(parcel: ParcelDraft) {
     if (!selectedPickup) return false;
 
     const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
+
+    let durablePhotoUrl = parcel.cargo_photo_url || "";
+    try {
+      durablePhotoUrl = await ensurePhotoUploaded(parcel, pickupId);
+    } catch (error: any) {
+      setMessage(error?.message || `Photo upload failed for parcel ${parcel.line_no}.`);
+      return false;
+    }
 
     const payload = {
       pickup_id: pickupId,
@@ -187,8 +253,8 @@ export default function RiderPickupPhotoQrPortal() {
       delivery_way_id: parcel.delivery_way_id,
       parcel_weight: parcel.parcel_weight || 0,
       remarks: parcel.remarks || "",
-      cargo_photo_url: parcel.cargo_photo_url || null,
-      cargo_photo_data_url: parcel.cargo_photo_data_url || null,
+      cargo_photo_url: durablePhotoUrl,
+      cargo_photo_data_url: null,
       cargo_photo_name: parcel.cargo_photo_name || null,
       temp_qr_code: parcel.temp_qr_code,
     };
