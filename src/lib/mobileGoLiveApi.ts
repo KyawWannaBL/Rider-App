@@ -74,36 +74,27 @@ function normalizeArray<T>(value: unknown): T[] {
 }
 
 export async function loadMobileSnapshot(role: MobileRole, limit = 100): Promise<MobileSnapshot> {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_snapshot", {
-    p_workforce_type: role,
-    p_workforce_code: null,
-    p_limit: limit,
+  const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
+    p_payload: { limit },
   });
 
   if (error) throw error;
 
   return {
     ok: Boolean(data?.ok ?? true),
-    account: data?.account ?? {},
-    workforce_code: data?.workforce_code ?? "",
-    workforce_type: (data?.workforce_type || role) as MobileRole,
-    pickups: normalizeArray<MobilePickup>(data?.pickups),
-    jobs: normalizeArray<MobileJob>(data?.jobs),
-    cod_records: normalizeArray<MobileJob>(data?.cod_records),
+    account: data?.identity ?? {},
+    workforce_code: data?.identity?.worker_code ?? "",
+    workforce_type: (data?.identity?.role || role) as MobileRole,
+    pickups: normalizeArray<any>(data?.jobs).filter((row: any) => String(row.job_kind || "PICKUP").toUpperCase() === "PICKUP") as MobilePickup[],
+    jobs: normalizeArray<any>(data?.jobs).filter((row: any) => String(row.job_kind || "").toUpperCase() === "DELIVERY") as MobileJob[],
+    cod_records: normalizeArray<any>(data?.jobs).filter((row: any) => String(row.job_kind || "").toUpperCase() === "DELIVERY" && Number(row.cod_collected ?? row.cod_amount ?? 0) > 0) as MobileJob[],
     notifications: normalizeArray<Record<string, unknown>>(data?.notifications),
     server_time: data?.server_time,
   };
 }
 
-export async function updateWaybillStatus(eventId: string, status: string, payload: Record<string, unknown> = {}) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_waybill_status", {
-    p_event_id: eventId,
-    p_status: status,
-    p_payload: payload,
-  });
-
-  if (error) throw error;
-  return data;
+export async function updateWaybillStatus(_eventId: string, _status: string, _payload: Record<string, unknown> = {}) {
+  throw new Error("Direct Waybill status mutation is retired. Use strict Enterprise workflow actions.");
 }
 
 export async function verifyPickupParcel(payload: {
@@ -114,8 +105,16 @@ export async function verifyPickupParcel(payload: {
   note?: string;
   role: MobileRole;
 }) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_verify_pickup_parcel", {
-    p_payload: payload,
+  const lineNo = Number(String(payload.deliver_way_id || "").split("-").pop() || 0);
+  const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_save", {
+    p_payload: {
+      pickup_id: payload.pickup_id,
+      delivery_way_id: payload.deliver_way_id,
+      line_no: lineNo,
+      parcel_weight: payload.weight_kg,
+      cargo_photo_url: payload.photo_url,
+      remarks: payload.note || null,
+    },
   });
 
   if (error) throw error;
@@ -123,9 +122,10 @@ export async function verifyPickupParcel(payload: {
 }
 
 export async function codHandover(eventId: string, payload: Record<string, unknown> = {}) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_cod_handover", {
-    p_event_id: eventId,
-    p_payload: payload,
+  const { data, error } = await (supabase as any).rpc("be_rider_submit_cod_settlement", {
+    p_delivery_way_id: eventId,
+    p_cod_amount: Number((payload as any).amount || (payload as any).cod_amount || 0),
+    p_remark: String((payload as any).remark || (payload as any).note || ""),
   });
 
   if (error) throw error;
@@ -133,10 +133,14 @@ export async function codHandover(eventId: string, payload: Record<string, unkno
 }
 
 export async function submitSupportRequest(role: MobileRole, message: string, payload: Record<string, unknown> = {}) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_support_request", {
-    p_workforce_type: role,
-    p_message: message,
-    p_payload: payload,
+  const { data, error } = await (supabase as any).rpc("be_rider_support_ticket_save", {
+    p_payload: {
+      ticket_type: (payload as any).ticket_type || (payload as any).topic || "app_error",
+      priority: (payload as any).priority || "normal",
+      subject: (payload as any).subject || `${role} support request`,
+      message,
+      pickup_id: (payload as any).pickup_id || null,
+    },
   });
 
   if (error) throw error;
