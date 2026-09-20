@@ -1,130 +1,73 @@
-import { useState } from 'react';
-import { HeadphonesIcon, MessageSquare, Phone, ChevronRight } from 'lucide-react';
-import { useAppState } from '@/hooks/useAppState';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState } from "react";
+import { ChevronRight, HeadphonesIcon, RefreshCw } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
-interface SupportPanelProps { role: 'rider' | 'driver' | 'helper'; }
+interface SupportPanelProps { role: "rider" | "driver" | "helper"; }
 
-export function SupportPanel({ role: _role }: SupportPanelProps) {
-  const { currentUser, language: lang } = useAppState();
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
-  const [sent, setSent] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function SupportPanel({ role }: SupportPanelProps) {
+  const [subject,setSubject]=useState("");
+  const [message,setMessage]=useState("");
+  const [pickupId,setPickupId]=useState("");
+  const [ticketType,setTicketType]=useState("delivery_issue");
+  const [priority,setPriority]=useState("normal");
+  const [tickets,setTickets]=useState<any[]>([]);
+  const [status,setStatus]=useState("Loading Enterprise support...");
+  const [sending,setSending]=useState(false);
 
-  const handleSend = async () => {
-    if (!subject.trim() || !message.trim()) {
-      setError(lang === 'en' ? 'Please fill all fields.' : 'ကွက်လပ်အားလုံး ဖြည့်ပါ');
-      return;
-    }
+  async function load(){
+    const {data,error}=await (supabase as any).rpc("be_rider_support_snapshot",{p_limit:50});
+    if(error){setStatus(error.message);return;}
+    setTickets(Array.isArray(data?.tickets)?data.tickets:[]);
+    setStatus("Support synchronized with Enterprise CS / Operations.");
+  }
+
+  async function handleSend(){
+    if(!subject.trim()||!message.trim()){setStatus("Subject and message are required.");return;}
     setSending(true);
-    setError(null);
-    try {
-      if (supabase) {
-        await supabase.from('support_tickets').insert({
-          user_id: currentUser?.id,
-          subject,
-          message,
-          role: _role,
-          status: 'open',
-        });
-      }
-      setSent(true);
-      setSubject('');
-      setMessage('');
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to send');
-    } finally {
-      setSending(false);
+    const {data,error}=await (supabase as any).rpc("be_rider_support_ticket_save",{p_payload:{
+      pickup_id:pickupId||null,
+      ticket_type:ticketType,
+      priority,
+      subject:`[${role.toUpperCase()}] ${subject.trim()}`,
+      message:message.trim(),
+    }});
+    if(error){setStatus(error.message);}else{
+      setStatus(`Enterprise ticket submitted${data?.cs_ticket_no?` as ${data.cs_ticket_no}`:""}.`);
+      setSubject("");setMessage("");setPickupId("");await load();
     }
-  };
+    setSending(false);
+  }
 
-  const faqs = [
-    { q: lang === 'en' ? 'How do I confirm a pickup?' : 'ကောက်ယူမှု မည်သို့အတည်ပြုမလဲ?', a: lang === 'en' ? 'Go to Pickup tab → scan QR or enter tracking.' : 'ကောက်ယူမှုတက်ဘ် → QR စကင်နိုင်' },
-    { q: lang === 'en' ? 'How to report a failed delivery?' : 'မအောင်မြင်သောပို့ဆောင်မှု မည်သို့တင်ပြမလဲ?', a: lang === 'en' ? 'Open the job → Proof tab → choose Failed + reason.' : 'အလုပ် → သက်သေ → မအောင်မြင် ရွေးချယ်ပါ' },
-    { q: lang === 'en' ? 'When does COD need to be handed over?' : 'COD မည်သောအချိန်တွင် လွှဲပြောင်းရမလဲ?', a: lang === 'en' ? 'End of shift. Go to COD tab and tap Handover.' : 'ဆင့်ပြီးဆုံးသောအချိန် COD တက်ဘ် → လွှဲပြောင်း' },
+  useEffect(()=>{void load();},[]);
+
+  const faqs=[
+    ["How do I confirm a pickup?","Use Pickup Verification. Weight and approved photo are synchronized to Enterprise Data Entry review."],
+    ["How do I report a failed delivery?","Open Delivery Verification, choose the exact failed reason, and submit. Warehouse, CS, Finance and Operations are synchronized automatically."],
+    ["When do I hand over COD?","After a delivered COD parcel, use COD Settlement. Enterprise Finance keeps the authoritative amount and settlement state."],
   ];
 
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3 mb-2">
-        <HeadphonesIcon className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-xl font-black text-foreground">
-          {lang === 'en' ? 'Support' : 'ပံ့ပိုး'}
-        </h1>
-      </div>
+  return <div className="space-y-5">
+    <div className="flex items-center justify-between"><div className="flex items-center gap-3"><HeadphonesIcon className="h-5 w-5 text-muted-foreground"/><div><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{role} · Enterprise</p><h1 className="text-xl font-black text-foreground">Support</h1></div></div><button onClick={load} className="rounded-xl bg-muted/20 p-2"><RefreshCw className="h-4 w-4"/></button></div>
+    <div className="rounded-2xl bg-muted/20 p-3 text-xs font-bold text-muted-foreground">{status}</div>
 
-      {/* Quick contact */}
-      <div className="grid grid-cols-2 gap-3">
-        <a href="tel:+959XXXXXXXX" className="flex items-center gap-3 rounded-2xl p-4 transition-colors" style={{ background: 'oklch(0.13 0.032 258)', border: '1px solid oklch(0.19 0.036 260)' }}>
-          <Phone className="h-5 w-5" style={{ color: 'oklch(0.62 0.18 152)' }} />
-          <div>
-            <p className="text-xs font-black text-foreground">{lang === 'en' ? 'Call Ops' : 'ဆက်သွယ်'}</p>
-            <p className="text-[9px] text-muted-foreground">24/7</p>
-          </div>
-        </a>
-        <div className="flex items-center gap-3 rounded-2xl p-4" style={{ background: 'oklch(0.13 0.032 258)', border: '1px solid oklch(0.19 0.036 260)' }}>
-          <MessageSquare className="h-5 w-5" style={{ color: 'oklch(0.55 0.18 240)' }} />
-          <div>
-            <p className="text-xs font-black text-foreground">{lang === 'en' ? 'Live Chat' : 'တိုက်ရိုက်စကား'}</p>
-            <p className="text-[9px] text-muted-foreground">{lang === 'en' ? 'Coming soon' : 'မကြာမီ'}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* FAQ */}
-      <div className="space-y-2.5">
-        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">FAQ</p>
-        {faqs.map(({ q, a }) => (
-          <details key={q} className="rounded-2xl overflow-hidden group" style={{ background: 'oklch(0.13 0.032 258)', border: '1px solid oklch(0.19 0.036 260)' }}>
-            <summary className="flex items-center justify-between px-4 py-3.5 cursor-pointer list-none">
-              <span className="text-sm font-semibold text-foreground">{q}</span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground group-open:rotate-90 transition-transform" />
-            </summary>
-            <div className="px-4 pb-4 text-sm text-muted-foreground">{a}</div>
-          </details>
-        ))}
-      </div>
-
-      {/* Submit ticket */}
-      <div className="space-y-3">
-        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">
-          {lang === 'en' ? 'Submit Ticket' : 'တိကက် တင်သွင်း'}
-        </p>
-        {sent ? (
-          <div className="rounded-2xl p-5 text-center" style={{ background: 'oklch(0.62 0.18 152 / 0.10)', border: '1px solid oklch(0.62 0.18 152 / 0.25)' }}>
-            <p className="text-sm font-bold" style={{ color: 'oklch(0.62 0.18 152)' }}>
-              {lang === 'en' ? '✅ Ticket submitted! Our team will reach you soon.' : '✅ တိကက် တင်သွင်းပြီး!'}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3 rounded-2xl p-4" style={{ background: 'oklch(0.13 0.032 258)', border: '1px solid oklch(0.19 0.036 260)' }}>
-            <input
-              value={subject}
-              onChange={e => setSubject(e.target.value)}
-              placeholder={lang === 'en' ? 'Subject' : 'ခေါင်းစဉ်'}
-              className="w-full rounded-xl px-4 py-3 text-sm bg-background text-foreground border border-border outline-none focus:border-primary"
-            />
-            <textarea
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              rows={4}
-              placeholder={lang === 'en' ? 'Describe your issue…' : 'ပြဿနာ ဖော်ပြပါ…'}
-              className="w-full rounded-xl px-4 py-3 text-sm bg-background text-foreground border border-border outline-none focus:border-primary resize-none"
-            />
-            {error && <p className="text-xs" style={{ color: 'oklch(0.72 0.15 15)' }}>{error}</p>}
-            <button
-              onClick={handleSend}
-              disabled={sending}
-              className="w-full rounded-2xl py-3 text-sm font-black uppercase tracking-wide transition-all disabled:opacity-60"
-              style={{ background: 'oklch(0.83 0.175 96)', color: 'oklch(0.09 0.028 256)' }}
-            >
-              {sending ? (lang === 'en' ? 'Sending…' : 'ပို့နေသည်…') : (lang === 'en' ? 'Send' : 'ပို့')}
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="space-y-2.5">
+      {faqs.map(([q,a])=><details key={q} className="group overflow-hidden rounded-2xl" style={{background:"oklch(0.13 0.032 258)",border:"1px solid oklch(0.19 0.036 260)"}}><summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3.5"><span className="text-sm font-semibold text-foreground">{q}</span><ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90"/></summary><div className="px-4 pb-4 text-sm text-muted-foreground">{a}</div></details>)}
     </div>
-  );
+
+    <div className="space-y-3 rounded-2xl p-4" style={{background:"oklch(0.13 0.032 258)",border:"1px solid oklch(0.19 0.036 260)"}}>
+      <input value={pickupId} onChange={e=>setPickupId(e.target.value)} placeholder="Pickup / Delivery Way ID" className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm"/>
+      <div className="grid grid-cols-2 gap-3">
+        <select value={ticketType} onChange={e=>setTicketType(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3 text-sm"><option value="delivery_issue">Delivery Issue</option><option value="pickup_issue">Pickup Issue</option><option value="cod_issue">COD Issue</option><option value="emergency">Emergency</option><option value="app_error">App Error</option></select>
+        <select value={priority} onChange={e=>setPriority(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-3 text-sm"><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select>
+      </div>
+      <input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Subject" className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm"/>
+      <textarea value={message} onChange={e=>setMessage(e.target.value)} rows={4} placeholder="Describe the issue..." className="w-full resize-none rounded-xl border border-border bg-background px-4 py-3 text-sm"/>
+      <button onClick={handleSend} disabled={sending} className="w-full rounded-2xl py-3 text-sm font-black uppercase disabled:opacity-50" style={{background:"oklch(0.83 0.175 96)",color:"oklch(0.09 0.028 256)"}}>{sending?"Sending...":"Send to Enterprise CS / Operations"}</button>
+    </div>
+
+    <section className="space-y-2">
+      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">My recent tickets</p>
+      {tickets.slice(0,10).map(t=><div key={t.id} className="rounded-xl bg-muted/20 px-4 py-3"><div className="flex items-center justify-between gap-3"><p className="text-sm font-bold text-foreground">{t.subject||t.ticket_type}</p><span className="text-[10px] font-black uppercase text-muted-foreground">{t.status||"OPEN"}</span></div><p className="mt-1 text-xs text-muted-foreground">{t.pickup_id||""}</p></div>)}
+    </section>
+  </div>;
 }
