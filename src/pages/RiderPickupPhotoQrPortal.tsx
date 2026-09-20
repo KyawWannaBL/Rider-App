@@ -83,11 +83,10 @@ export default function RiderPickupPhotoQrPortal() {
     setLoading(true);
     setMessage("Loading assigned pickups from Britium workflow...");
 
-    const { data, error } = await (supabase as any).rpc("be_mobile_go_live_snapshot", {
+    const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
       p_payload: {
-        role: "rider",
         search: search || null,
-        p_limit: 200,
+        limit: 200,
       },
     });
 
@@ -98,7 +97,10 @@ export default function RiderPickupPhotoQrPortal() {
       return;
     }
 
-    const rows = rowsFromSnapshot(data);
+    const rows = rowsFromSnapshot(data).filter((row) =>
+      String(row.job_kind || "PICKUP").toUpperCase() === "PICKUP" &&
+      !row.is_delivery_job
+    );
     setPickups(rows);
 
     const requested = params.pickupId || search;
