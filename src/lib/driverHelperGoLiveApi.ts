@@ -89,30 +89,28 @@ function assertNoError(error: any) {
 }
 
 export async function loadGoLiveSnapshot(role: WorkforceRole, workforceCode?: string): Promise<GoLiveSnapshot> {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_snapshot", {
-    p_workforce_code: workforceCode || null,
-    p_workforce_type: role,
-    p_limit: 200,
+  const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
+    p_payload: { limit: 200 },
   });
 
   assertNoError(error);
 
   return {
     ok: Boolean(data?.ok),
-    account: data?.account || {},
-    workforce_code: data?.workforce_code,
-    workforce_type: data?.workforce_type || role,
-    pickup_ids: Array.isArray(data?.pickup_ids) ? data.pickup_ids : [],
-    pickups: Array.isArray(data?.pickups) ? data.pickups : [],
-    jobs: Array.isArray(data?.jobs) ? data.jobs : [],
-    assignments: Array.isArray(data?.assignments) ? data.assignments : [],
-    cod_records: Array.isArray(data?.cod_records) ? data.cod_records : [],
+    account: data?.identity || {},
+    workforce_code: data?.identity?.worker_code,
+    workforce_type: data?.identity?.role || role,
+    pickup_ids: (Array.isArray(data?.jobs) ? data.jobs : []).filter((row: any) => String(row.job_kind || "PICKUP").toUpperCase() === "PICKUP").map((row: any) => row.pickup_id).filter(Boolean),
+    pickups: (Array.isArray(data?.jobs) ? data.jobs : []).filter((row: any) => String(row.job_kind || "PICKUP").toUpperCase() === "PICKUP"),
+    jobs: (Array.isArray(data?.jobs) ? data.jobs : []).filter((row: any) => String(row.job_kind || "").toUpperCase() === "DELIVERY"),
+    assignments: (Array.isArray(data?.jobs) ? data.jobs : []).filter((row: any) => String(row.job_kind || "").toUpperCase() === "DELIVERY"),
+    cod_records: (Array.isArray(data?.jobs) ? data.jobs : []).filter((row: any) => String(row.job_kind || "").toUpperCase() === "DELIVERY" && Number(row.cod_collected ?? row.cod_amount ?? 0) > 0),
     notifications: Array.isArray(data?.notifications) ? data.notifications : [],
-    summary: data?.summary || {},
+    summary: data?.counts || {},
   };
 }
 
-export async function updateGoLiveWaybillStatus(payload: {
+export async function updateGoLiveWaybillStatus(_payload: {
   pickup_id: string;
   deliver_way_id: string;
   status: string;
@@ -123,9 +121,7 @@ export async function updateGoLiveWaybillStatus(payload: {
   actor_code?: string;
   actor_name?: string;
 }) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_update_waybill_status", { p_payload: payload });
-  assertNoError(error);
-  return data;
+  throw new Error("Direct delivery status mutation is retired. Use the strict Delivery Verification workflow.");
 }
 
 export async function handoverGoLiveCod(payload: {
@@ -135,7 +131,12 @@ export async function handoverGoLiveCod(payload: {
   actor_code?: string;
   actor_name?: string;
 }) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_cod_handover", { p_payload: payload });
+  const { data, error } = await (supabase as any).rpc("be_rider_submit_cod_settlement", {
+    p_pickup_id: payload.pickup_id || null,
+    p_delivery_way_id: payload.deliver_way_id || null,
+    p_cod_amount: Number(payload.amount || 0),
+    p_remark: "Submitted from field-team compatibility flow",
+  });
   assertNoError(error);
   return data;
 }
@@ -149,7 +150,15 @@ export async function sendGoLiveSupportRequest(payload: {
   actor_code?: string;
   actor_name?: string;
 }) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_support_request", { p_payload: payload });
+  const { data, error } = await (supabase as any).rpc("be_rider_support_ticket_save", {
+    p_payload: {
+      ticket_type: "app_error",
+      priority: "normal",
+      subject: payload.title,
+      message: payload.message,
+      pickup_id: payload.pickup_id || payload.deliver_way_id || null,
+    },
+  });
   assertNoError(error);
   return data;
 }
@@ -163,7 +172,17 @@ export async function verifyGoLivePickupParcel(payload: {
   actor_code?: string;
   actor_name?: string;
 }) {
-  const { data, error } = await (supabase as any).rpc("be_mobile_go_live_verify_pickup_parcel", { p_payload: payload });
+  const lineNo = Number(String(payload.deliver_way_id || "").split("-").pop() || 0);
+  const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_save", {
+    p_payload: {
+      pickup_id: payload.pickup_id,
+      delivery_way_id: payload.deliver_way_id,
+      line_no: lineNo,
+      parcel_weight: payload.weight_kg,
+      cargo_photo_url: payload.photo_url,
+      remarks: payload.note || null,
+    },
+  });
   assertNoError(error);
   return data;
 }
