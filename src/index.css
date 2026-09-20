@@ -1,19 +1,59 @@
+@import "tailwindcss";
 @import "./styles/britium-design-tokens.css";
-@import "./styles/britium-design-tokens.css";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+
 @layer base {
   :root {
-    --background:222.2 84% 4.9%;--foreground:210 40% 98%;
-    --muted:217.2 32.6% 17.5%;--muted-foreground:215 20.2% 65.1%;
-    --primary:210 40% 98%;--primary-foreground:222.2 47.4% 11.2%;
-    --accent:217.2 32.6% 17.5%;--accent-foreground:210 40% 98%;
-    --destructive:0 62.8% 30.6%;--destructive-foreground:210 40% 98%;
-    --border:217.2 32.6% 17.5%;--input:217.2 32.6% 17.5%;--ring:212.7 26.8% 83.9%;
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
   }
-  * { border-color: hsl(var(--border)); box-sizing: border-box; }
-  body { background:#0f172a; color:#f1f5f9; font-family:'Inter',system-ui,sans-serif; margin:0; padding:0; }
-  ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:#0f172a; }
-  ::-webkit-scrollbar-thumb { background:#334155; border-radius:2px; }
+
+  * {
+    border-color: hsl(var(--border));
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    background: #07111f;
+    color: #f1f5f9;
+    font-family: var(--be-font-sans, Inter, system-ui, sans-serif);
+    margin: 0;
+    padding: 0;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0f172a;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 2px;
+  }
 }
