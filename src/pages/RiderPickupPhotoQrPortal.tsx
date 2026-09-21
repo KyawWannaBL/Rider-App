@@ -40,7 +40,7 @@ function baseFromPickup(pickupId: string) {
 }
 
 function lineCode(prefix: "D" | "W", pickupId: string, lineNo: number) {
-  const safeLine = Math.max(1, Math.min(Number(lineNo || 1), 50));
+  const safeLine = Math.max(1, Math.min(Number(lineNo || 1), 500));
   return `${prefix}${baseFromPickup(pickupId)}-${String(safeLine).padStart(3, "0")}`;
 }
 
@@ -79,7 +79,7 @@ async function compressPickupPhoto(file: File, maxBytes = 950 * 1024): Promise<F
 
 function buildParcels(pickup: PickupRow): ParcelDraft[] {
   const pickupId = safeText(pickup.pickup_id || pickup.pickup_way_id, "");
-  const count = Math.max(1, Math.min(Number(pickup.parcel_count || 1), 50));
+  const count = Math.max(1, Math.min(Number(pickup.parcel_count || pickup.expected_parcels || 1), 500));
 
   return Array.from({ length: count }, (_, idx) => {
     const line = idx + 1;
@@ -106,13 +106,17 @@ export default function RiderPickupPhotoQrPortal() {
   const [search, setSearch] = useState(params.pickupId || "");
   const [message, setMessage] = useState(language === "my" ? "တာဝန်ပေးထားသော Pickup များကို ဖွင့်နေသည်..." : "Loading assigned pickups...");
   const [loading, setLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState("");
+  const [savingLine, setSavingLine] = useState<number | null>(null);
+  const [parcelPage, setParcelPage] = useState(1);
+  const pageSize = 20;
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   async function loadAssignedPickups() {
     setLoading(true);
     setMessage(tx("Loading Enterprise Pickup Requests...","Enterprise Pickup Request များကို ဖွင့်နေသည်..."));
 
-    const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v94", {
+    const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v95", {
       p_limit: 300,
     });
 
@@ -127,9 +131,11 @@ export default function RiderPickupPhotoQrPortal() {
     setPickups(rows);
 
     const requested = params.pickupId || search;
+    const requestedRow = rows.find((row) => row.pickup_id === requested || row.pickup_way_id === requested);
     const first =
-      rows.find((row) => row.pickup_id === requested || row.pickup_way_id === requested) ||
-      rows[0];
+      (requestedRow?.can_open_workspace ? requestedRow : null) ||
+      rows.find((row) => row.assigned_to_me && row.can_open_workspace) ||
+      null;
 
     if (first) {
       await selectPickup(first);
@@ -154,13 +160,26 @@ export default function RiderPickupPhotoQrPortal() {
 
     const pickupId = safeText(row.pickup_id || row.pickup_way_id, "");
 
-    if (!row.can_verify) {
-      setParcels(buildParcels(row));
+    setParcelPage(1);
+
+    if (!row.can_open_workspace) {
+      setParcels([]);
       const scope = String(row.assignment_scope || "");
       setMessage(
         scope === "WAITING_ASSIGNMENT"
-          ? tx("This Pickup Request is waiting for assignment. Verification is locked until Operations/Supervisor assigns it to you.","ဤ Pickup Request သည် တာဝန်ပေးရန် စောင့်နေပါသည်။ Operations/Supervisor မှ သင့်ထံတာဝန်ပေးပြီးမှ စစ်ဆေးနိုင်ပါမည်။")
-          : tx("This Pickup Request is assigned to another field worker. Verification is locked.","ဤ Pickup Request ကို အခြား field worker တစ်ဦးထံ တာဝန်ပေးထားပါသည်။ စစ်ဆေးမှုကို ပိတ်ထားပါသည်။")
+          ? tx("This Pickup Request is visible but is waiting for Operations/Supervisor assignment. No parcel action is available yet.","ဤ Pickup Request ကို မြင်နိုင်သော်လည်း Operations/Supervisor မှ တာဝန်ပေးရန် စောင့်နေပါသည်။ Parcel လုပ်ဆောင်ချက်များ မရနိုင်သေးပါ။")
+          : tx("This Pickup Request belongs to another field worker. Select one assigned to you.","ဤ Pickup Request ကို အခြား field worker တစ်ဦးထံ တာဝန်ပေးထားပါသည်။ သင့်ထံတာဝန်ပေးထားသော Pickup ကို ရွေးပါ။")
+      );
+      return;
+    }
+
+    if (!row.can_capture) {
+      setParcels(buildParcels(row));
+      setMessage(
+        tx(
+          `Pickup selected. Next action: ${String(row.next_action || "REFRESH").replaceAll("_"," ")}.`,
+          `Pickup ရွေးပြီးပါပြီ။ နောက်လုပ်ဆောင်ရန်: ${String(row.next_action || "REFRESH").replaceAll("_"," ")}။`
+        )
       );
       return;
     }
@@ -198,6 +217,38 @@ export default function RiderPickupPhotoQrPortal() {
     });
 
     setParcels(merged);
+  }
+
+  async function performPickupAction(action: string) {
+    if (!selectedPickup) return;
+    const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
+    setActionBusy(action);
+    try {
+      const { data, error } = await (supabase as any).rpc("be_field_team_pickup_action", {
+        p_payload: { pickup_id: pickupId, action },
+      });
+      if (error) throw error;
+      if (data?.ok === false) throw new Error(data?.error || "Pickup action failed.");
+
+      setMessage(
+        tx(
+          `${pickupId}: ${String(action).replaceAll("_"," ")} completed successfully.`,
+          `${pickupId}: ${String(action).replaceAll("_"," ")} လုပ်ဆောင်မှု အောင်မြင်ပါသည်။`
+        )
+      );
+
+      await loadAssignedPickups();
+      const { data: refreshed } = await (supabase as any).rpc("be_field_pickup_request_options_v95", { p_limit: 300 });
+      const current = (Array.isArray(refreshed?.requests) ? refreshed.requests : []).find(
+        (row:any) => String(row.pickup_id || row.pickup_way_id) === pickupId
+      );
+      if (current) await selectPickup(current);
+    } catch (error:any) {
+      console.error(error);
+      setMessage(error?.message || tx("Pickup action failed.","Pickup လုပ်ဆောင်မှု မအောင်မြင်ပါ။"));
+    } finally {
+      setActionBusy("");
+    }
   }
 
   function updateParcel(lineNo: number, patch: Partial<ParcelDraft>) {
@@ -257,7 +308,21 @@ export default function RiderPickupPhotoQrPortal() {
 
   async function saveParcel(parcel: ParcelDraft) {
     if (!selectedPickup) return false;
+    if (!selectedPickup.can_capture) {
+      setMessage(tx("Arrive at pickup before saving parcel verification.","Parcel စစ်ဆေးမှု သိမ်းဆည်းမီ Pickup နေရာသို့ ရောက်ရှိကြောင်း အရင်မှတ်တမ်းတင်ပါ။"));
+      return false;
+    }
+    const weight = Number(parcel.parcel_weight || 0);
+    if (!Number.isFinite(weight) || weight <= 0) {
+      setMessage(tx(`Parcel ${parcel.line_no}: enter actual weight greater than 0.`,`Parcel ${parcel.line_no}: အလေးချိန် 0 ထက်ကြီးသောတန်ဖိုး ထည့်ပါ။`));
+      return false;
+    }
+    if (!parcel.cargo_photo_file && !parcel.cargo_photo_url) {
+      setMessage(tx(`Parcel ${parcel.line_no}: capture or upload a cargo photo first.`,`Parcel ${parcel.line_no}: ကုန်ပစ္စည်းဓာတ်ပုံကို အရင်ရိုက်ယူ သို့မဟုတ် Upload တင်ပါ။`));
+      return false;
+    }
 
+    setSavingLine(parcel.line_no);
     const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
 
     let durablePhotoUrl = parcel.cargo_photo_url || "";
@@ -265,6 +330,7 @@ export default function RiderPickupPhotoQrPortal() {
       durablePhotoUrl = await ensurePhotoUploaded(parcel, pickupId);
     } catch (error: any) {
       setMessage(error?.message || `Photo upload failed for parcel ${parcel.line_no}.`);
+      setSavingLine(null);
       return false;
     }
 
@@ -290,6 +356,7 @@ export default function RiderPickupPhotoQrPortal() {
     if (error) {
       console.error(error);
       setMessage(`Save failed for parcel ${parcel.line_no}: ${error.message}`);
+      setSavingLine(null);
       return false;
     }
 
@@ -299,7 +366,32 @@ export default function RiderPickupPhotoQrPortal() {
     });
 
     setMessage(tx(`Parcel ${parcel.line_no} saved successfully.`,`Parcel ${parcel.line_no} ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။`));
+    setSavingLine(null);
     return true;
+  }
+
+  async function submitPickupVerification() {
+    if (!selectedPickup) return;
+    const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
+    const validSaved = parcels.filter((p) => p.saved);
+    if (validSaved.length === 0) {
+      setMessage(tx("Save at least one parcel with weight and photo before submitting verification.","Verification မတင်မီ အလေးချိန်နှင့် ဓာတ်ပုံပါ Parcel အနည်းဆုံးတစ်ခု သိမ်းဆည်းပါ။"));
+      return;
+    }
+    setActionBusy("verify");
+    try {
+      const { data, error } = await (supabase as any).rpc("be_field_team_pickup_action", {
+        p_payload: { pickup_id: pickupId, action: "verify" },
+      });
+      if (error) throw error;
+      if (data?.ok === false) throw new Error(data?.error || "Verification submit failed.");
+      setMessage(data?.message || tx("Pickup verification submitted.","Pickup verification တင်သွင်းပြီးပါပြီ။"));
+      await loadAssignedPickups();
+    } catch (error:any) {
+      setMessage(error?.message || tx("Verification submit failed.","Verification တင်သွင်းမှု မအောင်မြင်ပါ။"));
+    } finally {
+      setActionBusy("");
+    }
   }
 
   async function saveAllParcels() {
@@ -398,6 +490,10 @@ export default function RiderPickupPhotoQrPortal() {
 
   const pickupId = safeText(selectedPickup?.pickup_id || selectedPickup?.pickup_way_id, "");
   const savedCount = parcels.filter((p) => p.saved).length;
+  const nextAction = String(selectedPickup?.next_action || "");
+  const canCapture = Boolean(selectedPickup?.can_capture);
+  const parcelPageCount = Math.max(1, Math.ceil(parcels.length / pageSize));
+  const pagedParcels = parcels.slice((parcelPage - 1) * pageSize, parcelPage * pageSize);
 
   return (
     <div className="min-h-screen bg-[#eefafa]">
@@ -442,7 +538,7 @@ export default function RiderPickupPhotoQrPortal() {
                       ? tx("Waiting assignment","တာဝန်ပေးရန်စောင့်နေသည်")
                       : tx("Assigned to other","အခြားသူထံတာဝန်ပေးထားသည်");
                 return (
-                  <option key={row.id || id} value={id}>
+                  <option key={row.id || id} value={id} disabled={!row.can_open_workspace}>
                     {id} — {safeText(row.merchant_name || row.merchant_code)} — {safeText(row.parcel_count, "1")} — {stateLabel}
                   </option>
                 );
@@ -519,6 +615,59 @@ export default function RiderPickupPhotoQrPortal() {
           <section className="space-y-4">
             {selectedPickup && (
               <>
+                <div className="rounded-3xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-700">{tx("Pickup Workflow","Pickup လုပ်ငန်းစဉ်")}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {["ASSIGN","ACCEPT","START","ARRIVE","VERIFY","COLLECT","WAREHOUSE"].map((step) => (
+                      <span key={step} className="rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-black text-slate-700">{step}</span>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-sm font-bold text-slate-700">
+                    {tx("Current status","လက်ရှိအခြေအနေ")}: {safeText(selectedPickup.mobile_status || selectedPickup.role_assignment_status || selectedPickup.assignment_status)}
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-slate-700">
+                    {tx("Next action","နောက်လုပ်ဆောင်ရန်")}: {safeText(selectedPickup.next_action).replaceAll("_"," ")}
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {nextAction === "ACCEPT_ASSIGNMENT" && (
+                      <button onClick={() => performPickupAction("accept")} disabled={!!actionBusy} className="rounded-2xl bg-emerald-600 px-5 py-3 font-black text-white disabled:opacity-50">
+                        {actionBusy === "accept" ? tx("Accepting...","လက်ခံနေသည်...") : tx("Accept Assignment","တာဝန်လက်ခံရန်")}
+                      </button>
+                    )}
+                    {nextAction === "START_PICKUP" && (
+                      <button onClick={() => performPickupAction("start_pickup")} disabled={!!actionBusy} className="rounded-2xl bg-blue-700 px-5 py-3 font-black text-white disabled:opacity-50">
+                        {tx("Start Pickup Trip","Pickup ခရီးစတင်ရန်")}
+                      </button>
+                    )}
+                    {nextAction === "ARRIVE_AT_PICKUP" && (
+                      <button onClick={() => performPickupAction("arrived_at_pickup")} disabled={!!actionBusy} className="rounded-2xl bg-indigo-700 px-5 py-3 font-black text-white disabled:opacity-50">
+                        {tx("Arrived at Pickup","Pickup နေရာသို့ ရောက်ရှိပြီ")}
+                      </button>
+                    )}
+                    {nextAction === "CAPTURE_AND_VERIFY" && (
+                      <button onClick={submitPickupVerification} disabled={!!actionBusy || savedCount === 0} className="rounded-2xl bg-violet-700 px-5 py-3 font-black text-white disabled:opacity-40">
+                        {tx("Submit Verification","Verification တင်သွင်းရန်")}
+                      </button>
+                    )}
+                    {nextAction === "COLLECT_PICKUP" && (
+                      <button onClick={() => performPickupAction("collect_pickup")} disabled={!!actionBusy} className="rounded-2xl bg-emerald-700 px-5 py-3 font-black text-white disabled:opacity-50">
+                        {tx("Confirm Pickup Collected","Pickup ကောက်ယူပြီး အတည်ပြုရန်")}
+                      </button>
+                    )}
+                    {nextAction === "HANDOFF_TO_WAREHOUSE" && (
+                      <button onClick={() => performPickupAction("handoff_to_warehouse")} disabled={!!actionBusy} className="rounded-2xl bg-slate-900 px-5 py-3 font-black text-white disabled:opacity-50">
+                        {tx("Handoff to Warehouse","Warehouse သို့ လွှဲပြောင်းရန်")}
+                      </button>
+                    )}
+                    {nextAction === "WAIT_FOR_TEAM_ACCEPTANCE" && (
+                      <div className="rounded-2xl bg-amber-100 px-4 py-3 text-sm font-black text-amber-900">
+                        {tx("Waiting for the rest of the assigned field team to accept.","တာဝန်ပေးထားသော အခြား field team များ လက်ခံရန် စောင့်နေပါသည်။")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="font-mono text-xl font-black text-rose-500">{pickupId}</p>
                   <h2 className="mt-2 text-2xl font-black">{safeText(selectedPickup.merchant_name)}</h2>
@@ -535,10 +684,10 @@ export default function RiderPickupPhotoQrPortal() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <button disabled={!selectedPickup?.can_verify} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
+                    <button disabled={!canCapture || !!actionBusy} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Save All Parcel Records","Parcel မှတ်တမ်းအားလုံး သိမ်းရန်")}
                     </button>
-                    <button disabled={!selectedPickup?.can_verify} onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
+                    <button disabled={!canCapture || !!actionBusy} onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Upload All Photos for Review","ဓာတ်ပုံအားလုံး စစ်ဆေးရန် တင်ရန်")}
                     </button>
                     <button onClick={() => printQrCards(parcels)} className="rounded-2xl bg-slate-950 px-5 py-4 font-black text-white">
@@ -547,7 +696,7 @@ export default function RiderPickupPhotoQrPortal() {
                   </div>
                 </div>
 
-                {parcels.map((parcel) => (
+                {pagedParcels.map((parcel) => (
                   <article key={parcel.line_no} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                       <div>
@@ -575,11 +724,11 @@ export default function RiderPickupPhotoQrPortal() {
                           Print This QR
                         </button>
                         <button
-                          disabled={!selectedPickup?.can_verify}
+                          disabled={!canCapture || savingLine === parcel.line_no}
                           onClick={() => saveParcel(parcel)}
                           className="rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          Save This Parcel
+                          {savingLine === parcel.line_no ? tx("Saving...","သိမ်းနေသည်...") : tx("Save This Parcel","ဤ Parcel ကို သိမ်းရန်")}
                         </button>
                       </div>
                     </div>
@@ -635,7 +784,7 @@ export default function RiderPickupPhotoQrPortal() {
                         />
 
                         <button
-                          disabled={!selectedPickup?.can_verify}
+                          disabled={!canCapture}
                           onClick={() => fileRefs.current[parcel.line_no]?.click()}
                           className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                         >
@@ -659,6 +808,30 @@ export default function RiderPickupPhotoQrPortal() {
                     </div>
                   </article>
                 ))}
+
+                {parcels.length > pageSize && (
+                  <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <button
+                      type="button"
+                      disabled={parcelPage <= 1}
+                      onClick={() => setParcelPage((p) => Math.max(1,p-1))}
+                      className="rounded-xl border border-slate-300 px-4 py-2 font-black disabled:opacity-40"
+                    >
+                      {tx("Previous","နောက်သို့")}
+                    </button>
+                    <span className="text-sm font-black text-slate-700">
+                      {tx("Page","စာမျက်နှာ")} {parcelPage}/{parcelPageCount} · {parcels.length} {tx("parcels","Parcel")}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={parcelPage >= parcelPageCount}
+                      onClick={() => setParcelPage((p) => Math.min(parcelPageCount,p+1))}
+                      className="rounded-xl border border-slate-300 px-4 py-2 font-black disabled:opacity-40"
+                    >
+                      {tx("Next","ရှေ့သို့")}
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </section>
