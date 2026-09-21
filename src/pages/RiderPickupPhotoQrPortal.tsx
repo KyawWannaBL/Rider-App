@@ -110,26 +110,20 @@ export default function RiderPickupPhotoQrPortal() {
 
   async function loadAssignedPickups() {
     setLoading(true);
-    setMessage(tx("Loading assigned pickups from Britium workflow...","Britium လုပ်ငန်းစဉ်မှ တာဝန်ပေးထားသော Pickup များကို ဖွင့်နေသည်..."));
+    setMessage(tx("Loading Enterprise Pickup Requests...","Enterprise Pickup Request များကို ဖွင့်နေသည်..."));
 
-    const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
-      p_payload: {
-        search: search || null,
-        limit: 200,
-      },
+    const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v94", {
+      p_limit: 300,
     });
 
     if (error) {
       console.error(error);
-      setMessage(`Failed to load assigned pickups: ${error.message}`);
+      setMessage(tx(`Failed to load Pickup Requests: ${error.message}`,`Pickup Request များကို ဖွင့်မရပါ: ${error.message}`));
       setLoading(false);
       return;
     }
 
-    const rows = rowsFromSnapshot(data).filter((row) =>
-      String(row.job_kind || "PICKUP").toUpperCase() === "PICKUP" &&
-      !row.is_delivery_job
-    );
+    const rows = Array.isArray(data?.requests) ? data.requests : [];
     setPickups(rows);
 
     const requested = params.pickupId || search;
@@ -139,9 +133,19 @@ export default function RiderPickupPhotoQrPortal() {
 
     if (first) {
       await selectPickup(first);
+    } else {
+      setSelectedPickup(null);
+      setParcels([]);
     }
 
-    setMessage(tx(`Loaded ${rows.length} assigned pickup(s).`,`တာဝန်ပေးထားသော Pickup ${rows.length} ခု ဖွင့်ပြီးပါပြီ။`));
+    const assignedCount = Number(data?.counts?.assigned_to_me || 0);
+    const waitingCount = Number(data?.counts?.waiting_assignment || 0);
+    setMessage(
+      tx(
+        `Loaded ${rows.length} Enterprise Pickup Request(s): ${assignedCount} assigned to you, ${waitingCount} waiting assignment.`,
+        `Enterprise Pickup Request ${rows.length} ခု ဖွင့်ပြီးပါပြီ။ သင့်ထံတာဝန်ပေးထားသည် ${assignedCount} ခု၊ တာဝန်ပေးရန်စောင့်နေသည် ${waitingCount} ခု။`
+      )
+    );
     setLoading(false);
   }
 
@@ -150,9 +154,26 @@ export default function RiderPickupPhotoQrPortal() {
 
     const pickupId = safeText(row.pickup_id || row.pickup_way_id, "");
 
-    const { data } = await (supabase as any).rpc("be_pickup_parcel_capture_snapshot", {
+    if (!row.can_verify) {
+      setParcels(buildParcels(row));
+      const scope = String(row.assignment_scope || "");
+      setMessage(
+        scope === "WAITING_ASSIGNMENT"
+          ? tx("This Pickup Request is waiting for assignment. Verification is locked until Operations/Supervisor assigns it to you.","ဤ Pickup Request သည် တာဝန်ပေးရန် စောင့်နေပါသည်။ Operations/Supervisor မှ သင့်ထံတာဝန်ပေးပြီးမှ စစ်ဆေးနိုင်ပါမည်။")
+          : tx("This Pickup Request is assigned to another field worker. Verification is locked.","ဤ Pickup Request ကို အခြား field worker တစ်ဦးထံ တာဝန်ပေးထားပါသည်။ စစ်ဆေးမှုကို ပိတ်ထားပါသည်။")
+      );
+      return;
+    }
+
+    const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_snapshot", {
       p_pickup_id: pickupId,
     });
+    if (error) {
+      console.error(error);
+      setMessage(error.message);
+      setParcels(buildParcels(row));
+      return;
+    }
 
     const generated = buildParcels(row);
     const savedParcels = Array.isArray(data?.parcels) ? data.parcels : [];
@@ -398,6 +419,37 @@ export default function RiderPickupPhotoQrPortal() {
 
       <main className="mx-auto max-w-[1200px] space-y-5 px-4 py-5">
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <label className="mb-4 block">
+            <span className="mb-2 block text-xs font-black uppercase tracking-widest text-slate-600">
+              {tx("Enterprise Pickup Request","Enterprise Pickup Request")}
+            </span>
+            <select
+              value={pickupId}
+              onChange={(e) => {
+                const row = pickups.find((item) => String(item.pickup_id || item.pickup_way_id) === e.target.value);
+                if (row) void selectPickup(row);
+              }}
+              className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-base font-black outline-none focus:border-blue-600"
+            >
+              <option value="">{tx("Select Pickup Request","Pickup Request ရွေးပါ")}</option>
+              {pickups.map((row) => {
+                const id = safeText(row.pickup_id || row.pickup_way_id, "");
+                const scope = String(row.assignment_scope || "");
+                const stateLabel =
+                  scope === "ASSIGNED_TO_ME"
+                    ? tx("Assigned to me","ကျွန်ုပ်ထံတာဝန်ပေးထားသည်")
+                    : scope === "WAITING_ASSIGNMENT"
+                      ? tx("Waiting assignment","တာဝန်ပေးရန်စောင့်နေသည်")
+                      : tx("Assigned to other","အခြားသူထံတာဝန်ပေးထားသည်");
+                return (
+                  <option key={row.id || id} value={id}>
+                    {id} — {safeText(row.merchant_name || row.merchant_code)} — {safeText(row.parcel_count, "1")} — {stateLabel}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_140px]">
             <input
               value={search}
@@ -445,6 +497,19 @@ export default function RiderPickupPhotoQrPortal() {
                     <p className="mt-2 text-sm font-bold text-slate-500">
                       {safeText(row.parcel_count, "1")} {tx("parcels","Parcel")}
                     </p>
+                    <p className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-black ${
+                      row.assignment_scope === "ASSIGNED_TO_ME"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : row.assignment_scope === "WAITING_ASSIGNMENT"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-slate-200 text-slate-700"
+                    }`}>
+                      {row.assignment_scope === "ASSIGNED_TO_ME"
+                        ? tx("Assigned to me","ကျွန်ုပ်ထံတာဝန်ပေးထားသည်")
+                        : row.assignment_scope === "WAITING_ASSIGNMENT"
+                          ? tx("Waiting assignment","တာဝန်ပေးရန်စောင့်နေသည်")
+                          : tx("Assigned to other","အခြားသူထံတာဝန်ပေးထားသည်")}
+                    </p>
                   </button>
                 );
               })}
@@ -470,10 +535,10 @@ export default function RiderPickupPhotoQrPortal() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <button onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white">
+                    <button disabled={!selectedPickup?.can_verify} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Save All Parcel Records","Parcel မှတ်တမ်းအားလုံး သိမ်းရန်")}
                     </button>
-                    <button onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white">
+                    <button disabled={!selectedPickup?.can_verify} onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Upload All Photos for Review","ဓာတ်ပုံအားလုံး စစ်ဆေးရန် တင်ရန်")}
                     </button>
                     <button onClick={() => printQrCards(parcels)} className="rounded-2xl bg-slate-950 px-5 py-4 font-black text-white">
@@ -510,8 +575,9 @@ export default function RiderPickupPhotoQrPortal() {
                           Print This QR
                         </button>
                         <button
+                          disabled={!selectedPickup?.can_verify}
                           onClick={() => saveParcel(parcel)}
-                          className="rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white"
+                          className="rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           Save This Parcel
                         </button>
@@ -569,8 +635,9 @@ export default function RiderPickupPhotoQrPortal() {
                         />
 
                         <button
+                          disabled={!selectedPickup?.can_verify}
                           onClick={() => fileRefs.current[parcel.line_no]?.click()}
-                          className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700"
+                          className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           Capture / Upload Cargo Photo
                         </button>
