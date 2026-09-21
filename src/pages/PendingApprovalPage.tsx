@@ -8,29 +8,46 @@ export default function PendingApprovalPage() {
   const { language, toggleLanguage } = useAppState();
   const tx = (en:string,my:string) => language === "my" ? my : en;
   const navigate = useNavigate();
-  const [status,setStatus]=useState("PENDING");
+  const [status,setStatus]=useState("CHECKING");
   const [message,setMessage]=useState(language === "my" ? "Rider ဝင်ရောက်ခွင့်တောင်းဆိုမှုကို Enterprise Management နှင့် ချိတ်ဆက်နေသည်။" : "Synchronizing your Rider access request with Enterprise Management.");
   const [loading,setLoading]=useState(false);
 
   async function syncRequest(){
     setLoading(true);
+    setStatus("CHECKING");
     try{
-      const {data:ensure,error:ensureError}=await (supabase as any).rpc("be_rider_access_request_ensure");
-      if(ensureError) throw ensureError;
-      const {data,error}=await (supabase as any).rpc("be_rider_access_request_snapshot");
-      if(error) throw error;
-      const next=String(data?.status||ensure?.status||"PENDING").toUpperCase();
+      const {data:existing,error:existingError}=await (supabase as any).rpc("be_rider_access_request_snapshot");
+      if(existingError) throw existingError;
+
+      let result=existing;
+      let next=String(existing?.status||"NOT_REQUESTED").toUpperCase();
+
+      if(next==="NOT_REQUESTED"){
+        const {data:created,error:createError}=await (supabase as any).rpc("be_rider_access_request_ensure");
+        if(createError) throw createError;
+        result=created;
+        next=String(created?.status||"PENDING").toUpperCase();
+      }
+
       setStatus(next);
       if(next==="APPROVED"){
         setMessage(tx("Access approved. Refreshing your Enterprise workforce profile...","ဝင်ရောက်ခွင့် အတည်ပြုပြီးပါပြီ။ Enterprise workforce profile ကို ပြန်ဖွင့်နေသည်..."));
         window.setTimeout(()=>window.location.assign(window.location.origin+"/#/dashboard"),400);
       }else if(next==="REJECTED"){
         setMessage(tx("This access request was rejected. Please contact Britium Operations / HR if you need a review.","ဝင်ရောက်ခွင့်တောင်းဆိုမှုကို ငြင်းပယ်ထားပါသည်။ ပြန်လည်စစ်ဆေးလိုပါက Britium Operations / HR ကို ဆက်သွယ်ပါ။"));
-      }else{
+      }else if(next==="PENDING" || next==="SUBMITTED" || next==="OPEN"){
         setMessage(tx("Your account is waiting for Britium Enterprise approval and workforce mapping.","သင့်အကောင့်သည် Britium Enterprise အတည်ပြုချက်နှင့် ဝန်ထမ်းချိတ်ဆက်မှုကို စောင့်နေပါသည်။"));
+      }else{
+        setMessage(tx("Enterprise returned an unknown access status.","Enterprise မှ မသိရှိသော access status ပြန်လာသည်။"));
       }
     }catch(error:any){
-      setMessage(error?.message||tx("Unable to synchronize the access request.","ဝင်ရောက်ခွင့်တောင်းဆိုမှုကို ချိတ်ဆက်မရပါ။"));
+      const raw=String(error?.message||error||"");
+      setStatus("ERROR");
+      setMessage(
+        /failed to fetch|networkerror|load failed|timed out/i.test(raw)
+          ? tx("Unable to connect to Britium Enterprise. Your approval status was not changed.","Britium Enterprise နှင့် ချိတ်ဆက်မရပါ။ သင့်အကောင့်အတည်ပြုမှုအခြေအနေ မပြောင်းလဲသေးပါ။")
+          : raw || tx("Unable to synchronize the access request.","ဝင်ရောက်ခွင့်တောင်းဆိုမှုကို ချိတ်ဆက်မရပါ။")
+      );
     }finally{
       setLoading(false);
     }
@@ -55,7 +72,15 @@ export default function PendingApprovalPage() {
           </div>
           <p className="mt-6 text-xs font-black uppercase tracking-[0.3em] text-blue-300">BRITIUM EXPRESS</p>
           <h1 className="mt-2 text-2xl font-black">
-            {status==="APPROVED"?tx("Access Approved","ဝင်ရောက်ခွင့် အတည်ပြုပြီး"):status==="REJECTED"?tx("Access Review Required","ဝင်ရောက်ခွင့် ပြန်လည်စစ်ဆေးရန်လိုအပ်သည်"):tx("Pending Enterprise Approval","Enterprise အတည်ပြုချက် စောင့်နေသည်")}
+            {status==="APPROVED"
+  ? tx("Access Approved","ဝင်ရောက်ခွင့် အတည်ပြုပြီး")
+  : status==="REJECTED"
+    ? tx("Access Review Required","ဝင်ရောက်ခွင့် ပြန်လည်စစ်ဆေးရန်လိုအပ်သည်")
+    : status==="ERROR"
+      ? tx("Enterprise Connection Error","Enterprise ချိတ်ဆက်မှု အမှား")
+      : status==="CHECKING"
+        ? tx("Checking Enterprise Access","Enterprise ဝင်ရောက်ခွင့် စစ်ဆေးနေသည်")
+        : tx("Pending Enterprise Approval","Enterprise အတည်ပြုချက် စောင့်နေသည်")}
           </h1>
           <p className="mt-3 text-sm font-semibold leading-6 text-slate-300">{message}</p>
           <div className="mt-5 rounded-2xl bg-black/20 p-4">
