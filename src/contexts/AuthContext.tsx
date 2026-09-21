@@ -1,10 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
 
+export type EnterpriseProfileState = "checking" | "approved" | "unapproved" | "error";
+
 type AuthContextValue = {
   user: any | null;
   session: any | null;
   profile: any | null;
+  profileState: EnterpriseProfileState;
   loading: boolean;
   authError: string | null;
   signOut: () => Promise<void>;
@@ -15,6 +18,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   session: null,
   profile: null,
+  profileState: "checking",
   loading: true,
   authError: null,
   signOut: async () => {},
@@ -31,10 +35,38 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+function isUnapprovedError(error: any) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || "").toLowerCase();
+  return code === "42501" || message.includes("not mapped to an active field-team account");
+}
+
+function normalizeNetworkMessage(error: any) {
+  const raw = String(error?.message || error || "");
+  if (/failed to fetch|networkerror|load failed|timed out/i.test(raw)) {
+    return "Unable to connect to Britium Enterprise. Check internet connection and try again.";
+  }
+  return raw || "Unable to load Enterprise profile.";
+}
+
+async function retry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 700): Promise<T> {
+  let lastError: any;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (i < attempts - 1) await new Promise((resolve) => window.setTimeout(resolve, delayMs * (i + 1)));
+    }
+  }
+  throw lastError;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<any | null>(null);
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
+  const [profileState, setProfileState] = useState<EnterpriseProfileState>("checking");
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const mountedRef = useRef(true);
@@ -47,32 +79,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!currentUser?.id) {
       if (!mountedRef.current || requestId !== requestRef.current) return null;
       setProfile(null);
+      setProfileState("checking");
       setAuthError(null);
       setLoading(false);
       return null;
     }
 
+    setProfileState("checking");
+    setAuthError(null);
+
     try {
-      const result: any = await withTimeout(
-        (supabase as any).rpc("be_rider_profile_snapshot"),
-        8000,
-        "Enterprise profile"
-      );
+      const result: any = await retry(async () => {
+        const rpcResult: any = await withTimeout(
+          (supabase as any).rpc("be_rider_profile_snapshot"),
+          8000,
+          "Enterprise profile"
+        );
+        if (rpcResult?.error) {
+          if (isUnapprovedError(rpcResult.error)) return rpcResult;
+          throw rpcResult.error;
+        }
+        return rpcResult;
+      });
+
       if (!mountedRef.current || requestId !== requestRef.current) return null;
 
-      if (result?.error || result?.data?.ok === false) {
+      if (result?.error && isUnapprovedError(result.error)) {
         setProfile(null);
-        setAuthError(result?.error?.message || result?.data?.error || "Enterprise profile is not approved yet.");
-      } else {
-        setProfile(result?.data || null);
+        setProfileState("unapproved");
         setAuthError(null);
+        return null;
       }
+
+      if (result?.data?.ok === false) {
+        setProfile(null);
+        setProfileState("error");
+        setAuthError(result.data?.error || "Enterprise profile check failed.");
+        return null;
+      }
+
+      setProfile(result?.data || null);
+      setProfileState("approved");
+      setAuthError(null);
       return result?.data || null;
     } catch (error: any) {
       if (!mountedRef.current || requestId !== requestRef.current) return null;
-      console.error(`Rider auth profile hydration failed (${source})`, error);
+      console.error(`Rider Enterprise profile hydration failed (${source})`, error);
       setProfile(null);
-      setAuthError(error?.message || "Unable to load Enterprise profile.");
+      setProfileState("error");
+      setAuthError(normalizeNetworkMessage(error));
       return null;
     } finally {
       if (mountedRef.current && requestId === requestRef.current) setLoading(false);
@@ -88,12 +143,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     mountedRef.current = true;
     let bootstrapFinished = false;
 
-    // Absolute fail-safe: never leave a field user on the splash indefinitely.
     const watchdog = window.setTimeout(() => {
       if (!mountedRef.current) return;
       setLoading(false);
-      setAuthError((current) => current || "Authentication check timed out. Please sign in again.");
-    }, 10000);
+      setProfileState((state) => state === "checking" ? "error" : state);
+      setAuthError((current) => current || "Enterprise connection timed out. Please retry.");
+    }, 12000);
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mountedRef.current) return;
@@ -104,13 +159,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!nextSession?.user) {
         requestRef.current += 1;
         setProfile(null);
+        setProfileState("checking");
         setAuthError(null);
         setLoading(false);
         return;
       }
 
-      // IMPORTANT: never await Supabase RPCs inside onAuthStateChange.
-      // The callback must return immediately or auth's internal lock can stall.
       if (event !== "INITIAL_SESSION" || bootstrapFinished) {
         setLoading(true);
         window.setTimeout(() => {
@@ -132,6 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await hydrateProfile(nextSession, "bootstrap");
         } else {
           setProfile(null);
+          setProfileState("checking");
           setAuthError(null);
           setLoading(false);
         }
@@ -141,7 +196,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setUser(null);
         setProfile(null);
-        setAuthError(error?.message || "Authentication check failed.");
+        setProfileState("error");
+        setAuthError(normalizeNetworkMessage(error));
         setLoading(false);
       } finally {
         bootstrapFinished = true;
@@ -161,6 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       session,
       profile,
+      profileState,
       loading,
       authError,
       signOut: async () => {
@@ -172,6 +229,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setSession(null);
             setUser(null);
             setProfile(null);
+            setProfileState("checking");
             setAuthError(null);
             setLoading(false);
           }
@@ -179,7 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       refreshProfile,
     }),
-    [user, session, profile, loading, authError, refreshProfile]
+    [user, session, profile, profileState, loading, authError, refreshProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
