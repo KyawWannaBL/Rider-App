@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { Clock, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAppState } from "@/hooks/useAppState";
 
 export default function PendingApprovalPage() {
+  const { language } = useAppState();
+  const tx = (en:string,my:string) => language === "my" ? my : en;
   const navigate = useNavigate();
   const [status,setStatus]=useState("PENDING");
-  const [message,setMessage]=useState("Synchronizing your Rider access request with Enterprise Management.");
+  const [message,setMessage]=useState(language === "my" ? "Rider ဝင်ရောက်ခွင့်တောင်းဆိုမှုကို Enterprise Management နှင့် ချိတ်ဆက်နေသည်။" : "Synchronizing your Rider access request with Enterprise Management.");
   const [loading,setLoading]=useState(false);
 
   async function syncRequest(){
@@ -24,7 +27,7 @@ export default function PendingApprovalPage() {
       }else if(next==="REJECTED"){
         setMessage("This access request was rejected. Please contact Britium Operations / HR if you need a review.");
       }else{
-        setMessage("Your account is waiting for Britium Enterprise approval and workforce mapping.");
+        setMessage("{tx("Your account is waiting for Britium Enterprise approval and workforce mapping.","သင့်အကောင့်သည် Britium Enterprise အတည်ပြုချက်နှင့် ဝန်ထမ်းချိတ်ဆက်မှုကို စောင့်နေပါသည်။")}");
       }
     }catch(error:any){
       setMessage(error?.message||"Unable to synchronize the access request.");
@@ -49,7 +52,7 @@ export default function PendingApprovalPage() {
           </div>
           <p className="mt-6 text-xs font-black uppercase tracking-[0.3em] text-blue-300">BRITIUM EXPRESS</p>
           <h1 className="mt-2 text-2xl font-black">
-            {status==="APPROVED"?"Access Approved":status==="REJECTED"?"Access Review Required":"Pending Enterprise Approval"}
+            {status==="APPROVED"?tx("Access Approved","ဝင်ရောက်ခွင့် အတည်ပြုပြီး"):status==="REJECTED"?tx("Access Review Required","ဝင်ရောက်ခွင့် ပြန်လည်စစ်ဆေးရန်လိုအပ်သည်"):tx("Pending Enterprise Approval","Enterprise အတည်ပြုချက် စောင့်နေသည်")}
           </h1>
           <p className="mt-3 text-sm font-semibold leading-6 text-slate-300">{message}</p>
           <div className="mt-5 rounded-2xl bg-black/20 p-4">
