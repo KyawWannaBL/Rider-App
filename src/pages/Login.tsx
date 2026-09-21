@@ -15,9 +15,9 @@ import {
   UserPlus,
 } from "lucide-react";
 import { supabase } from "../integrations/supabase/client";
+import { useAppState } from "../hooks/useAppState";
 
 type View = "password" | "forgot" | "request";
-type Language = "en" | "my";
 
 const SUPABASE_CONFIGURED = Boolean(
   import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -42,7 +42,7 @@ function setRememberMe(value: boolean) {
 
 export default function Login() {
   const navigate = useNavigate();
-  const [language, setLanguage] = useState<Language>("en");
+  const { language, setLanguage } = useAppState();
   const [view, setView] = useState<View>("password");
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(getRememberMe());
