@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
+import { useAppState } from "../hooks/useAppState";
 
 type PickupRow = Record<string, any>;
 
@@ -96,18 +97,20 @@ function buildParcels(pickup: PickupRow): ParcelDraft[] {
 }
 
 export default function RiderPickupPhotoQrPortal() {
+  const { language } = useAppState();
+  const tx = (en:string,my:string) => language === "my" ? my : en;
   const params = useParams();
   const [pickups, setPickups] = useState<PickupRow[]>([]);
   const [selectedPickup, setSelectedPickup] = useState<PickupRow | null>(null);
   const [parcels, setParcels] = useState<ParcelDraft[]>([]);
   const [search, setSearch] = useState(params.pickupId || "");
-  const [message, setMessage] = useState("Loading assigned pickups...");
+  const [message, setMessage] = useState(language === "my" ? "တာဝန်ပေးထားသော Pickup များကို ဖွင့်နေသည်..." : "Loading assigned pickups...");
   const [loading, setLoading] = useState(false);
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   async function loadAssignedPickups() {
     setLoading(true);
-    setMessage("Loading assigned pickups from Britium workflow...");
+    setMessage(tx("Loading assigned pickups from Britium workflow...","Britium လုပ်ငန်းစဉ်မှ တာဝန်ပေးထားသော Pickup များကို ဖွင့်နေသည်..."));
 
     const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
       p_payload: {
@@ -138,7 +141,7 @@ export default function RiderPickupPhotoQrPortal() {
       await selectPickup(first);
     }
 
-    setMessage(`Loaded ${rows.length} assigned pickup(s).`);
+    setMessage(tx(`Loaded ${rows.length} assigned pickup(s).`,`တာဝန်ပေးထားသော Pickup ${rows.length} ခု ဖွင့်ပြီးပါပြီ။`));
     setLoading(false);
   }
 
@@ -187,7 +190,7 @@ export default function RiderPickupPhotoQrPortal() {
   async function onPhotoSelected(lineNo: number, file?: File) {
     if (!file) return;
 
-    setMessage(`Preparing cargo photo for parcel ${lineNo}...`);
+    setMessage(tx(`Preparing cargo photo for parcel ${lineNo}...`,`Parcel ${lineNo} အတွက် ကုန်ပစ္စည်းဓာတ်ပုံကို ပြင်ဆင်နေသည်...`));
     try {
       const compressed = await compressPickupPhoto(file);
       const reader = new FileReader();
@@ -199,7 +202,7 @@ export default function RiderPickupPhotoQrPortal() {
           cargo_photo_name: compressed.name,
           photo_status: "photo_ready_for_upload",
         });
-        setMessage(`Cargo photo ready for parcel ${lineNo}. It will upload to Enterprise proof storage when saved.`);
+        setMessage(tx(`Cargo photo ready for parcel ${lineNo}. It will upload to Enterprise proof storage when saved.`,`Parcel ${lineNo} အတွက် ကုန်ပစ္စည်းဓာတ်ပုံ အဆင်သင့်ဖြစ်ပါပြီ။ သိမ်းဆည်းချိန်တွင် Enterprise သက်သေသိုလှောင်မှုသို့ တင်ပါမည်။`));
       };
       reader.readAsDataURL(compressed);
     } catch (error: any) {
@@ -274,7 +277,7 @@ export default function RiderPickupPhotoQrPortal() {
       saved: true,
     });
 
-    setMessage(`Parcel ${parcel.line_no} saved successfully.`);
+    setMessage(tx(`Parcel ${parcel.line_no} saved successfully.`,`Parcel ${parcel.line_no} ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။`));
     return true;
   }
 
@@ -286,13 +289,13 @@ export default function RiderPickupPhotoQrPortal() {
       if (ok) okCount += 1;
     }
 
-    setMessage(`Saved ${okCount}/${parcels.length} parcel record(s).`);
+    setMessage(tx(`Saved ${okCount}/${parcels.length} parcel record(s).`,`Parcel မှတ်တမ်း ${okCount}/${parcels.length} ကို သိမ်းဆည်းပြီးပါပြီ။`));
   }
 
   async function uploadAllPhotosForReview() {
     const withPhotos = parcels.filter((parcel) => parcel.cargo_photo_data_url || parcel.cargo_photo_url);
     if (withPhotos.length === 0) {
-      setMessage("Capture at least one cargo photo before using Upload All.");
+      setMessage(tx("Capture at least one cargo photo before using Upload All.","Upload All မလုပ်မီ ကုန်ပစ္စည်းဓာတ်ပုံ အနည်းဆုံးတစ်ပုံ ရိုက်ယူပါ။"));
       return;
     }
     let okCount = 0;
@@ -300,7 +303,7 @@ export default function RiderPickupPhotoQrPortal() {
       const ok = await saveParcel(parcel);
       if (ok) okCount += 1;
     }
-    setMessage(`Upload All completed: ${okCount}/${withPhotos.length} photo parcel(s) sent for review.`);
+    setMessage(tx(`Upload All completed: ${okCount}/${withPhotos.length} photo parcel(s) sent for review.`,`Upload All ပြီးပါပြီ။ ဓာတ်ပုံပါ Parcel ${okCount}/${withPhotos.length} ကို စစ်ဆေးရန် ပို့ပြီးပါပြီ။`));
   }
 
   function ensureQr(parcel: ParcelDraft) {
@@ -381,14 +384,14 @@ export default function RiderPickupPhotoQrPortal() {
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4">
           <div>
             <p className="text-xs font-black tracking-[0.35em] text-blue-600">BRITIUM EXPRESS</p>
-            <h1 className="text-2xl font-black text-slate-950">Rider Pickup Verification</h1>
+            <h1 className="text-2xl font-black text-slate-950">{tx("Rider Pickup Verification","Rider Pickup စစ်ဆေးအတည်ပြုခြင်း")}</h1>
           </div>
           <button
             onClick={loadAssignedPickups}
             disabled={loading}
             className="rounded-2xl bg-rose-500 px-5 py-3 text-sm font-black text-white disabled:opacity-60"
           >
-            {loading ? "Loading..." : "Refresh"}
+            {loading ? tx("Loading...","ဖွင့်နေသည်...") : tx("Refresh","ပြန်ဖွင့်ရန်")}
           </button>
         </div>
       </header>
@@ -399,7 +402,7 @@ export default function RiderPickupPhotoQrPortal() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search pickup ID / merchant"
+              placeholder={tx("Search pickup ID / merchant","Pickup ID / ကုန်သည် ရှာရန်")}
               className="rounded-2xl border border-slate-300 px-5 py-4 text-base font-bold outline-none focus:border-blue-600"
             />
             <button
@@ -415,7 +418,7 @@ export default function RiderPickupPhotoQrPortal() {
         <section className="grid grid-cols-1 gap-5 lg:grid-cols-[340px_1fr]">
           <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-black uppercase tracking-widest text-slate-700">Assigned Pickups</h2>
+              <h2 className="font-black uppercase tracking-widest text-slate-700">{tx("Assigned Pickups","တာဝန်ပေးထားသော Pickup များ")}</h2>
               <span className="rounded-full bg-rose-500 px-3 py-1 text-xs font-black text-white">
                 {filteredPickups.length}
               </span>
@@ -440,7 +443,7 @@ export default function RiderPickupPhotoQrPortal() {
                       {safeText(row.pickup_address)}
                     </p>
                     <p className="mt-2 text-sm font-bold text-slate-500">
-                      {safeText(row.parcel_count, "1")} parcels
+                      {safeText(row.parcel_count, "1")} {tx("parcels","Parcel")}
                     </p>
                   </button>
                 );
@@ -458,23 +461,23 @@ export default function RiderPickupPhotoQrPortal() {
                   <p className="mt-2 text-base font-semibold text-slate-700">{safeText(selectedPickup.pickup_address)}</p>
 
                   <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
-                    <p className="text-sm font-black uppercase tracking-widest text-slate-600">Batch Info</p>
+                    <p className="text-sm font-black uppercase tracking-widest text-slate-600">{tx("Batch Info","Batch အချက်အလက်")}</p>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                      <span>Parcels</span><b>{parcels.length}</b>
-                      <span>Saved</span><b>{savedCount}/{parcels.length}</b>
-                      <span>Rider</span><b>{safeText(selectedPickup.assigned_rider_name || selectedPickup.assigned_rider_code)}</b>
+                      <span>{tx("Parcels","Parcel များ")}</span><b>{parcels.length}</b>
+                      <span>{tx("Saved","သိမ်းပြီး")}</span><b>{savedCount}/{parcels.length}</b>
+                      <span>{tx("Rider","Rider")}</span><b>{safeText(selectedPickup.assigned_rider_name || selectedPickup.assigned_rider_code)}</b>
                     </div>
                   </div>
 
                   <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <button onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white">
-                      Save All Parcel Records
+                      {tx("Save All Parcel Records","Parcel မှတ်တမ်းအားလုံး သိမ်းရန်")}
                     </button>
                     <button onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white">
-                      Upload All Photos for Review
+                      {tx("Upload All Photos for Review","ဓာတ်ပုံအားလုံး စစ်ဆေးရန် တင်ရန်")}
                     </button>
                     <button onClick={() => printQrCards(parcels)} className="rounded-2xl bg-slate-950 px-5 py-4 font-black text-white">
-                      Print All Temporary QR Codes
+                      {tx("Print All Temporary QR Codes","ယာယီ QR Code အားလုံး ပုံနှိပ်ရန်")}
                     </button>
                   </div>
                 </div>
@@ -498,7 +501,7 @@ export default function RiderPickupPhotoQrPortal() {
                           }}
                           className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-black text-white"
                         >
-                          Generate Temporary QR
+                          {tx("Generate Temporary QR","ယာယီ QR ထုတ်ရန်")}
                         </button>
                         <button
                           onClick={() => printQrCards([parcel])}
