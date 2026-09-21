@@ -19,6 +19,7 @@ const checks = [
   ["captures transaction reference", /transaction_reference/],
   ["captures electronic signature", /signature_(path|payload)|Customer Electronic Signature/],
   ["uploads rider proof", /rider-proofs/],
+  ["requires explicit proof-photo approval", /Approve proof photo/],
   ["requires explicit photo approval before upload", /Approve photo & upload/],
   ["compresses proof before upload", /compressImage[\s\S]{0,800}950\s*\*\s*1024/],
   ["uploads signature", /ops-signatures/],
