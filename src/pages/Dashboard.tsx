@@ -3,20 +3,23 @@ import { useEffect, useState } from "react";
 import { Bell, Building2, Package, RefreshCw, Truck, WalletCards } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
+import { useAppState } from "../hooks/useAppState";
 
 function money(value:any){ return Number(value||0).toLocaleString()+" MMK"; }
 
 export default function Dashboard() {
+  const { language } = useAppState();
+  const tx = (en:string,my:string) => language === "my" ? my : en;
   const [data,setData]=useState<any>({counts:{},wallet:{},pickups:[],deliveries:[],notifications:[],identity:{},branch:{}});
   const [loading,setLoading]=useState(false);
-  const [message,setMessage]=useState("Loading Enterprise Portal status...");
+  const [message,setMessage]=useState(language === "my" ? "Enterprise Portal အခြေအနေကို ဖွင့်နေသည်..." : "Loading Enterprise Portal status...");
 
   async function load(){
     setLoading(true);
     const {data:result,error}=await (supabase as any).rpc("be_rider_dashboard_snapshot");
     if(error){ setMessage(error.message); setLoading(false); return; }
     setData(result||{});
-    setMessage("Enterprise Portal synchronized.");
+    setMessage(tx("Enterprise Portal synchronized.","Enterprise Portal နှင့် ချိတ်ဆက်ပြီးပါပြီ။"));
     setLoading(false);
   }
   useEffect(()=>{load();},[]);
@@ -24,10 +27,10 @@ export default function Dashboard() {
   const counts=data.counts||{};
   const wallet=data.wallet||{};
   const cards=[
-    ["Assigned Pickups",counts.pickups||counts.pickup_jobs||0,Truck],
-    ["Delivery Jobs",counts.deliveries||counts.delivery_jobs||0,Package],
-    ["Unread / Active Notifications",counts.notifications||0,Bell],
-    ["COD Balance",money(wallet.cod_balance||0),WalletCards],
+    [tx("Assigned Pickups","တာဝန်ပေးထားသော Pickup များ"),counts.pickups||counts.pickup_jobs||0,Truck],
+    [tx("Delivery Jobs","ပို့ဆောင်ရမည့်အလုပ်များ"),counts.deliveries||counts.delivery_jobs||0,Package],
+    [tx("Unread / Active Notifications","မဖတ်ရသေးသော အသိပေးချက်များ"),counts.notifications||0,Bell],
+    [tx("COD Balance","COD လက်ကျန်"),money(wallet.cod_balance||0),WalletCards],
   ];
 
   return (
@@ -37,9 +40,9 @@ export default function Dashboard() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black tracking-[0.35em] text-blue-600">BRITIUM EXPRESS</p>
-              <h1 className="mt-2 text-3xl font-black text-slate-950">Rider Dashboard</h1>
+              <h1 className="mt-2 text-3xl font-black text-slate-950">{tx("Rider Dashboard","Rider ပင်မစာမျက်နှာ")}</h1>
               <p className="mt-2 font-semibold text-slate-600">
-                Live assignments, delivery work, notifications, COD and branch information synchronized with Enterprise Portal.
+                {tx("Live assignments, delivery work, notifications, COD and branch information synchronized with Enterprise Portal.","တာဝန်ပေးမှုများ၊ ပို့ဆောင်ရေးအလုပ်များ၊ အသိပေးချက်များ၊ COD နှင့် ဌာနခွဲအချက်အလက်များကို Enterprise Portal နှင့် တစ်ပြိုင်နက်တည်း ချိတ်ဆက်ထားပါသည်။")}
               </p>
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {data.identity?.display_name||data.identity?.worker_code||"Rider"} · {data.identity?.worker_code||"-"} · {data.identity?.branch_code||"No branch"}
@@ -63,20 +66,20 @@ export default function Dashboard() {
 
         <section className="grid gap-4 md:grid-cols-2">
           <Link to="/jobs" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
-            <h2 className="text-xl font-black text-slate-950">Pickup Verification</h2>
-            <p className="mt-2 font-semibold text-slate-600">Open Enterprise-assigned pickups, capture proof, weight, and submit parcels for review.</p>
+            <h2 className="text-xl font-black text-slate-950">{tx("Pickup Verification","Pickup စစ်ဆေးအတည်ပြုခြင်း")}</h2>
+            <p className="mt-2 font-semibold text-slate-600">{tx("Open Enterprise-assigned pickups, capture proof, weight, and submit parcels for review.","Enterprise မှ တာဝန်ပေးထားသော Pickup များကို ဖွင့်ပြီး ဓာတ်ပုံသက်သေ၊ အလေးချိန် ထည့်သွင်းကာ စစ်ဆေးရန် ပို့ပါ။")}</p>
           </Link>
           <Link to="/delivery" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
-            <h2 className="text-xl font-black text-slate-950">Delivery / Drop-Off</h2>
-            <p className="mt-2 font-semibold text-slate-600">Open Enterprise Wayplan stops and complete strict delivery verification.</p>
+            <h2 className="text-xl font-black text-slate-950">{tx("Delivery / Drop-Off","ပို့ဆောင် / ပစ္စည်းချခြင်း")}</h2>
+            <p className="mt-2 font-semibold text-slate-600">{tx("Open Enterprise Wayplan stops and complete strict delivery verification.","Enterprise Wayplan မှတ်တိုင်များကို ဖွင့်ပြီး ပို့ဆောင်မှု စစ်ဆေးအတည်ပြုခြင်းကို ပြီးစီးအောင် ဆောင်ရွက်ပါ။")}</p>
           </Link>
           <Link to="/cod-settlement" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
-            <h2 className="text-xl font-black text-slate-950">COD Settlement</h2>
-            <p className="mt-2 font-semibold text-slate-600">Submit delivered COD to Finance using authoritative Enterprise values.</p>
+            <h2 className="text-xl font-black text-slate-950">{tx("COD Settlement","COD ငွေစာရင်းရှင်းခြင်း")}</h2>
+            <p className="mt-2 font-semibold text-slate-600">{tx("Submit delivered COD to Finance using authoritative Enterprise values.","ပို့ဆောင်ပြီးသော COD ကို Enterprise သတ်မှတ်ချက်အတိုင်း Finance သို့ တင်သွင်းပါ။")}</p>
           </Link>
           <Link to="/branch-sync" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
-            <h2 className="flex items-center gap-2 text-xl font-black text-slate-950"><Building2 className="h-5 w-5"/> Branch Sync</h2>
-            <p className="mt-2 font-semibold text-slate-600">View your authenticated branch assignment and branch pickup workload.</p>
+            <h2 className="flex items-center gap-2 text-xl font-black text-slate-950"><Building2 className="h-5 w-5"/> {tx("Branch Sync","ဌာနခွဲ ချိတ်ဆက်မှု")}</h2>
+            <p className="mt-2 font-semibold text-slate-600">{tx("View your authenticated branch assignment and branch pickup workload.","သင့်ဌာနခွဲတာဝန်နှင့် Pickup အလုပ်ပမာဏကို ကြည့်ရှုပါ။")}</p>
           </Link>
         </section>
       </div>
