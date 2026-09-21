@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useEffect, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
+import { useAppState } from "../hooks/useAppState";
 
 function rows(data: any) {
   for (const key of ["assigned_pickups", "delivery_jobs", "jobs", "items"]) {
@@ -10,9 +11,11 @@ function rows(data: any) {
 }
 
 export default function CodSettlementPage() {
+  const { language } = useAppState();
+  const tx = (en:string,my:string) => language === "my" ? my : en;
   const [pickups, setPickups] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
-  const [message, setMessage] = useState("Loading COD jobs...");
+  const [message, setMessage] = useState(language === "my" ? "COD အလုပ်များကို ဖွင့်နေသည်..." : "Loading COD jobs...");
   const [form, setForm] = useState({
     cod_expected: "",
     cod_collected: "",
@@ -39,7 +42,7 @@ export default function CodSettlementPage() {
     );
     setPickups(list);
     setSelected(list[0] || null);
-    setMessage(`Loaded ${list.length} delivered COD job(s) awaiting Rider settlement review.`);
+    setMessage(tx(`Loaded ${list.length} delivered COD job(s) awaiting Rider settlement review.`,`ငွေစာရင်းရှင်းရန် စောင့်နေသော ပို့ဆောင်ပြီး COD အလုပ် ${list.length} ခု ရှိပါသည်။`));
   }
 
   function selectPhoto(file?: File) {
@@ -58,13 +61,13 @@ export default function CodSettlementPage() {
 
   async function save() {
     if (!selected) {
-      setMessage("Select a pickup first.");
+      setMessage(tx("Select a pickup first.","Pickup ကို အရင်ရွေးပါ။"));
       return;
     }
 
     const amount = Number(form.cod_handover_amount || form.cod_collected || selected.cod_collected || 0);
     if (!(amount > 0)) {
-      setMessage("COD handover amount must be greater than zero.");
+      setMessage(tx("COD handover amount must be greater than zero.","လွှဲပြောင်းမည့် COD ပမာဏသည် 0 ထက် ကြီးရပါမည်။"));
       return;
     }
 
@@ -90,7 +93,7 @@ export default function CodSettlementPage() {
       setMessage(error?.message || data?.error || "COD settlement submission failed.");
       return;
     }
-    setMessage("COD settlement submitted to Finance.");
+    setMessage(tx("COD settlement submitted to Finance.","COD ငွေစာရင်းကို Finance သို့ တင်သွင်းပြီးပါပြီ။"));
     await load();
   }
 
@@ -102,9 +105,9 @@ export default function CodSettlementPage() {
     <div className="min-h-screen bg-slate-50 p-4">
       <div className="mx-auto max-w-6xl space-y-4">
         <section className="rounded-3xl border bg-white p-5 shadow-sm">
-          <h1 className="text-3xl font-black">COD Settlement</h1>
+          <h1 className="text-3xl font-black">{tx("COD Settlement","COD ငွေစာရင်းရှင်းခြင်း")}</h1>
           <p className="font-semibold text-slate-600">
-            Track COD expected, collected, handed over, and proof photo.
+            {tx("Track COD expected, collected, handed over, and proof photo.","ရရှိရမည့် COD၊ ကောက်ခံပြီး COD၊ လွှဲပြောင်းပြီး COD နှင့် သက်သေဓာတ်ပုံကို စစ်ဆေးပါ။")}
           </p>
           <div className="mt-3 rounded-2xl bg-blue-50 p-3 font-bold text-blue-900">
             {message}
@@ -132,7 +135,7 @@ export default function CodSettlementPage() {
                 </b>
                 <p className="font-black">{pickup.merchant_name || "-"}</p>
                 <p className="text-sm text-slate-500">
-                  COD collected: {Number(pickup.cod_collected || pickup.cod_amount || 0).toLocaleString()} MMK
+                  {tx("COD collected:","ကောက်ခံပြီး COD:")} {Number(pickup.cod_collected || pickup.cod_amount || 0).toLocaleString()} MMK
                 </p>
               </button>
             ))}
@@ -140,31 +143,31 @@ export default function CodSettlementPage() {
 
           <section className="rounded-3xl border bg-white p-5 shadow-sm">
             <h2 className="text-xl font-black">
-              {selected?.pickup_id || "No pickup selected"}
+              {selected?.pickup_id || tx("No pickup selected","Pickup မရွေးထားပါ")}
             </h2>
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <input
                 className="rounded-2xl border p-3 font-bold"
-                placeholder="COD expected"
+                placeholder={tx("COD expected","ရရှိရမည့် COD")}
                 value={form.cod_expected}
                 onChange={(e) => setForm({ ...form, cod_expected: e.target.value })}
               />
               <input
                 className="rounded-2xl border p-3 font-bold"
-                placeholder="COD collected"
+                placeholder={tx("COD collected","ကောက်ခံပြီး COD")}
                 value={form.cod_collected}
                 onChange={(e) => setForm({ ...form, cod_collected: e.target.value })}
               />
               <input
                 className="rounded-2xl border p-3 font-bold"
-                placeholder="COD handover amount"
+                placeholder={tx("COD handover amount","လွှဲပြောင်းမည့် COD ပမာဏ")}
                 value={form.cod_handover_amount}
                 onChange={(e) => setForm({ ...form, cod_handover_amount: e.target.value })}
               />
               <input
                 className="rounded-2xl border p-3 font-bold"
-                placeholder="Handed over to"
+                placeholder={tx("Handed over to","လွှဲပြောင်းလက်ခံသူ")}
                 value={form.handed_over_to}
                 onChange={(e) => setForm({ ...form, handed_over_to: e.target.value })}
               />
