@@ -2,12 +2,15 @@
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { supabase } from "../integrations/supabase/client";
+import { useAppState } from "../hooks/useAppState";
 
 const emptyForm={is_online:false,shift_date:"",shift_start:"",shift_end:"",vehicle_type:"Motorbike",vehicle_plate:"",preferred_language:"English"};
 
 export default function AvailabilityPage() {
+  const { language } = useAppState();
+  const tx = (en:string,my:string) => language === "my" ? my : en;
   const [form,setForm]=useState(emptyForm);
-  const [msg,setMsg]=useState("Loading Enterprise availability...");
+  const [msg,setMsg]=useState(language === "my" ? "Enterprise အလုပ်ဆင်းနိုင်မှုကို ဖွင့်နေသည်..." : "Loading Enterprise availability...");
   const [loading,setLoading]=useState(false);
 
   async function load(){
@@ -24,7 +27,7 @@ export default function AvailabilityPage() {
       vehicle_plate:a.vehicle_plate||"",
       preferred_language:a.preferred_language||"English",
     });
-    setMsg("Availability synchronized with Enterprise workforce.");
+    setMsg(tx("Availability synchronized with Enterprise workforce.","အလုပ်ဆင်းနိုင်မှုကို Enterprise workforce နှင့် ချိတ်ဆက်ပြီးပါပြီ။"));
     setLoading(false);
   }
 
@@ -42,7 +45,7 @@ export default function AvailabilityPage() {
       <section className="rounded-3xl border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           <div><h1 className="text-3xl font-black">Availability & Schedule</h1><p className="mt-2 font-semibold text-slate-600">Enterprise-synchronized online status, shift, vehicle and language settings.</p></div>
-          <button onClick={load} disabled={loading} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>Refresh</button>
+          <button onClick={load} disabled={loading} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>{tx("Refresh","ပြန်ဖွင့်ရန်")}</button>
         </div>
         <div className="mt-4 rounded-2xl bg-blue-50 p-3 text-sm font-bold text-blue-900">{msg}</div>
       </section>
