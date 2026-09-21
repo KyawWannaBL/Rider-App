@@ -157,7 +157,7 @@ export default function Login() {
 
       <button
         type="button"
-        onClick={() => setLanguage((current) => (current === "en" ? "my" : "en"))}
+        onClick={() => setLanguage(language === "en" ? "my" : "en")}
         className="absolute right-4 top-4 z-20 inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 text-xs font-black uppercase tracking-wider text-slate-100 backdrop-blur-md hover:bg-white/10 sm:right-6 sm:top-6"
       >
         <Globe className="h-4 w-4" />
