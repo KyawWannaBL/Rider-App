@@ -2,19 +2,22 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, WalletCards } from "lucide-react";
 import { supabase } from "../integrations/supabase/client";
+import { useAppState } from "../hooks/useAppState";
 
 function money(value: any) {
   return Number(value || 0).toLocaleString();
 }
 
 export default function WalletPage() {
+  const { language } = useAppState();
+  const tx = (en:string,my:string) => language === "my" ? my : en;
   const [snapshot, setSnapshot] = useState<any>({ totals: {}, ledger: [], identity: {} });
-  const [msg, setMsg] = useState("Loading Rider wallet...");
+  const [msg, setMsg] = useState(language === "my" ? "Rider ငွေစာရင်းကို ဖွင့်နေသည်..." : "Loading Rider wallet...");
   const [loading, setLoading] = useState(false);
 
   async function load() {
     setLoading(true);
-    setMsg("Loading Rider wallet...");
+    setMsg(tx("Loading Rider wallet...","Rider ငွေစာရင်းကို ဖွင့်နေသည်..."));
     const { data, error } = await (supabase as any).rpc("be_rider_wallet_snapshot", { p_payload: {} });
     if (error) {
       setMsg(`Unable to load Rider wallet: ${error.message}`);
@@ -22,7 +25,7 @@ export default function WalletPage() {
       return;
     }
     setSnapshot(data || { totals: {}, ledger: [], identity: {} });
-    setMsg("Wallet synchronized with Finance COD settlement records.");
+    setMsg(tx("Wallet synchronized with Finance COD settlement records.","ငွေစာရင်းကို Finance COD settlement မှတ်တမ်းများနှင့် ချိတ်ဆက်ပြီးပါပြီ။"));
     setLoading(false);
   }
 
@@ -41,10 +44,10 @@ export default function WalletPage() {
               <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">BRITIUM EXPRESS</p>
               <h1 className="mt-2 flex items-center gap-3 text-3xl font-black text-slate-950">
                 <WalletCards className="h-7 w-7 text-blue-700" />
-                Rider Wallet
+                {tx("Rider Wallet","Rider ငွေစာရင်း")}
               </h1>
               <p className="mt-2 font-semibold text-slate-600">
-                COD collection, handover balance, settlement status, and Rider ledger.
+                {tx("COD collection, handover balance, settlement status, and Rider ledger.","COD ကောက်ခံမှု၊ လွှဲပြောင်းလက်ကျန်၊ ငွေစာရင်းရှင်းမှုအခြေအနေနှင့် Rider စာရင်းကို ကြည့်ရှုပါ။")}
               </p>
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {identity.display_name || identity.worker_code || "Rider"} · {identity.worker_code || "-"} · {identity.branch_code || "Branch not set"}
@@ -64,10 +67,10 @@ export default function WalletPage() {
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ["COD Collected", money(t.cod_collected) + " MMK"],
-            ["COD Handed Over", money(t.cod_handed_over) + " MMK"],
-            ["COD Balance", money(t.cod_balance) + " MMK"],
-            ["Completed Settlements", Number(t.completed_jobs || 0).toLocaleString()],
+            [tx("COD Collected","ကောက်ခံပြီး COD"), money(t.cod_collected) + " MMK"],
+            [tx("COD Handed Over","လွှဲပြောင်းပြီး COD"), money(t.cod_handed_over) + " MMK"],
+            [tx("COD Balance","COD လက်ကျန်"), money(t.cod_balance) + " MMK"],
+            [tx("Completed Settlements","ပြီးဆုံးသော ငွေစာရင်းရှင်းမှု"), Number(t.completed_jobs || 0).toLocaleString()],
           ].map(([label, value]) => (
             <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p>
@@ -78,15 +81,15 @@ export default function WalletPage() {
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-black text-slate-950">Wallet Ledger</h2>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{ledger.length} records</span>
+            <h2 className="text-xl font-black text-slate-950">{tx("Wallet Ledger","ငွေစာရင်းမှတ်တမ်း")}</h2>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{ledger.length} {tx("records","မှတ်တမ်း")}</span>
           </div>
 
           {ledger.length === 0 ? (
             <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-              <p className="font-black text-slate-700">No Rider COD ledger entries yet.</p>
+              <p className="font-black text-slate-700">{tx("No Rider COD ledger entries yet.","Rider COD စာရင်းမှတ်တမ်း မရှိသေးပါ။")}</p>
               <p className="mt-1 text-sm font-semibold text-slate-500">
-                Delivered COD transactions will appear here after Finance settlement records are created.
+                {tx("Delivered COD transactions will appear here after Finance settlement records are created.","ပို့ဆောင်ပြီး COD များကို Finance settlement မှတ်တမ်း ပြုလုပ်ပြီးနောက် ဤနေရာတွင် ပြပါမည်။")}
               </p>
             </div>
           ) : (
