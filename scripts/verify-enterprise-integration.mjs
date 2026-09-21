@@ -3,9 +3,11 @@ import fs from "node:fs";
 const contracts = {
   "src/pages/Dashboard.tsx": ["be_rider_dashboard_snapshot"],
   "src/pages/RiderPickupPhotoQrPortal.tsx": [
-    "be_field_team_mobile_snapshot_v77",
+    "be_field_pickup_request_options_v94",
     "be_pickup_parcel_capture_snapshot",
     "be_pickup_parcel_capture_save",
+    "WAITING_ASSIGNMENT",
+    "ASSIGNED_TO_ME",
     'storage.from("rider-proofs")'
   ],
   "src/pages/DeliveryPage.tsx": [
