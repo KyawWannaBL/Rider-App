@@ -300,15 +300,15 @@ export default function DeliveryPage() {
   async function deliver() {
     if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
     if (!canDeliver) return setMsg(tx("Record Arrived at Customer before confirming delivery.","ပို့ဆောင်ပြီးအတည်ပြုမီ Customer နေရာသို့ ရောက်ရှိကြောင်း အရင်မှတ်တမ်းတင်ပါ။"));
-    if (!form.receiver_name.trim()) return setMsg(tx("{tx("Receiver name","လက်ခံသူအမည်")} is required.","လက်ခံသူအမည် ဖြည့်ရန်လိုအပ်ပါသည်။"));
+    if (!form.receiver_name.trim()) return setMsg(tx("Receiver name is required.","လက်ခံသူအမည် ဖြည့်ရန်လိုအပ်ပါသည်။"));
     if (!approvedProofFile) return setMsg(tx("Capture, review and approve the delivery proof photo first.","ပို့ဆောင်မှုဓာတ်ပုံကို ရိုက်ယူ၊ စစ်ဆေးပြီး အတည်ပြုပါ။"));
     const drawnSignature = await signatureCanvasFile();
     if (!signatureFile && !drawnSignature && !form.signature_name.trim()) return setMsg(tx("Customer electronic signature is required.","Customer အီလက်ထရွန်နစ်လက်မှတ် လိုအပ်ပါသည်။"));
     if (requiredCod > 0 && Number(form.cod_collected || 0) !== requiredCod) {
-      return setMsg(`{tx("COD collected","ကောက်ခံပြီး COD")} must equal required COD: ${requiredCod.toLocaleString()} Ks.`);
+      return setMsg(tx(`COD collected must equal required COD: ${requiredCod.toLocaleString()} Ks.`,`ကောက်ခံပြီး COD သည် ရရှိရမည့် COD ${requiredCod.toLocaleString()} Ks နှင့် တူညီရပါမည်။`));
     }
     if (electronicPayment && !form.transaction_reference.trim()) {
-      return setMsg(tx("{tx("Transaction reference","ငွေလွှဲအမှတ်")} is required for electronic payment.","အီလက်ထရွန်နစ်ငွေပေးချေမှုအတွက် {tx("Transaction reference","ငွေလွှဲအမှတ်")} လိုအပ်ပါသည်။"));
+      return setMsg(tx("Transaction reference is required for electronic payment.","အီလက်ထရွန်နစ်ငွေပေးချေမှုအတွက် ငွေလွှဲအမှတ် လိုအပ်ပါသည်။"));
     }
 
     setBusy(true);
@@ -372,7 +372,7 @@ export default function DeliveryPage() {
       const today = new Date();
       const selectedDate = new Date(`${form.reschedule_date}T00:00:00`);
       if (selectedDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
-        return setMsg(tx("{tx("Dedicated delivery date","သတ်မှတ်ပို့ဆောင်ရက်")} cannot be in the past.","သတ်မှတ်ပို့ဆောင်ရက်သည် ယခင်ရက် မဖြစ်ရပါ။"));
+        return setMsg(tx("Dedicated delivery date cannot be in the past.","သတ်မှတ်ပို့ဆောင်ရက်သည် ယခင်ရက် မဖြစ်ရပါ။"));
       }
       setBusy(true);
       try {
@@ -485,9 +485,9 @@ export default function DeliveryPage() {
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <input className="rounded-2xl border p-3 font-bold" placeholder="{tx("Receiver name","လက်ခံသူအမည်")}" value={form.receiver_name} onChange={(e) => setForm({ ...form, receiver_name: e.target.value })} />
-                  <input className="rounded-2xl border p-3 font-bold" placeholder="{tx("Receiver phone","လက်ခံသူဖုန်း")}" value={form.receiver_phone} onChange={(e) => setForm({ ...form, receiver_phone: e.target.value })} />
-                  <textarea className="rounded-2xl border p-3 font-bold md:col-span-2" placeholder="{tx("Remarks / special issue","မှတ်ချက် / အထူးပြဿနာ")}" value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+                  <input className="rounded-2xl border p-3 font-bold" placeholder={tx("Receiver name","လက်ခံသူအမည်")} value={form.receiver_name} onChange={(e) => setForm({ ...form, receiver_name: e.target.value })} />
+                  <input className="rounded-2xl border p-3 font-bold" placeholder={tx("Receiver phone","လက်ခံသူဖုန်း")} value={form.receiver_phone} onChange={(e) => setForm({ ...form, receiver_phone: e.target.value })} />
+                  <textarea className="rounded-2xl border p-3 font-bold md:col-span-2" placeholder={tx("Remarks / special issue","မှတ်ချက် / အထူးပြဿနာ")} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -498,7 +498,7 @@ export default function DeliveryPage() {
                     {proofState === "compressing" && <p className="mt-2 text-sm text-blue-700">{tx("Compressing photo…","ဓာတ်ပုံကို ချုံ့နေသည်…")}</p>}
                     {proofPreview && (
                       <button type="button" disabled={proofState === "approved"} onClick={approveProofPhoto} className="mt-3 w-full rounded-xl bg-emerald-600 p-3 text-white disabled:opacity-50">
-                        {proofState === "approved" ? "{tx("Photo approved","ဓာတ်ပုံ အတည်ပြုပြီး")}" : "{tx("Approve photo & upload","ဓာတ်ပုံအတည်ပြုပြီး Upload တင်ရန်")}"}
+                        {proofState === "approved" ? tx("Photo approved","ဓာတ်ပုံ အတည်ပြုပြီး") : tx("Approve photo & upload","ဓာတ်ပုံအတည်ပြုပြီး Upload တင်ရန်")}
                       </button>
                     )}
                   </label>
@@ -521,7 +521,7 @@ export default function DeliveryPage() {
                     <button type="button" onClick={clearSignatureCanvas} className="mt-2 rounded-lg border px-3 py-2 text-xs">{tx("Clear drawn signature","ရေးထားသောလက်မှတ် ဖျက်ရန်")}</button>
                     <input
                       className="mt-3 w-full rounded-xl border p-3"
-                      placeholder="{tx("Or type signed customer name","သို့မဟုတ် လက်မှတ်ထိုးသူအမည် ရိုက်ထည့်ပါ")}"
+                      placeholder={tx("Or type signed customer name","သို့မဟုတ် လက်မှတ်ထိုးသူအမည် ရိုက်ထည့်ပါ")}
                       value={form.signature_name}
                       onChange={(e) => setForm({ ...form, signature_name: e.target.value })}
                     />
