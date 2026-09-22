@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "VITE_ENABLE_ROUTE_MESSAGING=true vite",
-    "build": "npm run verify:preferred-rider-modern-delivery-v51 && npm run verify:ui-css && npm run verify:enterprise-integration && vite build",
+    "build": "npm run verify:preferred-rider-modern-delivery-v51 && npm run verify:pickup-photo-review-rotation-v106 && npm run verify:ui-css && npm run verify:enterprise-integration && vite build",
     "build:dev": "VITE_ENABLE_ROUTE_MESSAGING=true vite build --mode development --sourcemap",
     "build:map": "VITE_ENABLE_ROUTE_MESSAGING=true vite build --sourcemap",
     "lint": "eslint .",
@@ -13,6 +13,7 @@
     "preview:dev": "npm run build:dev && npm run preview",
     "test:edge-functions": "cd supabase/edge_function && deno task test",
     "verify:preferred-rider-modern-delivery-v51": "node scripts/verify-preferred-rider-modern-delivery-v51.mjs",
+    "verify:pickup-photo-review-rotation-v106": "node scripts/verify-pickup-photo-review-rotation-v106.mjs",
     "verify:ui-css": "node scripts/verify-ui-css.mjs",
     "verify:enterprise-integration": "node scripts/verify-enterprise-integration.mjs"
   },
