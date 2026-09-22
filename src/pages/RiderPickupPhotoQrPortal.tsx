@@ -292,7 +292,11 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   function rotatePhotoReview(direction: "left" | "right") {
-    setReviewRotation((current) => current + (direction === "left" ? -90 : 90));
+    if (direction === "left") {
+      setReviewRotation((current) => current - 90);
+      return;
+    }
+    setReviewRotation((current) => current + 90);
   }
 
   function closePhotoReview() {
