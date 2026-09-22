@@ -288,7 +288,7 @@ export default function RiderPickupPhotoQrPortal() {
     const src = parcel.cargo_photo_data_url || parcel.cargo_photo_url || "";
     if (!src) return;
     setReviewRotation(0);
-    setReviewPhoto({ src, lineNo: parcel.line_no });
+    setReviewPhoto({ src: src, lineNo: parcel.line_no });
   }
 
   function rotatePhotoReview(direction: "left" | "right") {
