@@ -108,6 +108,8 @@ export default function RiderPickupPhotoQrPortal() {
   const [loading, setLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState("");
   const [savingLine, setSavingLine] = useState<number | null>(null);
+  const [reviewPhoto, setReviewPhoto] = useState<{ src: string; lineNo: number } | null>(null);
+  const [reviewRotation, setReviewRotation] = useState(0);
   const [parcelPage, setParcelPage] = useState(1);
   const pageSize = 20;
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -280,6 +282,22 @@ export default function RiderPickupPhotoQrPortal() {
     } catch (error: any) {
       setMessage(error?.message || `Unable to prepare parcel ${lineNo} photo.`);
     }
+  }
+
+  function openPhotoReview(parcel: ParcelDraft) {
+    const src = parcel.cargo_photo_data_url || parcel.cargo_photo_url || "";
+    if (!src) return;
+    setReviewRotation(0);
+    setReviewPhoto({ src, lineNo: parcel.line_no });
+  }
+
+  function rotatePhotoReview(direction: "left" | "right") {
+    setReviewRotation((current) => current + (direction === "left" ? -90 : 90));
+  }
+
+  function closePhotoReview() {
+    setReviewPhoto(null);
+    setReviewRotation(0);
   }
 
   async function ensurePhotoUploaded(parcel: ParcelDraft, pickupId: string) {
@@ -790,11 +808,21 @@ export default function RiderPickupPhotoQrPortal() {
                         <p className="text-xs font-black uppercase tracking-widest text-slate-600">Cargo Photo</p>
 
                         {parcel.cargo_photo_data_url || parcel.cargo_photo_url ? (
-                          <img
-                            src={parcel.cargo_photo_data_url || parcel.cargo_photo_url}
-                            alt={`Cargo parcel ${parcel.line_no}`}
-                            className="h-40 w-full rounded-2xl border border-slate-200 object-cover"
-                          />
+                          <button
+                            type="button"
+                            onClick={() => openPhotoReview(parcel)}
+                            className="block w-full cursor-zoom-in overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                            aria-label={tx(`Review cargo photo for parcel ${parcel.line_no}`,`Parcel ${parcel.line_no} ကုန်ပစ္စည်းဓာတ်ပုံ စစ်ဆေးရန်`)}
+                          >
+                            <img
+                              src={parcel.cargo_photo_data_url || parcel.cargo_photo_url}
+                              alt={`Cargo parcel ${parcel.line_no}`}
+                              className="h-40 w-full object-cover"
+                            />
+                            <span className="block px-3 py-2 text-xs font-black text-blue-700">
+                              {tx("Tap photo to enlarge & rotate","ဓာတ်ပုံကို နှိပ်၍ ချဲ့ပြီး လှည့်ကြည့်ရန်")}
+                            </span>
+                          </button>
                         ) : (
                           <div className="flex h-40 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-center text-sm font-black text-slate-500">
                             No cargo photo yet
@@ -888,6 +916,75 @@ export default function RiderPickupPhotoQrPortal() {
           </section>
         </section>
       </main>
+
+      {reviewPhoto && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label={tx(`Review cargo photo for parcel ${reviewPhoto.lineNo}`,`Parcel ${reviewPhoto.lineNo} ကုန်ပစ္စည်းဓာတ်ပုံ စစ်ဆေးရန်`)}
+          onClick={closePhotoReview}
+        >
+          <div
+            className="flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-blue-600">PHOTO REVIEW</p>
+                <p className="font-black text-slate-900">Parcel {reviewPhoto.lineNo}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closePhotoReview}
+                className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-800"
+              >
+                {tx("Close","ပိတ်ရန်")}
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-slate-950 p-4 sm:p-6">
+              <img
+                src={reviewPhoto.src}
+                alt={`Cargo parcel ${reviewPhoto.lineNo} enlarged review`}
+                className="max-h-[68vh] max-w-full object-contain transition-transform duration-200"
+                style={{ transform: `rotate(${reviewRotation}deg)` }}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 border-t border-slate-200 bg-white p-4 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => rotatePhotoReview("left")}
+                className="rounded-2xl bg-slate-900 px-4 py-3 font-black text-white"
+              >
+                {tx("↺ Rotate Left 90°","↺ ဘယ်ဘက် 90° လှည့်ရန်")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setReviewRotation(0)}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 font-black text-slate-800"
+              >
+                {tx("Reset View","မြင်ကွင်း ပြန်ထားရန်")}
+              </button>
+              <button
+                type="button"
+                onClick={() => rotatePhotoReview("right")}
+                className="rounded-2xl bg-blue-700 px-4 py-3 font-black text-white"
+              >
+                {tx("Rotate Right 90° ↻","ညာဘက် 90° လှည့်ရန် ↻")}
+              </button>
+            </div>
+
+            <p className="px-4 pb-4 text-center text-xs font-bold text-slate-500">
+              {tx(
+                "Rotation changes this review view only. The saved/uploaded photo is not modified.",
+                "လှည့်ခြင်းသည် စစ်ဆေးကြည့်ရှုသည့် မြင်ကွင်းအတွက်သာဖြစ်ပြီး သိမ်း/Upload တင်မည့် ဓာတ်ပုံကို မပြောင်းလဲပါ။"
+              )}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
