@@ -395,14 +395,30 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function saveAllParcels() {
-    let okCount = 0;
+    const readyParcels = parcels.filter((parcel) => {
+      const weight = Number(parcel.parcel_weight || 0);
+      const hasPhoto = Boolean(parcel.cargo_photo_file || parcel.cargo_photo_url || parcel.cargo_photo_data_url);
+      return Number.isFinite(weight) && weight > 0 && hasPhoto;
+    });
 
-    for (const parcel of parcels) {
+    if (readyParcels.length === 0) {
+      setMessage(tx(
+        "No parcel is ready to save yet. Enter weight and capture/upload a cargo photo first.",
+        "သိမ်းရန် အဆင်သင့်ဖြစ်သော Parcel မရှိသေးပါ။ အလေးချိန်ထည့်ပြီး ကုန်ပစ္စည်းဓာတ်ပုံကို ရိုက်ယူ/Upload တင်ပါ။"
+      ));
+      return;
+    }
+
+    let okCount = 0;
+    for (const parcel of readyParcels) {
       const ok = await saveParcel(parcel);
       if (ok) okCount += 1;
     }
 
-    setMessage(tx(`Saved ${okCount}/${parcels.length} parcel record(s).`,`Parcel မှတ်တမ်း ${okCount}/${parcels.length} ကို သိမ်းဆည်းပြီးပါပြီ။`));
+    setMessage(tx(
+      `Saved ${okCount}/${readyParcels.length} ready parcel record(s).`,
+      `သိမ်းရန်အဆင်သင့် Parcel ${okCount}/${readyParcels.length} ကို သိမ်းဆည်းပြီးပါပြီ။`
+    ));
   }
 
   async function uploadAllPhotosForReview() {
@@ -490,6 +506,11 @@ export default function RiderPickupPhotoQrPortal() {
 
   const pickupId = safeText(selectedPickup?.pickup_id || selectedPickup?.pickup_way_id, "");
   const savedCount = parcels.filter((p) => p.saved).length;
+  const readyToSaveCount = parcels.filter((parcel) => {
+    const weight = Number(parcel.parcel_weight || 0);
+    const hasPhoto = Boolean(parcel.cargo_photo_file || parcel.cargo_photo_url || parcel.cargo_photo_data_url);
+    return Number.isFinite(weight) && weight > 0 && hasPhoto && !parcel.saved;
+  }).length;
   const nextAction = String(selectedPickup?.next_action || "");
   const canCapture = Boolean(selectedPickup?.can_capture);
   const parcelPageCount = Math.max(1, Math.ceil(parcels.length / pageSize));
@@ -683,9 +704,16 @@ export default function RiderPickupPhotoQrPortal() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <button disabled={!canCapture || !!actionBusy} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
-                      {tx("Save All Parcel Records","Parcel မှတ်တမ်းအားလုံး သိမ်းရန်")}
+                  <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+                    <p className="mb-2 text-sm font-black text-blue-950">
+                      {tx(
+                        `${readyToSaveCount} parcel(s) ready to save · ${savedCount}/${parcels.length} saved`,
+                        `သိမ်းရန်အဆင်သင့် ${readyToSaveCount} Parcel · သိမ်းပြီး ${savedCount}/${parcels.length}`
+                      )}
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <button disabled={!canCapture || !!actionBusy || readyToSaveCount === 0} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
+                      {tx("Save All Ready Parcels","အဆင်သင့် Parcel အားလုံး သိမ်းရန်")}
                     </button>
                     <button disabled={!canCapture || !!actionBusy} onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Upload All Photos for Review","ဓာတ်ပုံအားလုံး စစ်ဆေးရန် တင်ရန်")}
@@ -693,6 +721,7 @@ export default function RiderPickupPhotoQrPortal() {
                     <button onClick={() => printQrCards(parcels)} className="rounded-2xl bg-slate-950 px-5 py-4 font-black text-white">
                       {tx("Print All Temporary QR Codes","ယာယီ QR Code အားလုံး ပုံနှိပ်ရန်")}
                     </button>
+                    </div>
                   </div>
                 </div>
 
@@ -802,8 +831,30 @@ export default function RiderPickupPhotoQrPortal() {
                         </div>
 
                         <div className={`rounded-xl px-4 py-3 text-sm font-black ${parcel.saved ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
-                          {parcel.saved ? "Saved" : "Not Saved"}
+                          {parcel.saved ? tx("Saved","သိမ်းပြီး") : tx("Not Saved","မသိမ်းရသေး")}
                         </div>
+
+                        {!parcel.saved && (
+                          <button
+                            type="button"
+                            disabled={!canCapture || savingLine === parcel.line_no}
+                            onClick={() => saveParcel(parcel)}
+                            className="w-full rounded-2xl bg-blue-700 px-4 py-4 font-black text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            {savingLine === parcel.line_no
+                              ? tx("Saving Photo & Parcel...","ဓာတ်ပုံနှင့် Parcel ကို သိမ်းနေသည်...")
+                              : tx("Save Photo & Parcel","ဓာတ်ပုံနှင့် Parcel ကို သိမ်းရန်")}
+                          </button>
+                        )}
+
+                        {!parcel.saved && (
+                          <p className="text-xs font-bold leading-5 text-slate-500">
+                            {tx(
+                              "Enter weight, capture/upload the cargo photo, then press Save Photo & Parcel.",
+                              "အလေးချိန်ထည့်ပါ၊ ကုန်ပစ္စည်းဓာတ်ပုံ ရိုက်ယူ/Upload တင်ပါ၊ ပြီးနောက် ဓာတ်ပုံနှင့် Parcel ကို သိမ်းရန် ကိုနှိပ်ပါ။"
+                            )}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </article>
