@@ -156,6 +156,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(nextSession);
       setUser(nextSession?.user || null);
 
+      // During bootstrap, getSession() is the single owner of profile hydration.
+      // Supabase may emit INITIAL_SESSION/SIGNED_IN at nearly the same time.
+      // Starting a second hydrateProfile here increments requestRef and can leave
+      // the first request unable to clear loading, producing a permanent splash.
+      if (!bootstrapFinished) {
+        if (!nextSession?.user) {
+          setProfile(null);
+          setProfileState("checking");
+          setAuthError(null);
+        }
+        return;
+      }
+
       if (!nextSession?.user) {
         requestRef.current += 1;
         setProfile(null);
@@ -165,12 +178,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (event !== "INITIAL_SESSION" || bootstrapFinished) {
-        setLoading(true);
-        window.setTimeout(() => {
-          if (mountedRef.current) void hydrateProfile(nextSession, `auth-event:${event}`);
-        }, 0);
-      }
+      setLoading(true);
+      window.setTimeout(() => {
+        if (mountedRef.current) void hydrateProfile(nextSession, `auth-event:${event}`);
+      }, 0);
     });
 
     void (async () => {
@@ -201,7 +212,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       } finally {
         bootstrapFinished = true;
-        window.clearTimeout(watchdog);
+        // Never clear the watchdog while the UI is still owned by a stale
+        // "checking" request. The bootstrap path above should have settled
+        // loading; this is a final safety net against an auth callback race.
+        if (mountedRef.current) {
+          setLoading((current) => {
+            if (!current) window.clearTimeout(watchdog);
+            return current;
+          });
+        }
       }
     })();
 
