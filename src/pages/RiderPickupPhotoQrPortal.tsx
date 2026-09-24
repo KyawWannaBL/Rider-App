@@ -18,6 +18,7 @@ type ParcelDraft = {
   cargo_photo_file?: File;
   cargo_photo_name?: string;
   photo_status?: string;
+  photo_error?: string;
   saved?: boolean;
 };
 
@@ -52,29 +53,64 @@ function qrImageUrl(value: string) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(value)}`;
 }
 
-async function compressPickupPhoto(file: File, maxBytes = 950 * 1024): Promise<File> {
-  if (!file.type.startsWith("image/")) throw new Error("Select an image file.");
-  if (file.size <= maxBytes) return file;
+async function compressPickupPhoto(file: File, maxBytes = 8 * 1024 * 1024): Promise<File> {
+  const mime = String(file.type || "").toLowerCase();
+  if (mime && !mime.startsWith("image/")) throw new Error("Select an image file.");
+  if (file.size > 14 * 1024 * 1024) {
+    throw new Error("Photo is too large. Please choose an image smaller than 14 MB.");
+  }
 
-  const worker = new Worker(new URL("../workers/proofCompressionWorker.ts", import.meta.url), { type: "module" });
+  // Compression is optional. Older iOS/Android WebViews may not support
+  // createImageBitmap/OffscreenCanvas even though direct file upload works.
+  if (file.size <= maxBytes || /heic|heif/.test(mime) || typeof Worker === "undefined") return file;
+
+  let worker: Worker | null = null;
   try {
+    worker = new Worker(new URL("../workers/proofCompressionWorker.ts", import.meta.url), { type: "module" });
     const buffer = await file.arrayBuffer();
     return await new Promise<File>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(new Error("Photo compression timed out.")), 30_000);
-      worker.onmessage = (event) => {
+      const timer = window.setTimeout(() => reject(new Error("Photo compression timed out.")), 20_000);
+      worker!.onmessage = (event) => {
         window.clearTimeout(timer);
         if (!event.data?.ok) return reject(new Error(event.data?.error || "Photo compression failed."));
         resolve(new File([event.data.buffer], event.data.name || "pickup-proof.jpg", { type: event.data.type || "image/jpeg" }));
       };
-      worker.onerror = () => {
+      worker!.onerror = () => {
         window.clearTimeout(timer);
         reject(new Error("Photo compression failed."));
       };
-      worker.postMessage({ buffer, type: file.type, name: file.name, maxBytes, maxWidth: 1280, maxHeight: 720 }, [buffer]);
+      worker!.postMessage({ buffer, type: file.type, name: file.name, maxBytes, maxWidth: 1600, maxHeight: 1200 }, [buffer]);
     });
+  } catch (error) {
+    if (file.size <= 14 * 1024 * 1024) return file;
+    throw error;
   } finally {
-    worker.terminate();
+    worker?.terminate();
   }
+}
+
+function readPhotoPreview(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(file);
+  });
+}
+
+function safeStorageSegment(value: string) {
+  return String(value || "unknown").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
+}
+
+function photoExtension(file: File) {
+  const byName = String(file.name || "").split(".").pop()?.toLowerCase();
+  if (byName && /^[a-z0-9]{2,5}$/.test(byName)) return byName === "jpeg" ? "jpg" : byName;
+  const mime = String(file.type || "").toLowerCase();
+  if (mime.includes("png")) return "png";
+  if (mime.includes("webp")) return "webp";
+  if (mime.includes("heic")) return "heic";
+  if (mime.includes("heif")) return "heif";
+  return "jpg";
 }
 
 function buildParcels(pickup: PickupRow): ParcelDraft[] {
@@ -108,9 +144,11 @@ export default function RiderPickupPhotoQrPortal() {
   const [loading, setLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState("");
   const [savingLine, setSavingLine] = useState<number | null>(null);
+  const [uploadingLine, setUploadingLine] = useState<number | null>(null);
   const [parcelPage, setParcelPage] = useState(1);
   const pageSize = 20;
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const galleryRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   async function loadAssignedPickups() {
     setLoading(true);
@@ -259,51 +297,123 @@ export default function RiderPickupPhotoQrPortal() {
     );
   }
 
-  async function onPhotoSelected(lineNo: number, file?: File) {
-    if (!file) return;
+  async function uploadPhotoFile(lineNo: number, file: File, pickupId: string, deliveryWayId: string) {
+    if (!supabase) throw new Error("Enterprise storage is not configured.");
 
-    setMessage(tx(`Preparing cargo photo for parcel ${lineNo}...`,`Parcel ${lineNo} အတွက် ကုန်ပစ္စည်းဓာတ်ပုံကို ပြင်ဆင်နေသည်...`));
+    const { data: sessionResult, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (!sessionResult?.session?.user) {
+      throw new Error("Your Rider session expired. Sign in again, then retry the photo upload.");
+    }
+
+    const extension = photoExtension(file);
+    const path = `pickup/${safeStorageSegment(pickupId)}/${safeStorageSegment(deliveryWayId)}/${Date.now()}-${lineNo}.${extension}`;
+    const { data: uploaded, error } = await supabase.storage.from("rider-proofs").upload(path, file, {
+      upsert: false,
+      cacheControl: "3600",
+      contentType: file.type || "image/jpeg",
+    });
+    if (error) throw new Error(`Photo upload failed: ${error.message}`);
+
+    const { data } = supabase.storage.from("rider-proofs").getPublicUrl(uploaded?.path || path);
+    const url = data?.publicUrl;
+    if (!url) throw new Error("Unable to create Rider proof URL.");
+    return url;
+  }
+
+  async function onPhotoSelected(lineNo: number, file?: File) {
+    if (!file || !selectedPickup) return;
+    if (!selectedPickup.can_capture) {
+      setMessage(tx(
+        "Arrive at the pickup location before capturing proof photos.",
+        "Pickup နေရာသို့ ရောက်ရှိကြောင်း အရင်မှတ်တမ်းတင်ပြီးမှ သက်သေဓာတ်ပုံ ရိုက်/တင်ပါ။"
+      ));
+      return;
+    }
+
+    const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
+    const currentParcel = parcels.find((parcel) => parcel.line_no === lineNo);
+    const deliveryWayId = currentParcel?.delivery_way_id || lineCode("D", pickupId, lineNo);
+    let prepared = file;
+    let preview = "";
+
+    setUploadingLine(lineNo);
+    setMessage(tx(`Preparing and uploading cargo photo for parcel ${lineNo}...`,`Parcel ${lineNo} အတွက် ဓာတ်ပုံပြင်ဆင်ပြီး Upload တင်နေသည်...`));
+
     try {
-      const compressed = await compressPickupPhoto(file);
-      const reader = new FileReader();
-      reader.onload = () => {
-        updateParcel(lineNo, {
-          cargo_photo_data_url: String(reader.result || ""),
-          cargo_photo_file: compressed,
-          cargo_photo_url: "",
-          cargo_photo_name: compressed.name,
-          photo_status: "photo_ready_for_upload",
-        });
-        setMessage(tx(`Cargo photo ready for parcel ${lineNo}. It will upload to Enterprise proof storage when saved.`,`Parcel ${lineNo} အတွက် ကုန်ပစ္စည်းဓာတ်ပုံ အဆင်သင့်ဖြစ်ပါပြီ။ သိမ်းဆည်းချိန်တွင် Enterprise သက်သေသိုလှောင်မှုသို့ တင်ပါမည်။`));
-      };
-      reader.readAsDataURL(compressed);
+      prepared = await compressPickupPhoto(file);
+      preview = await readPhotoPreview(prepared);
+
+      updateParcel(lineNo, {
+        cargo_photo_data_url: preview,
+        cargo_photo_file: prepared,
+        cargo_photo_url: "",
+        cargo_photo_name: prepared.name || file.name || `pickup-${lineNo}.jpg`,
+        photo_status: "photo_uploading",
+        photo_error: undefined,
+      });
+
+      const url = await uploadPhotoFile(lineNo, prepared, pickupId, deliveryWayId);
+      updateParcel(lineNo, {
+        cargo_photo_data_url: preview,
+        cargo_photo_file: undefined,
+        cargo_photo_url: url,
+        cargo_photo_name: prepared.name || file.name || `pickup-${lineNo}.jpg`,
+        photo_status: "photo_uploaded",
+        photo_error: undefined,
+      });
+
+      setMessage(tx(
+        `Parcel ${lineNo} photo uploaded successfully. Enter weight and save the parcel when ready.`,
+        `Parcel ${lineNo} ဓာတ်ပုံ Upload အောင်မြင်ပါပြီ။ အလေးချိန်ထည့်ပြီး Parcel ကို သိမ်းနိုင်ပါပြီ။`
+      ));
     } catch (error: any) {
-      setMessage(error?.message || `Unable to prepare parcel ${lineNo} photo.`);
+      const errorMessage = error?.message || `Unable to upload parcel ${lineNo} photo.`;
+      if (!preview) preview = await readPhotoPreview(prepared).catch(() => "");
+
+      updateParcel(lineNo, {
+        cargo_photo_data_url: preview,
+        cargo_photo_file: prepared,
+        cargo_photo_url: "",
+        cargo_photo_name: prepared.name || file.name || `pickup-${lineNo}.jpg`,
+        photo_status: "photo_upload_failed",
+        photo_error: errorMessage,
+      });
+
+      setMessage(tx(
+        `Parcel ${lineNo}: ${errorMessage} Tap Retry Photo Upload.`,
+        `Parcel ${lineNo}: ဓာတ်ပုံ Upload မအောင်မြင်ပါ။ Retry Photo Upload ကိုနှိပ်ပြီး ပြန်စမ်းပါ။`
+      ));
+    } finally {
+      setUploadingLine(null);
     }
   }
 
   async function ensurePhotoUploaded(parcel: ParcelDraft, pickupId: string) {
     if (parcel.cargo_photo_url) return parcel.cargo_photo_url;
-    if (!parcel.cargo_photo_file) throw new Error(`Parcel ${parcel.line_no} requires an approved cargo photo.`);
+    if (!parcel.cargo_photo_file) throw new Error(`Parcel ${parcel.line_no} requires a cargo photo.`);
 
-    const extension = parcel.cargo_photo_file.name.split(".").pop() || "jpg";
-    const path = `pickup/${pickupId}/${parcel.delivery_way_id}/${Date.now()}-${parcel.line_no}.${extension}`;
-    const { error } = await supabase.storage.from("rider-proofs").upload(path, parcel.cargo_photo_file, {
-      upsert: false,
-      contentType: parcel.cargo_photo_file.type || "image/jpeg",
-    });
-    if (error) throw error;
-
-    const { data } = supabase.storage.from("rider-proofs").getPublicUrl(path);
-    const url = data?.publicUrl;
-    if (!url) throw new Error("Unable to create Rider proof URL.");
-
-    updateParcel(parcel.line_no, {
-      cargo_photo_url: url,
-      cargo_photo_file: undefined,
-      photo_status: "photo_uploaded",
-    });
-    return url;
+    setUploadingLine(parcel.line_no);
+    updateParcel(parcel.line_no, { photo_status: "photo_uploading", photo_error: undefined });
+    try {
+      const url = await uploadPhotoFile(parcel.line_no, parcel.cargo_photo_file, pickupId, parcel.delivery_way_id);
+      updateParcel(parcel.line_no, {
+        cargo_photo_url: url,
+        cargo_photo_file: undefined,
+        photo_status: "photo_uploaded",
+        photo_error: undefined,
+      });
+      return url;
+    } catch (error: any) {
+      const errorMessage = error?.message || `Photo upload failed for parcel ${parcel.line_no}.`;
+      updateParcel(parcel.line_no, {
+        photo_status: "photo_upload_failed",
+        photo_error: errorMessage,
+      });
+      throw error;
+    } finally {
+      setUploadingLine(null);
+    }
   }
 
   async function saveParcel(parcel: ParcelDraft) {
@@ -422,17 +532,38 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function uploadAllPhotosForReview() {
-    const withPhotos = parcels.filter((parcel) => parcel.cargo_photo_data_url || parcel.cargo_photo_url);
-    if (withPhotos.length === 0) {
-      setMessage(tx("Capture at least one cargo photo before using Upload All.","Upload All မလုပ်မီ ကုန်ပစ္စည်းဓာတ်ပုံ အနည်းဆုံးတစ်ပုံ ရိုက်ယူပါ။"));
+    if (!selectedPickup) return;
+    const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
+    const pending = parcels.filter((parcel) => !parcel.cargo_photo_url && Boolean(parcel.cargo_photo_file));
+    const uploadedCount = parcels.filter((parcel) => Boolean(parcel.cargo_photo_url)).length;
+
+    if (pending.length === 0) {
+      setMessage(
+        uploadedCount > 0
+          ? tx(`All ${uploadedCount} selected photo(s) are already uploaded. Enter parcel weight and save when ready.`,`ရွေးထားသော ဓာတ်ပုံ ${uploadedCount} ပုံလုံး Upload ပြီးပါပြီ။ အလေးချိန်ထည့်ပြီး Parcel ကို သိမ်းပါ။`)
+          : tx("Capture or choose at least one cargo photo before using Upload All.","Upload All မလုပ်မီ ကုန်ပစ္စည်းဓာတ်ပုံ အနည်းဆုံးတစ်ပုံ ရိုက်ယူ/ရွေးချယ်ပါ။")
+      );
       return;
     }
+
+    setActionBusy("upload_all_photos");
     let okCount = 0;
-    for (const parcel of withPhotos) {
-      const ok = await saveParcel(parcel);
-      if (ok) okCount += 1;
+    try {
+      for (const parcel of pending) {
+        try {
+          await ensurePhotoUploaded(parcel, pickupId);
+          okCount += 1;
+        } catch (error) {
+          console.error("Photo retry failed", parcel.line_no, error);
+        }
+      }
+      setMessage(tx(
+        `Photo upload completed: ${okCount}/${pending.length} pending photo(s) uploaded. Weight is not required for photo upload.`,
+        `ဓာတ်ပုံ Upload ပြီးပါပြီ။ စောင့်ဆိုင်းနေသော ဓာတ်ပုံ ${okCount}/${pending.length} ပုံ တင်ပြီးပါပြီ။ ဓာတ်ပုံတင်ရန် အလေးချိန် မလိုပါ။`
+      ));
+    } finally {
+      setActionBusy("");
     }
-    setMessage(tx(`Upload All completed: ${okCount}/${withPhotos.length} photo parcel(s) sent for review.`,`Upload All ပြီးပါပြီ။ ဓာတ်ပုံပါ Parcel ${okCount}/${withPhotos.length} ကို စစ်ဆေးရန် ပို့ပြီးပါပြီ။`));
   }
 
   function ensureQr(parcel: ParcelDraft) {
@@ -753,7 +884,7 @@ export default function RiderPickupPhotoQrPortal() {
                           Print This QR
                         </button>
                         <button
-                          disabled={!canCapture || savingLine === parcel.line_no}
+                          disabled={!canCapture || savingLine === parcel.line_no || uploadingLine === parcel.line_no}
                           onClick={() => saveParcel(parcel)}
                           className="rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
                         >
@@ -809,16 +940,85 @@ export default function RiderPickupPhotoQrPortal() {
                           accept="image/*"
                           capture="environment"
                           className="hidden"
-                          onChange={(e) => onPhotoSelected(parcel.line_no, e.target.files?.[0])}
+                          onChange={(e) => {
+                            const input = e.currentTarget;
+                            const file = input.files?.[0];
+                            input.value = "";
+                            void onPhotoSelected(parcel.line_no, file);
+                          }}
+                        />
+                        <input
+                          ref={(el) => {
+                            galleryRefs.current[parcel.line_no] = el;
+                          }}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const input = e.currentTarget;
+                            const file = input.files?.[0];
+                            input.value = "";
+                            void onPhotoSelected(parcel.line_no, file);
+                          }}
                         />
 
-                        <button
-                          disabled={!canCapture}
-                          onClick={() => fileRefs.current[parcel.line_no]?.click()}
-                          className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          Capture / Upload Cargo Photo
-                        </button>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            disabled={!canCapture || uploadingLine === parcel.line_no}
+                            onClick={() => fileRefs.current[parcel.line_no]?.click()}
+                            className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            {uploadingLine === parcel.line_no ? tx("Uploading...","Upload တင်နေသည်...") : tx("Take Photo","ဓာတ်ပုံရိုက်ရန်")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!canCapture || uploadingLine === parcel.line_no}
+                            onClick={() => galleryRefs.current[parcel.line_no]?.click()}
+                            className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            {tx("Choose from Gallery","Gallery မှရွေးရန်")}
+                          </button>
+                        </div>
+
+                        <div className={`rounded-xl px-4 py-3 text-sm font-black ${
+                          uploadingLine === parcel.line_no
+                            ? "bg-blue-100 text-blue-800"
+                            : parcel.cargo_photo_url
+                              ? "bg-emerald-100 text-emerald-800"
+                              : parcel.photo_status === "photo_upload_failed"
+                                ? "bg-rose-100 text-rose-800"
+                                : parcel.cargo_photo_file
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-slate-100 text-slate-600"
+                        }`}>
+                          {uploadingLine === parcel.line_no
+                            ? tx("Uploading photo to Enterprise storage...","Enterprise storage သို့ ဓာတ်ပုံ Upload တင်နေသည်...")
+                            : parcel.cargo_photo_url
+                              ? tx("Photo uploaded successfully","ဓာတ်ပုံ Upload အောင်မြင်")
+                              : parcel.photo_status === "photo_upload_failed"
+                                ? tx("Photo upload failed","ဓာတ်ပုံ Upload မအောင်မြင်")
+                                : parcel.cargo_photo_file
+                                  ? tx("Photo ready to retry","ဓာတ်ပုံ ပြန်တင်ရန် အဆင်သင့်")
+                                  : tx("No photo uploaded","ဓာတ်ပုံ မတင်ရသေး")}
+                        </div>
+
+                        {parcel.photo_error && (
+                          <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold leading-5 text-rose-700">
+                            {parcel.photo_error}
+                          </p>
+                        )}
+
+                        {parcel.photo_status === "photo_upload_failed" && parcel.cargo_photo_file && (
+                          <button
+                            type="button"
+                            disabled={!canCapture || uploadingLine === parcel.line_no}
+                            onClick={() => void onPhotoSelected(parcel.line_no, parcel.cargo_photo_file)}
+                            className="w-full rounded-2xl bg-rose-600 px-4 py-3 font-black text-white disabled:opacity-40"
+                          >
+                            {tx("Retry Photo Upload","ဓာတ်ပုံ Upload ပြန်စမ်းရန်")}
+                          </button>
+                        )}
 
                         <div className="rounded-2xl bg-slate-50 p-4">
                           <p className="text-xs font-black uppercase text-slate-500">Temporary QR</p>
@@ -837,7 +1037,7 @@ export default function RiderPickupPhotoQrPortal() {
                         {!parcel.saved && (
                           <button
                             type="button"
-                            disabled={!canCapture || savingLine === parcel.line_no}
+                            disabled={!canCapture || savingLine === parcel.line_no || uploadingLine === parcel.line_no}
                             onClick={() => saveParcel(parcel)}
                             className="w-full rounded-2xl bg-blue-700 px-4 py-4 font-black text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -850,8 +1050,8 @@ export default function RiderPickupPhotoQrPortal() {
                         {!parcel.saved && (
                           <p className="text-xs font-bold leading-5 text-slate-500">
                             {tx(
-                              "Enter weight, capture/upload the cargo photo, then press Save Photo & Parcel.",
-                              "အလေးချိန်ထည့်ပါ၊ ကုန်ပစ္စည်းဓာတ်ပုံ ရိုက်ယူ/Upload တင်ပါ၊ ပြီးနောက် ဓာတ်ပုံနှင့် Parcel ကို သိမ်းရန် ကိုနှိပ်ပါ။"
+                              "The photo uploads immediately after capture/selection. Then enter weight and press Save Photo & Parcel.",
+                              "ဓာတ်ပုံရိုက်/ရွေးပြီးသည်နှင့် ချက်ချင်း Upload တင်ပါမည်။ ထို့နောက် အလေးချိန်ထည့်ပြီး ဓာတ်ပုံနှင့် Parcel ကို သိမ်းရန် ကိုနှိပ်ပါ။"
                             )}
                           </p>
                         )}
