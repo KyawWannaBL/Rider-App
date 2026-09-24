@@ -323,10 +323,10 @@ export default function RiderPickupPhotoQrPortal() {
 
   async function onPhotoSelected(lineNo: number, file?: File) {
     if (!file || !selectedPickup) return;
-    if (!selectedPickup.can_capture) {
+    if (!selectedPickup.can_open_workspace) {
       setMessage(tx(
-        "Arrive at the pickup location before capturing proof photos.",
-        "Pickup နေရာသို့ ရောက်ရှိကြောင်း အရင်မှတ်တမ်းတင်ပြီးမှ သက်သေဓာတ်ပုံ ရိုက်/တင်ပါ။"
+        "This pickup is not assigned to your field-team account.",
+        "ဤ Pickup ကို သင့် field-team account သို့ တာဝန်ပေးထားခြင်း မရှိသေးပါ။"
       ));
       return;
     }
@@ -965,7 +965,7 @@ export default function RiderPickupPhotoQrPortal() {
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <button
                             type="button"
-                            disabled={!canCapture || uploadingLine === parcel.line_no}
+                            disabled={!selectedPickup?.can_open_workspace || uploadingLine === parcel.line_no}
                             onClick={() => fileRefs.current[parcel.line_no]?.click()}
                             className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -973,7 +973,7 @@ export default function RiderPickupPhotoQrPortal() {
                           </button>
                           <button
                             type="button"
-                            disabled={!canCapture || uploadingLine === parcel.line_no}
+                            disabled={!selectedPickup?.can_open_workspace || uploadingLine === parcel.line_no}
                             onClick={() => galleryRefs.current[parcel.line_no]?.click()}
                             className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -1012,7 +1012,7 @@ export default function RiderPickupPhotoQrPortal() {
                         {parcel.photo_status === "photo_upload_failed" && parcel.cargo_photo_file && (
                           <button
                             type="button"
-                            disabled={!canCapture || uploadingLine === parcel.line_no}
+                            disabled={!selectedPickup?.can_open_workspace || uploadingLine === parcel.line_no}
                             onClick={() => void onPhotoSelected(parcel.line_no, parcel.cargo_photo_file)}
                             className="w-full rounded-2xl bg-rose-600 px-4 py-3 font-black text-white disabled:opacity-40"
                           >
