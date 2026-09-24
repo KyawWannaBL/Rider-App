@@ -418,8 +418,8 @@ export default function RiderPickupPhotoQrPortal() {
 
   async function saveParcel(parcel: ParcelDraft) {
     if (!selectedPickup) return false;
-    if (!selectedPickup.can_capture) {
-      setMessage(tx("Arrive at pickup before saving parcel verification.","Parcel စစ်ဆေးမှု သိမ်းဆည်းမီ Pickup နေရာသို့ ရောက်ရှိကြောင်း အရင်မှတ်တမ်းတင်ပါ။"));
+    if (!selectedPickup.can_open_workspace) {
+      setMessage(tx("This pickup is not assigned to your field-team account.","ဤ Pickup ကို သင့် field-team account သို့ တာဝန်ပေးထားခြင်း မရှိသေးပါ။"));
       return false;
     }
     const weight = Number(parcel.parcel_weight || 0);
@@ -843,10 +843,10 @@ export default function RiderPickupPhotoQrPortal() {
                       )}
                     </p>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <button disabled={!canCapture || !!actionBusy || readyToSaveCount === 0} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
+                    <button disabled={!selectedPickup?.can_open_workspace || !!actionBusy || readyToSaveCount === 0} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Save All Ready Parcels","အဆင်သင့် Parcel အားလုံး သိမ်းရန်")}
                     </button>
-                    <button disabled={!canCapture || !!actionBusy} onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
+                    <button disabled={!selectedPickup?.can_open_workspace || !!actionBusy} onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Upload All Photos for Review","ဓာတ်ပုံအားလုံး စစ်ဆေးရန် တင်ရန်")}
                     </button>
                     <button onClick={() => printQrCards(parcels)} className="rounded-2xl bg-slate-950 px-5 py-4 font-black text-white">
@@ -884,7 +884,7 @@ export default function RiderPickupPhotoQrPortal() {
                           Print This QR
                         </button>
                         <button
-                          disabled={!canCapture || savingLine === parcel.line_no || uploadingLine === parcel.line_no}
+                          disabled={!selectedPickup?.can_open_workspace || savingLine === parcel.line_no || uploadingLine === parcel.line_no}
                           onClick={() => saveParcel(parcel)}
                           className="rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
                         >
@@ -1037,7 +1037,7 @@ export default function RiderPickupPhotoQrPortal() {
                         {!parcel.saved && (
                           <button
                             type="button"
-                            disabled={!canCapture || savingLine === parcel.line_no || uploadingLine === parcel.line_no}
+                            disabled={!selectedPickup?.can_open_workspace || savingLine === parcel.line_no || uploadingLine === parcel.line_no}
                             onClick={() => saveParcel(parcel)}
                             className="w-full rounded-2xl bg-blue-700 px-4 py-4 font-black text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                           >
