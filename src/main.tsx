@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-const UI_CACHE_VERSION = 'rider-ui-v52-20260921';
+const UI_CACHE_VERSION = 'rider-ui-v53-20260925';
 
 async function clearLegacyUiCaches() {
   try {
