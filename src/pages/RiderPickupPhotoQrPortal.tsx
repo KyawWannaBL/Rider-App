@@ -168,7 +168,7 @@ export default function RiderPickupPhotoQrPortal() {
     const rows = Array.isArray(data?.requests) ? data.requests : [];
     setPickups(rows);
 
-    const requested = params.pickupId || search;
+    const requested = selectedPickup?.pickup_id || params.pickupId || search;
     const requestedRow = rows.find((row) => row.pickup_id === requested || row.pickup_way_id === requested);
     const first =
       (requestedRow?.can_open_workspace ? requestedRow : null) ||
@@ -246,6 +246,20 @@ export default function RiderPickupPhotoQrPortal() {
     setParcels(merged);
   }
 
+  async function refreshPickupAfterAction(pickupId: string) {
+    const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v95", {
+      p_limit: 300,
+    });
+    if (error) throw error;
+    if (data?.ok === false) throw new Error(data?.error || "Unable to refresh pickup status.");
+    const rows = Array.isArray(data?.requests) ? data.requests : [];
+    setPickups(rows);
+    const current = rows.find((row: PickupRow) => String(row.pickup_id || row.pickup_way_id) === pickupId);
+    if (!current) throw new Error(`${pickupId}: pickup is no longer in the assigned pickup list. Refresh to check its status.`);
+    await selectPickup(current);
+    return current;
+  }
+
   async function performPickupAction(action: string) {
     if (!selectedPickup) return;
     const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
@@ -257,19 +271,11 @@ export default function RiderPickupPhotoQrPortal() {
       if (error) throw error;
       if (data?.ok === false) throw new Error(data?.error || "Pickup action failed.");
 
-      setMessage(
-        tx(
-          `${pickupId}: ${String(action).replaceAll("_"," ")} completed successfully.`,
-          `${pickupId}: ${String(action).replaceAll("_"," ")} လုပ်ဆောင်မှု အောင်မြင်ပါသည်။`
-        )
-      );
-
-      await loadAssignedPickups();
-      const { data: refreshed } = await (supabase as any).rpc("be_field_pickup_request_options_v95", { p_limit: 300 });
-      const current = (Array.isArray(refreshed?.requests) ? refreshed.requests : []).find(
-        (row:any) => String(row.pickup_id || row.pickup_way_id) === pickupId
-      );
-      if (current) await selectPickup(current);
+      const current = await refreshPickupAfterAction(pickupId);
+      setMessage(tx(
+        `${pickupId}: ${String(action).replaceAll("_", " ")} completed. Next: ${String(current.next_action || "REFRESH").replaceAll("_", " ")}.`,
+        `${pickupId}: ${String(action).replaceAll("_", " ")} အောင်မြင်ပါသည်။ နောက်လုပ်ဆောင်ရန်: ${String(current.next_action || "REFRESH").replaceAll("_", " ")}။`
+      ));
     } catch (error:any) {
       console.error(error);
       setMessage(error?.message || tx("Pickup action failed.","Pickup လုပ်ဆောင်မှု မအောင်မြင်ပါ။"));
@@ -485,8 +491,8 @@ export default function RiderPickupPhotoQrPortal() {
       });
       if (error) throw error;
       if (data?.ok === false) throw new Error(data?.error || "Verification submit failed.");
-      setMessage(data?.message || tx("Pickup verification submitted.","Pickup verification တင်သွင်းပြီးပါပြီ။"));
-      await loadAssignedPickups();
+      const current = await refreshPickupAfterAction(pickupId);
+      setMessage(`${pickupId}: ${data?.message || tx("Pickup verification submitted.", "Pickup verification တင်သွင်းပြီးပါပြီ။")} ${tx("Next:", "နောက်လုပ်ဆောင်ရန်:")} ${String(current.next_action || "REFRESH").replaceAll("_", " ")}.`);
     } catch (error:any) {
       setMessage(error?.message || tx("Verification submit failed.","Verification တင်သွင်းမှု မအောင်မြင်ပါ။"));
     } finally {
@@ -794,7 +800,7 @@ export default function RiderPickupPhotoQrPortal() {
                     )}
                     {nextAction === "COLLECT_PICKUP" && (
                       <button onClick={() => performPickupAction("collect_pickup")} disabled={!!actionBusy} className="rounded-2xl bg-emerald-700 px-5 py-3 font-black text-white disabled:opacity-50">
-                        {tx("Confirm Pickup Collected","Pickup ကောက်ယူပြီး အတည်ပြုရန်")}
+                        {tx("Confirm Collection & Release to Data Entry","Pickup ကောက်ယူပြီး Data Entry သို့ လွှဲရန်")}
                       </button>
                     )}
                     {nextAction === "HANDOFF_TO_WAREHOUSE" && (
