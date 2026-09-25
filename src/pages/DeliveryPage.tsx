@@ -1,535 +1,359 @@
 // @ts-nocheck
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
 
 const PAYMENT_METHODS = ["CASH", "PREPAID", "QR", "BANK_TRANSFER", "MOBILE_WALLET"];
-const PROOF_MAX_BYTES = 950 * 1024;
-const UPLOAD_TIMEOUT_MS = 120_000;
-const FAILED_REASONS = [
-  ["PHONE_OFF", "ဖုန်းစက်ပိတ်ထားသည်။ / Phone switched off"],
-  ["PHONE_OUT_OF_COVERAGE", "ဖုန်းဆက်သွယ်မှုဧရိယာပြင်ပသို့ရောက်ရှိနေသည်။ / Outside coverage"],
-  ["NO_ANSWER", "ဖုန်းမကိုင်ပါ။ / Customer did not answer"],
-  ["CUSTOMER_NOT_AVAILABLE", "Customer not available"],
-  ["CUSTOMER_REFUSED", "Customer refused"],
-  ["WRONG_ADDRESS", "Wrong address"],
-  ["COD_NOT_READY", "COD not ready"],
-  ["NO_ACCESS_TO_BUILDING", "No access to building"],
-  ["PARCEL_DAMAGED", "Parcel damaged"],
-  ["WEATHER_TRAFFIC_ISSUE", "Weather / traffic issue"],
-  ["CUSTOMER_REQUESTED_RESCHEDULE", "Delivery date postponed / changed by customer"],
-  ["OTHER", "Other"],
-];
 
-async function compressImage(file: File, maxBytes = 950 * 1024): Promise<File> {
-  if (!file.type.startsWith("image/")) throw new Error("Select an image file.");
-  if (file.size <= maxBytes && file.size <= PROOF_MAX_BYTES) return file;
-  const worker = new Worker(new URL("../workers/proofCompressionWorker.ts", import.meta.url), { type: "module" });
-  try {
-    const buffer = await file.arrayBuffer();
-    return await new Promise<File>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(new Error("Photo compression timed out.")), 30_000);
-      worker.onmessage = (event) => {
-        window.clearTimeout(timer);
-        if (!event.data?.ok) return reject(new Error(event.data?.error || "Photo compression failed."));
-        resolve(new File([event.data.buffer], event.data.name || "proof.jpg", { type: event.data.type || "image/jpeg" }));
-      };
-      worker.onerror = () => {
-        window.clearTimeout(timer);
-        reject(new Error("Photo compression failed."));
-      };
-      worker.postMessage({ buffer, type: file.type, name: file.name, maxBytes, maxWidth: 1280, maxHeight: 720 }, [buffer]);
-    });
-  } finally {
-    worker.terminate();
+function rows(data: any) {
+  for (const k of ["jobs", "delivery_jobs", "assigned_pickups", "items"]) {
+    if (Array.isArray(data?.[k])) return data[k];
   }
-}
-
-async function withTimeout<T>(promise: Promise<T>, ms = UPLOAD_TIMEOUT_MS): Promise<T> {
-  let timer = 0;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = window.setTimeout(() => reject(new Error("Upload timed out. Check the mobile network and retry.")), ms);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    window.clearTimeout(timer);
-  }
-}
-
-function jobsFromResponse(data: any) {
-  if (Array.isArray(data?.jobs)) return data.jobs;
-  if (Array.isArray(data)) return data;
   return [];
 }
 
-function safeName(file: File) {
-  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+function dataUrlToBlob(dataUrl: string) {
+  const [meta, body] = dataUrl.split(",");
+  const mime = meta.match(/data:(.*?);/)?.[1] || "image/png";
+  const bytes = atob(body || "");
+  const array = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i += 1) array[i] = bytes.charCodeAt(i);
+  return new Blob([array], { type: mime });
 }
 
-async function currentGps() {
-  if (!navigator.geolocation) return {};
-  return await new Promise<any>((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ gps_lat: pos.coords.latitude, gps_lng: pos.coords.longitude }),
-      () => resolve({}),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 15000 },
-    );
-  });
+function safePart(value: unknown) {
+  return String(value || "unknown").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 80);
 }
 
 export default function DeliveryPage() {
   const [pickups, setPickups] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [approvedProofFile, setApprovedProofFile] = useState<File | null>(null);
-  const [proofState, setProofState] = useState<"idle" | "compressing" | "ready" | "approved">("idle");
-  const [signatureFile, setSignatureFile] = useState<File | null>(null);
-  const [proofPreview, setProofPreview] = useState("");
-  const [signaturePreview, setSignaturePreview] = useState("");
   const [busy, setBusy] = useState(false);
-  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const drawingRef = useRef(false);
   const [form, setForm] = useState({
     receiver_name: "",
     receiver_phone: "",
     remarks: "",
+    proof_photo_data_url: "",
+    proof_photo_name: "",
     payment_method: "CASH",
     transaction_reference: "",
     cod_collected: "",
-    failed_reason: "NO_ANSWER",
-    signature_name: "",
-    reschedule_date: "",
+    failed_reason: "",
   });
   const [msg, setMsg] = useState("Loading delivery jobs...");
+  const signatureRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRef = useRef(false);
 
-  const requiredCod = Number(selected?.cod_amount || 0);
-  const status = String(selected?.stop_status || selected?.rider_status || "").toUpperCase();
-  const electronicPayment = ["QR", "BANK_TRANSFER", "MOBILE_WALLET"].includes(form.payment_method);
-  const canDeliver = status === "ARRIVED_AT_CUSTOMER";
-
-  function resetProofs() {
-    setProofFile(null);
-    setApprovedProofFile(null);
-    setProofState("idle");
-    setSignatureFile(null);
-    setProofPreview("");
-    setSignaturePreview("");
+  async function load() {
+    const { data, error } = await supabase.rpc("be_rider_delivery_wayplan_jobs", { p_limit: 200 });
+    if (error) return setMsg(error.message);
+    const list = rows(data);
+    setPickups(list);
+    const first = list[0] || null;
+    setSelected(first);
+    setForm((current) => ({
+      ...current,
+      receiver_name: first?.receiver_name || first?.recipient_name || "",
+      receiver_phone: first?.receiver_phone || first?.recipient_phone || "",
+      cod_collected: String(first?.cod_amount ?? ""),
+    }));
+    setMsg(`Loaded ${list.length} assigned Wayplan delivery job(s).`);
   }
 
   function selectJob(job: any) {
     setSelected(job);
-    resetProofs();
     setForm((current) => ({
       ...current,
-      receiver_name: job.receiver_name || job.recipient_name || "",
-      receiver_phone: job.receiver_phone || job.recipient_phone || "",
-      cod_collected: String(job.cod_collected ?? job.cod_amount ?? ""),
+      receiver_name: job?.receiver_name || job?.recipient_name || "",
+      receiver_phone: job?.receiver_phone || job?.recipient_phone || "",
+      cod_collected: String(job?.cod_amount ?? ""),
       transaction_reference: "",
-      remarks: "",
-      signature_name: "",
-      failed_reason: "NO_ANSWER",
+      failed_reason: "",
+      proof_photo_data_url: "",
+      proof_photo_name: "",
     }));
+    clearSignature();
   }
 
-  async function load(preferredDeliveryWayId?: string) {
-    setMsg("Loading assigned Wayplan deliveries...");
-    const { data, error } = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs", {
-      p_rider_code: null,
-      p_limit: 200,
-    });
-    if (error) return setMsg(error.message);
-
-    const list = jobsFromResponse(data);
-    setPickups(list);
-    const next =
-      list.find((job: any) => job.delivery_way_id === preferredDeliveryWayId) ||
-      list.find((job: any) => !["DELIVERED", "FAILED_DELIVERY", "RETURN_TO_WAREHOUSE"].includes(String(job.stop_status || "").toUpperCase())) ||
-      list[0] ||
-      null;
-    if (next) selectJob(next);
-    else setSelected(null);
-    setMsg(`Loaded ${list.length} assigned delivery stop(s).`);
-  }
-
-  async function choosePhoto(file?: File) {
+  function photo(file?: File) {
     if (!file) return;
-    setProofState("compressing");
-    setApprovedProofFile(null);
-    try {
-      const compressed = await compressImage(file, 950 * 1024);
-      if (compressed.size > PROOF_MAX_BYTES) throw new Error("Proof photo remains larger than 950 KB after compression.");
-      setProofFile(compressed);
-      setProofPreview(URL.createObjectURL(compressed));
-      setProofState("ready");
-      setMsg(`Proof compressed to ${Math.ceil(compressed.size / 1024)} KB. Review it, then press “Approve photo & upload”.`);
-    } catch (error: any) {
-      setProofFile(null);
-      setProofPreview("");
-      setProofState("idle");
-      setMsg(error?.message || "Unable to prepare proof photo.");
-    }
+    const reader = new FileReader();
+    reader.onload = () => setForm((f) => ({
+      ...f,
+      proof_photo_data_url: String(reader.result || ""),
+      proof_photo_name: file.name,
+    }));
+    reader.readAsDataURL(file);
   }
 
-  function approveProofPhoto() {
-    if (!proofFile) return setMsg("Capture a proof photo first.");
-    setApprovedProofFile(proofFile);
-    setProofState("approved");
-    setMsg("Delivery proof approved. It will upload only when delivery is confirmed.");
-  }
-
-  function canvasPoint(event: any) {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
+  function point(event: any) {
+    const canvas = signatureRef.current;
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const point = event.touches?.[0] || event;
-    return { x: (point.clientX - rect.left) * (canvas.width / rect.width), y: (point.clientY - rect.top) * (canvas.height / rect.height) };
+    const source = event.touches?.[0] || event;
+    return {
+      x: (source.clientX - rect.left) * (canvas.width / rect.width),
+      y: (source.clientY - rect.top) * (canvas.height / rect.height),
+    };
   }
 
   function startSignature(event: any) {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-    event.preventDefault();
+    const canvas = signatureRef.current;
+    const p = point(event);
+    if (!canvas || !p) return;
     drawingRef.current = true;
-    const p = canvasPoint(event);
     const ctx = canvas.getContext("2d");
-    ctx?.beginPath();
-    ctx?.moveTo(p.x, p.y);
+    if (!ctx) return;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    event.preventDefault?.();
   }
 
   function drawSignature(event: any) {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas || !drawingRef.current) return;
-    event.preventDefault();
-    const p = canvasPoint(event);
+    if (!drawingRef.current) return;
+    const canvas = signatureRef.current;
+    const p = point(event);
+    if (!canvas || !p) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
     ctx.strokeStyle = "#0f172a";
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
+    event.preventDefault?.();
   }
 
-  function stopSignature(event?: any) {
-    event?.preventDefault?.();
+  function stopSignature() {
     drawingRef.current = false;
   }
 
-  function clearSignatureCanvas() {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-    canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+  function clearSignature() {
+    const canvas = signatureRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
-  async function signatureCanvasFile() {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return null;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    let hasInk = false;
-    for (let i = 3; i < pixels.length; i += 4) {
-      if (pixels[i] > 0) { hasInk = true; break; }
-    }
-    if (!hasInk) return null;
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    return blob ? new File([blob], "customer-signature.png", { type: "image/png" }) : null;
+  function currentGps(): Promise<{ gps_lat: number; gps_lng: number; accuracy?: number }> {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error("GPS is not available on this device."));
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({
+          gps_lat: pos.coords.latitude,
+          gps_lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        }),
+        (error) => reject(new Error(error.message || "Unable to read GPS position.")),
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 },
+      );
+    });
   }
 
-  function chooseSignature(file?: File) {
-    if (!file) return;
-    setSignatureFile(file);
-    setSignaturePreview(URL.createObjectURL(file));
-  }
-
-  async function upload(bucket: "rider-proofs" | "ops-signatures", file: File, prefix: string) {
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user?.id) throw new Error("Sign in before uploading proof.");
-    const path = `${auth.user.id}/${prefix}/${safeName(file)}`;
-    const result = await withTimeout(supabase.storage.from(bucket).upload(path, file, {
+  async function uploadDataUrl(bucket: string, dataUrl: string, prefix: string) {
+    const blob = dataUrlToBlob(dataUrl);
+    const path = `${prefix}/${Date.now()}-${crypto.randomUUID()}.png`;
+    const { error } = await supabase.storage.from(bucket).upload(path, blob, {
+      contentType: blob.type || "image/png",
       upsert: false,
-      contentType: file.type || "image/jpeg",
-    }) as any, UPLOAD_TIMEOUT_MS);
-    if (result.error) throw result.error;
+    });
+    if (error) throw error;
     if (bucket === "rider-proofs") {
       return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
     }
     return path;
   }
 
-  async function act(action: string, extra: any = {}) {
-    if (!selected) return setMsg("Select a delivery stop first.");
-    setBusy(true);
+  async function action(actionName: string, extra: Record<string, any> = {}) {
+    if (!selected) throw new Error("Select a Wayplan delivery first.");
+    const payload = {
+      action: actionName,
+      wayplan_id: selected.wayplan_id,
+      delivery_way_id: selected.delivery_way_id,
+      ...extra,
+    };
+    const { data, error } = await supabase.rpc("be_rider_wayplan_action", { p_payload: payload });
+    if (error) throw error;
+    if (data?.ok === false) throw new Error(data?.message || data?.error || "Rider action failed.");
+    return data;
+  }
+
+  async function run(label: string, fn: () => Promise<any>) {
     try {
-      const payload = {
-        wayplan_id: selected.wayplan_id,
-        delivery_way_id: selected.delivery_way_id,
-        action,
-        ...extra,
-      };
-      const { data, error } = await (supabase as any).rpc("be_rider_wayplan_action", { p_payload: payload });
-      if (error) throw error;
-      if (data?.ok === false) throw new Error(data?.error || "Rider action failed.");
-      setMsg(`${selected.delivery_way_id}: ${data?.status || action} saved.`);
-      await load(selected.delivery_way_id);
-    } catch (error: any) {
-      setMsg(error?.message || "Unable to save Rider action.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deliver() {
-    if (!selected) return setMsg("Select a delivery stop first.");
-    if (!canDeliver) return setMsg("Record Arrived at Customer before confirming delivery.");
-    if (!form.receiver_name.trim()) return setMsg("Receiver name is required.");
-    if (!approvedProofFile) return setMsg("Capture, review and approve the delivery proof photo first.");
-    const drawnSignature = await signatureCanvasFile();
-    if (!signatureFile && !drawnSignature && !form.signature_name.trim()) return setMsg("Customer electronic signature is required.");
-    if (requiredCod > 0 && Number(form.cod_collected || 0) !== requiredCod) {
-      return setMsg(`COD collected must equal required COD: ${requiredCod.toLocaleString()} Ks.`);
-    }
-    if (electronicPayment && !form.transaction_reference.trim()) {
-      return setMsg("Transaction reference is required for electronic payment.");
-    }
-
-    setBusy(true);
-    try {
-      const prefix = `${selected.wayplan_id}/${selected.delivery_way_id}`;
-      const proof_url = await upload("rider-proofs", approvedProofFile, prefix);
-      const finalSignatureFile = signatureFile || drawnSignature;
-      const signature_path = finalSignatureFile
-        ? await upload("ops-signatures", finalSignatureFile, prefix)
-        : null;
-      const gps = await currentGps();
-      const signature_payload = form.signature_name.trim()
-        ? {
-            method: "CUSTOMER_TYPED_ACKNOWLEDGEMENT",
-            signed_name: form.signature_name.trim(),
-            signed_at: new Date().toISOString(),
-          }
-        : {};
-
-      const { data, error } = await (supabase as any).rpc("be_rider_wayplan_action", {
-        p_payload: {
-          wayplan_id: selected.wayplan_id,
-          delivery_way_id: selected.delivery_way_id,
-          action: "deliver",
-          receiver_name: form.receiver_name.trim(),
-          receiver_phone: form.receiver_phone.trim() || null,
-          proof_url,
-          signature_path,
-          signature_payload,
-          payment_method: form.payment_method,
-          transaction_reference: form.transaction_reference.trim() || null,
-          cod_collected: Number(form.cod_collected || 0),
-          remark: form.remarks.trim() || null,
-          ...gps,
-        },
-      });
-      if (error) throw error;
-      if (data?.ok === false) throw new Error(data?.error || "Delivery confirmation failed.");
-
-      setMsg(`${selected.delivery_way_id}: delivery confirmed with proof, payment and signature.`);
-      resetProofs();
-      await load(selected.delivery_way_id);
-    } catch (error: any) {
-      setMsg(error?.message || "Delivery confirmation failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function arriveAtCustomer() {
-    if (!selected) return setMsg("Select a delivery stop first.");
-    const gps = await currentGps();
-    if (!gps.gps_lat || !gps.gps_lng) return setMsg("GPS permission is required to record arrival.");
-    await act("arrived", gps);
-  }
-
-  async function failDelivery() {
-    if (!selected) return setMsg("Select a delivery stop first.");
-    if (form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE") {
-      if (!form.reschedule_date) return setMsg("Choose the customer’s dedicated delivery date.");
-      const today = new Date();
-      const selectedDate = new Date(`${form.reschedule_date}T00:00:00`);
-      if (selectedDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
-        return setMsg("Dedicated delivery date cannot be in the past.");
-      }
       setBusy(true);
-      try {
-        const { data, error } = await (supabase as any).rpc("be_set_delivery_reschedule_v71", {
-          p_way_id: selected.delivery_way_id,
-          p_delivery_date: form.reschedule_date,
-          p_reason_code: "CUSTOMER_REQUESTED_RESCHEDULE",
-          p_actor_email: null,
-          p_note: form.remarks.trim() || null,
-        });
-        if (error) throw error;
-        if (data?.ok === false) throw new Error(data?.error || "Unable to reschedule delivery.");
-        setMsg(`${selected.delivery_way_id}: rescheduled for ${form.reschedule_date}. It is held from Wayplan assignment until that date.`);
-        await load(selected.delivery_way_id);
-      } catch (error: any) {
-        setMsg(error?.message || "Unable to reschedule delivery.");
-      } finally {
-        setBusy(false);
-      }
-      return;
+      setMsg(`${label}...`);
+      await fn();
+      setMsg(`${label} completed.`);
+      await load();
+    } catch (error: any) {
+      setMsg(error?.message || `${label} failed.`);
+    } finally {
+      setBusy(false);
     }
-    const gps = await currentGps();
-    await act("failed", { failed_reason: form.failed_reason, remark: form.remarks || null, ...gps });
   }
 
-  async function sendGps() {
-    if (!selected) return setMsg("Select a delivery stop first.");
-    const gps = await currentGps();
-    if (!gps.gps_lat) return setMsg("GPS unavailable or permission denied.");
-    setMsg(`Current GPS: ${gps.gps_lat.toFixed(6)}, ${gps.gps_lng.toFixed(6)}. It will be attached to delivery proof.`);
+  async function startDelivery() {
+    await run("Starting delivery", async () => action("start_delivery"));
   }
 
-  const activeCount = useMemo(
-    () => pickups.filter((job) => !["DELIVERED", "FAILED_DELIVERY", "RETURN_TO_WAREHOUSE"].includes(String(job.stop_status || "").toUpperCase())).length,
-    [pickups],
-  );
+  async function arrivedAtCustomer() {
+    await run("Confirming customer arrival", async () => {
+      const gps = await currentGps();
+      return action("arrived_at_customer", gps);
+    });
+  }
 
-  useEffect(() => {
-    const hashQuery = window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "";
-    const preferred = new URLSearchParams(hashQuery).get("deliveryWayId") || undefined;
-    load(preferred);
-  }, []);
+  async function confirmDelivered() {
+    await run("Saving delivery proof", async () => {
+      if (!form.receiver_name.trim()) throw new Error("Receiver name is required.");
+      if (!form.proof_photo_data_url) throw new Error("Delivery proof photo is required.");
+
+      const canvas = signatureRef.current;
+      const signatureData = canvas?.toDataURL("image/png") || "";
+      const blankCanvas = document.createElement("canvas");
+      blankCanvas.width = canvas?.width || 720;
+      blankCanvas.height = canvas?.height || 220;
+      if (!signatureData || signatureData === blankCanvas.toDataURL("image/png")) {
+        throw new Error("Customer electronic signature is required.");
+      }
+
+      const requiredCod = Number(selected?.cod_amount || 0);
+      const collectedCod = Number(form.cod_collected || 0);
+      if (requiredCod > 0 && collectedCod !== requiredCod) {
+        throw new Error(`COD collected must equal required COD: ${requiredCod} Ks.`);
+      }
+      if (["QR", "BANK_TRANSFER", "MOBILE_WALLET"].includes(form.payment_method) && !form.transaction_reference.trim()) {
+        throw new Error("Transaction reference is required for electronic payment.");
+      }
+
+      const gps = await currentGps();
+      const base = `${safePart(selected.wayplan_id)}/${safePart(selected.delivery_way_id)}`;
+      const [proofUrl, signaturePath] = await Promise.all([
+        uploadDataUrl("rider-proofs", form.proof_photo_data_url, base),
+        uploadDataUrl("ops-signatures", signatureData, base),
+      ]);
+
+      return action("deliver", {
+        receiver_name: form.receiver_name.trim(),
+        receiver_phone: form.receiver_phone.trim(),
+        proof_url: proofUrl,
+        signature_path: signaturePath,
+        signature_payload: { capture: "canvas", captured_at: new Date().toISOString() },
+        payment_method: form.payment_method,
+        transaction_reference: form.transaction_reference.trim() || null,
+        cod_collected: collectedCod,
+        gps_lat: gps.gps_lat,
+        gps_lng: gps.gps_lng,
+        remark: form.remarks.trim() || null,
+      });
+    });
+  }
+
+  async function failedDelivery() {
+    await run("Recording failed delivery", async () => {
+      if (!form.failed_reason.trim()) throw new Error("Failed-delivery reason is required.");
+      return action("delivery_failed", {
+        failed_reason: form.failed_reason.trim(),
+        reason: form.failed_reason.trim(),
+        remark: form.remarks.trim() || form.failed_reason.trim(),
+      });
+    });
+  }
+
+  useEffect(() => { load(); }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4">
       <div className="mx-auto max-w-6xl space-y-4">
         <section className="rounded-3xl bg-white p-5 shadow-sm border">
           <h1 className="text-3xl font-black">Delivery / Drop-Off Process</h1>
-          <p className="font-semibold text-slate-600">Assigned Wayplan stops, arrival, delivery proof, signature, COD/payment confirmation and failed delivery.</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
-            <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{pickups.length} assigned</span>
-            <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-900">{activeCount} active</span>
-          </div>
+          <p className="font-semibold text-slate-600">Preferred Rider workflow with Wayplan assignment, geofence arrival, proof, signature, COD and payment confirmation.</p>
           <div className="mt-3 rounded-2xl bg-blue-50 p-3 font-bold text-blue-900">{msg}</div>
         </section>
 
         <div className="grid gap-4 lg:grid-cols-[330px_1fr]">
-          <aside className="rounded-3xl bg-white p-4 shadow-sm border space-y-3 max-h-[78vh] overflow-y-auto">
-            {pickups.map((p) => {
-              const current = p.delivery_way_id === selected?.delivery_way_id;
-              return (
-                <button
-                  key={p.id || `${p.wayplan_id}-${p.delivery_way_id}`}
-                  onClick={() => selectJob(p)}
-                  className={`w-full rounded-2xl border p-3 text-left hover:bg-slate-50 ${current ? "border-blue-600 bg-blue-50" : "border-slate-200"}`}
-                >
-                  <b className="font-mono text-blue-700">{p.delivery_way_id || p.waybill_no}</b>
-                  <p className="font-black">{p.recipient_name || p.receiver_name || "-"}</p>
-                  <p className="text-sm text-slate-500">{p.address || p.township || "-"}</p>
-                  <div className="mt-2 flex items-center justify-between text-xs font-bold">
-                    <span>{String(p.stop_status || p.rider_status || "PENDING").replaceAll("_", " ")}</span>
-                    <span>{Number(p.cod_amount || 0).toLocaleString()} Ks</span>
-                  </div>
-                </button>
-              );
-            })}
+          <aside className="rounded-3xl bg-white p-4 shadow-sm border space-y-3">
+            {pickups.map((p) => (
+              <button
+                key={p.id || p.delivery_way_id}
+                onClick={() => selectJob(p)}
+                className={`w-full rounded-2xl border p-3 text-left hover:bg-slate-50 ${selected?.delivery_way_id === p.delivery_way_id ? "border-blue-600 bg-blue-50" : ""}`}
+              >
+                <b className="font-mono text-blue-700">{p.delivery_way_id || p.waybill_no}</b>
+                <p className="font-black">{p.recipient_name || p.receiver_name || "-"}</p>
+                <p className="text-sm text-slate-500">{p.address || p.township || "-"}</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">{p.stop_status || p.rider_status || "ASSIGNED"} · COD {Number(p.cod_amount || 0).toLocaleString()} Ks</p>
+              </button>
+            ))}
           </aside>
 
           <section className="rounded-3xl bg-white p-5 shadow-sm border">
-            <h2 className="text-xl font-black">{selected?.delivery_way_id || "No delivery stop selected"}</h2>
-            {selected && (
-              <>
-                <div className="mt-2 grid gap-2 rounded-2xl bg-slate-50 p-4 text-sm md:grid-cols-2">
-                  <div><b>Wayplan:</b> {selected.wayplan_id}</div>
-                  <div><b>Status:</b> {status || "PENDING"}</div>
-                  <div><b>Township:</b> {selected.township || "-"}</div>
-                  <div><b>COD:</b> {requiredCod.toLocaleString()} Ks</div>
-                  <div className="md:col-span-2"><b>Address:</b> {selected.address || "-"}</div>
-                </div>
+            <h2 className="text-xl font-black">{selected?.delivery_way_id || "No delivery selected"}</h2>
+            {selected && <p className="mt-1 text-sm font-bold text-slate-500">Wayplan: {selected.wayplan_id} · Stop {selected.stop_sequence || "-"}</p>}
 
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <input className="rounded-2xl border p-3 font-bold" placeholder="Receiver name" value={form.receiver_name} onChange={(e) => setForm({ ...form, receiver_name: e.target.value })} />
-                  <input className="rounded-2xl border p-3 font-bold" placeholder="Receiver phone" value={form.receiver_phone} onChange={(e) => setForm({ ...form, receiver_phone: e.target.value })} />
-                  <textarea className="rounded-2xl border p-3 font-bold md:col-span-2" placeholder="Remarks / special issue" value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
-                </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <input className="rounded-2xl border p-3 font-bold" placeholder="Receiver name" value={form.receiver_name} onChange={(e) => setForm({ ...form, receiver_name: e.target.value })} />
+              <input className="rounded-2xl border p-3 font-bold" placeholder="Receiver phone" value={form.receiver_phone} onChange={(e) => setForm({ ...form, receiver_phone: e.target.value })} />
+              <textarea className="rounded-2xl border p-3 font-bold md:col-span-2" placeholder="Remarks / special issue" value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+            </div>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <label className="rounded-2xl border p-3 font-bold">
-                    Delivery proof photo
-                    <input type="file" accept="image/*" capture="environment" onChange={(e) => choosePhoto(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
-                    {proofPreview && <img src={proofPreview} className="mt-3 h-40 w-full rounded-2xl object-cover" />}
-                    {proofState === "compressing" && <p className="mt-2 text-sm text-blue-700">Compressing photo…</p>}
-                    {proofPreview && (
-                      <button type="button" disabled={proofState === "approved"} onClick={approveProofPhoto} className="mt-3 w-full rounded-xl bg-emerald-600 p-3 text-white disabled:opacity-50">
-                        {proofState === "approved" ? "Photo approved" : "Approve photo & upload"}
-                      </button>
-                    )}
-                  </label>
-                  <label className="rounded-2xl border p-3 font-bold">
-                    Customer Electronic Signature
-                    <input type="file" accept="image/*" onChange={(e) => chooseSignature(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
-                    <canvas
-                      ref={signatureCanvasRef}
-                      width={600}
-                      height={180}
-                      onMouseDown={startSignature}
-                      onMouseMove={drawSignature}
-                      onMouseUp={stopSignature}
-                      onMouseLeave={stopSignature}
-                      onTouchStart={startSignature}
-                      onTouchMove={drawSignature}
-                      onTouchEnd={stopSignature}
-                      className="mt-3 h-32 w-full touch-none rounded-xl border bg-white"
-                    />
-                    <button type="button" onClick={clearSignatureCanvas} className="mt-2 rounded-lg border px-3 py-2 text-xs">Clear drawn signature</button>
-                    <input
-                      className="mt-3 w-full rounded-xl border p-3"
-                      placeholder="Or type signed customer name"
-                      value={form.signature_name}
-                      onChange={(e) => setForm({ ...form, signature_name: e.target.value })}
-                    />
-                    {signaturePreview && <img src={signaturePreview} className="mt-3 h-40 w-full rounded-2xl object-contain" />}
-                  </label>
-                </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="rounded-2xl border p-3">
+                <span className="mb-2 block text-xs font-black uppercase text-slate-500">Delivery proof photo</span>
+                <input type="file" accept="image/*" capture="environment" onChange={(e) => photo(e.target.files?.[0])} className="w-full" />
+              </label>
+              {form.proof_photo_data_url
+                ? <img src={form.proof_photo_data_url} className="h-40 w-full rounded-2xl object-cover" />
+                : <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed text-sm font-bold text-slate-400">Proof preview</div>}
+            </div>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <label className="font-bold">
-                    Payment method
-                    <select className="mt-1 w-full rounded-2xl border p-3" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
-                      {PAYMENT_METHODS.map((method) => <option key={method} value={method}>{method.replaceAll("_", " ")}</option>)}
-                    </select>
-                  </label>
-                  <label className="font-bold">
-                    COD collected
-                    <input className="mt-1 w-full rounded-2xl border p-3" inputMode="decimal" value={form.cod_collected} onChange={(e) => setForm({ ...form, cod_collected: e.target.value })} />
-                  </label>
-                  {electronicPayment && (
-                    <label className="font-bold md:col-span-2">
-                      Transaction reference
-                      <input className="mt-1 w-full rounded-2xl border p-3" value={form.transaction_reference} onChange={(e) => setForm({ ...form, transaction_reference: e.target.value })} />
-                    </label>
-                  )}
-                </div>
+            <div className="mt-4 rounded-2xl border p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <b>Customer Electronic Signature</b>
+                <button type="button" onClick={clearSignature} className="rounded-xl border px-3 py-1 text-xs font-black">Clear</button>
+              </div>
+              <canvas
+                ref={signatureRef}
+                width={720}
+                height={220}
+                className="h-36 w-full touch-none rounded-xl border bg-white"
+                onMouseDown={startSignature}
+                onMouseMove={drawSignature}
+                onMouseUp={stopSignature}
+                onMouseLeave={stopSignature}
+                onTouchStart={startSignature}
+                onTouchMove={drawSignature}
+                onTouchEnd={stopSignature}
+              />
+            </div>
 
-                <div className="mt-5 grid gap-3 md:grid-cols-3">
-                  <button disabled={busy} onClick={() => act("accept")} className="rounded-2xl bg-slate-900 p-3 font-black text-white disabled:opacity-50">Accept</button>
-                  <button disabled={busy} onClick={() => act("start_delivery")} className="rounded-2xl bg-blue-700 p-3 font-black text-white disabled:opacity-50">Start Delivery</button>
-                  <button disabled={busy} onClick={arriveAtCustomer} className="rounded-2xl bg-indigo-700 p-3 font-black text-white disabled:opacity-50">Arrived at Customer</button>
-                  <button disabled={busy || !canDeliver} onClick={deliver} className="rounded-2xl bg-emerald-600 p-3 font-black text-white disabled:opacity-50">Delivered</button>
-                  <select className="rounded-2xl border p-3 font-bold" value={form.failed_reason} onChange={(e) => setForm({ ...form, failed_reason: e.target.value })}>
-                    {FAILED_REASONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-                  </select>
-                  {form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
-                    <label className="rounded-2xl border p-3 font-bold">
-                      Dedicated delivery date
-                      <input type="date" className="mt-1 w-full rounded-xl border p-2" value={form.reschedule_date} onChange={(e) => setForm({ ...form, reschedule_date: e.target.value })} />
-                    </label>
-                  )}
-                  <button disabled={busy} onClick={failDelivery} className="rounded-2xl bg-rose-600 p-3 font-black text-white disabled:opacity-50">Failed Delivery</button>
-                  <button disabled={busy} onClick={() => act("return", { failed_reason: form.failed_reason, remark: form.remarks || null })} className="rounded-2xl bg-orange-600 p-3 font-black text-white disabled:opacity-50">Return to Warehouse</button>
-                  <button disabled={busy} onClick={sendGps} className="rounded-2xl border p-3 font-black md:col-span-2 disabled:opacity-50">Check Current GPS</button>
-                </div>
-              </>
-            )}
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="text-sm font-black">
+                Payment method
+                <select className="mt-1 w-full rounded-2xl border p-3" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
+                  {PAYMENT_METHODS.map((method) => <option key={method} value={method}>{method.replaceAll("_", " ")}</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-black">
+                COD collected
+                <input type="number" className="mt-1 w-full rounded-2xl border p-3" value={form.cod_collected} onChange={(e) => setForm({ ...form, cod_collected: e.target.value })} />
+              </label>
+              {["QR", "BANK_TRANSFER", "MOBILE_WALLET"].includes(form.payment_method) && (
+                <label className="text-sm font-black md:col-span-2">
+                  Transaction reference
+                  <input className="mt-1 w-full rounded-2xl border p-3" value={form.transaction_reference} onChange={(e) => setForm({ ...form, transaction_reference: e.target.value })} />
+                </label>
+              )}
+              <label className="text-sm font-black md:col-span-2">
+                Failed reason
+                <input className="mt-1 w-full rounded-2xl border p-3" placeholder="e.g. CUSTOMER_UNREACHABLE" value={form.failed_reason} onChange={(e) => setForm({ ...form, failed_reason: e.target.value })} />
+              </label>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <button disabled={busy || !selected} onClick={startDelivery} className="rounded-2xl bg-blue-700 p-3 font-black text-white disabled:opacity-50">Start Delivery</button>
+              <button disabled={busy || !selected} onClick={arrivedAtCustomer} className="rounded-2xl bg-indigo-700 p-3 font-black text-white disabled:opacity-50">Arrived at Customer</button>
+              <button disabled={busy || !selected} onClick={confirmDelivered} className="rounded-2xl bg-emerald-600 p-3 font-black text-white disabled:opacity-50">Delivered + Proof</button>
+              <button disabled={busy || !selected} onClick={failedDelivery} className="rounded-2xl bg-rose-600 p-3 font-black text-white disabled:opacity-50">Failed Delivery</button>
+            </div>
           </section>
         </div>
       </div>
