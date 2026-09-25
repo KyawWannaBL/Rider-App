@@ -650,6 +650,23 @@ export default function RiderPickupPhotoQrPortal() {
     return Number.isFinite(weight) && weight > 0 && hasPhoto && !parcel.saved;
   }).length;
   const nextAction = String(selectedPickup?.next_action || "");
+  const canSubmitVerification = Boolean(selectedPickup?.can_open_workspace) && nextAction === "CAPTURE_AND_VERIFY" && savedCount > 0;
+  const canReleaseToDataEntry = Boolean(selectedPickup?.can_open_workspace) && nextAction === "COLLECT_PICKUP";
+  const finalizationHint = nextAction === "WAIT_FOR_TEAM_ACCEPTANCE"
+    ? tx("Waiting for the remaining assigned field worker to accept. Parcel photos can be saved now, but pickup verification must wait.", "တာဝန်ပေးထားသော field team မှ ကျန်သူ၏ တာဝန်လက်ခံမှုကို စောင့်နေသည်။ Parcel ဓာတ်ပုံများကို သိမ်းနိုင်သော်လည်း Pickup Verification ကို စောင့်ရပါမည်။")
+    : nextAction === "ACCEPT_ASSIGNMENT"
+      ? tx("Accept your assignment above first.", "အထက်တွင် သင့်တာဝန်ကို ဦးစွာ လက်ခံပါ။")
+      : nextAction === "START_PICKUP" || nextAction === "ARRIVE_AT_PICKUP"
+        ? tx("Start the trip and confirm arrival at the pickup before submitting verification.", "Verification မတင်မီ ခရီးစတင်ပြီး Pickup နေရာသို့ ရောက်ရှိမှုကို အတည်ပြုပါ။")
+        : nextAction === "CAPTURE_AND_VERIFY"
+          ? savedCount === 0
+            ? tx("Save at least one parcel with weight and photo to submit verification.", "Verification တင်ရန် အလေးချိန်နှင့် ဓာတ်ပုံပါ Parcel အနည်းဆုံးတစ်ခု သိမ်းပါ။")
+            : tx("Submit verification now. Collection becomes available after the server confirms it.", "ယခု Verification တင်နိုင်ပါပြီ။ Server အတည်ပြုပြီးနောက် Collection ကို လုပ်နိုင်ပါမည်။")
+          : nextAction === "COLLECT_PICKUP"
+            ? tx("Verification is complete. Confirm physical collection to release this pickup to Data Entry.", "Verification ပြီးပါပြီ။ Data Entry သို့ လွှဲရန် ပစ္စည်းကောက်ယူပြီးကြောင်း အတည်ပြုပါ။")
+            : nextAction === "HANDOFF_TO_WAREHOUSE" || nextAction === "WAIT_WAREHOUSE_ACCEPTANCE" || nextAction === "COMPLETED"
+              ? tx("Collection has been confirmed and the pickup has been released to Data Entry.", "ပစ္စည်းကောက်ယူမှု အတည်ပြုပြီး Data Entry သို့ လွှဲပြီးပါပြီ။")
+              : tx("Complete the next pickup action shown above, then refresh the status.", "အထက်တွင် ပြထားသည့် Pickup လုပ်ဆောင်ချက်ကို ပြီးစီးအောင်လုပ်ပြီး အခြေအနေကို ပြန်ဖွင့်ပါ။");
   const canCapture = Boolean(selectedPickup?.can_capture);
   const parcelPageCount = Math.max(1, Math.ceil(parcels.length / pageSize));
   const pagedParcels = parcels.slice((parcelPage - 1) * pageSize, parcelPage * pageSize);
@@ -672,7 +689,7 @@ export default function RiderPickupPhotoQrPortal() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1200px] space-y-5 px-4 py-5">
+      <main className="mx-auto max-w-[1200px] space-y-5 px-4 py-5 pb-56">
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <label className="mb-4 block">
             <span className="mb-2 block text-xs font-black uppercase tracking-widest text-slate-600">
@@ -1095,6 +1112,24 @@ export default function RiderPickupPhotoQrPortal() {
           </section>
         </section>
       </main>
+      {selectedPickup && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-blue-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur">
+          <div className="mx-auto max-w-[1200px]">
+            <p className="mb-2 text-xs font-bold text-slate-700" role="status">{pickupId} · {finalizationHint}</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <button type="button" onClick={submitPickupVerification} disabled={!canSubmitVerification || !!actionBusy} className="rounded-xl bg-violet-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600">
+                {actionBusy === "verify" ? tx("Submitting Verification...", "Verification တင်နေသည်...") : tx("Submit Verification", "Verification တင်သွင်းရန်")}
+              </button>
+              <button type="button" onClick={() => performPickupAction("collect_pickup")} disabled={!canReleaseToDataEntry || !!actionBusy} className="rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600">
+                {actionBusy === "collect_pickup" ? tx("Confirming Collection...", "ကောက်ယူမှု အတည်ပြုနေသည်...") : tx("Confirm Collection & Release to Data Entry", "ကောက်ယူပြီး Data Entry သို့ လွှဲရန်")}
+              </button>
+              <button type="button" onClick={loadAssignedPickups} disabled={loading || !!actionBusy} className="rounded-xl border border-blue-200 px-4 py-3 text-sm font-black text-blue-800 disabled:opacity-40">
+                {tx("Refresh Status", "အခြေအနေ ပြန်ဖွင့်ရန်")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
