@@ -83,8 +83,9 @@ function ConnectionIssue() {
 
 function Guard({ children }) {
   const { user, profile, profileState, loading } = useAuth();
-  if (loading || profileState === "checking") return <Splash />;
+  if (loading) return <Splash />;
   if (!user) return <Navigate to="/login" replace />;
+  if (profileState === "checking") return <Splash />;
   if (profileState === "error") return <ConnectionIssue />;
   if (profileState === "unapproved") return <Navigate to="/pending-approval" replace />;
   if (!profile) return <ConnectionIssue />;
