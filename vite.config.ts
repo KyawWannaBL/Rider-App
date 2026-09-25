@@ -225,7 +225,7 @@ export default defineConfig(({ mode }) => {
         // Proxy react-router-dom to our wrapper
         "react-router-dom": path.resolve(__dirname, "./src/lib/react-router-dom-proxy.tsx"),
         // Original react-router-dom under a different name
-        "react-router-dom-original": path.resolve(__dirname, "./node_modules/react-router-dom/dist/index.js"),
+        "react-router-dom-original": "react-router-dom",
       },
     },
     define: {
