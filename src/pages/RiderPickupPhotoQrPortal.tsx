@@ -287,9 +287,14 @@ export default function RiderPickupPhotoQrPortal() {
   function updateParcel(lineNo: number, patch: Partial<ParcelDraft>) {
     setParcels((current) =>
       current.map((parcel) =>
-        parcel.line_no === lineNo ? { ...parcel, ...patch, saved: patch.saved ?? false } : parcel
+        parcel.line_no === lineNo ? { ...parcel, ...patch, saved: patch.saved ?? parcel.saved } : parcel
       )
     );
+  }
+
+  async function refreshParcelSnapshot() {
+    if (!selectedPickup) return;
+    await selectPickup(selectedPickup);
   }
 
   async function uploadPhotoFile(lineNo: number, file: File, pickupId: string, deliveryWayId: string) {
@@ -462,9 +467,12 @@ export default function RiderPickupPhotoQrPortal() {
       if (data?.ok !== true) throw new Error(data?.error || "Enterprise did not confirm the parcel save.");
 
       updateParcel(parcel.line_no, {
+        cargo_photo_url: durablePhotoUrl,
+        cargo_photo_file: undefined,
         photo_status: data.photo_status || "photo_uploaded",
         saved: true,
       });
+      await refreshParcelSnapshot();
       setMessage(tx(`Parcel ${parcel.line_no} saved successfully.`,`Parcel ${parcel.line_no} ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။`));
       return true;
     } catch (error: any) {
@@ -553,9 +561,12 @@ export default function RiderPickupPhotoQrPortal() {
           console.error("Photo retry failed", parcel.line_no, error);
         }
       }
+      if (okCount > 0) {
+        await refreshParcelSnapshot();
+      }
       setMessage(tx(
-        `Photo upload completed: ${okCount}/${pending.length} pending photo(s) uploaded. Weight is not required for photo upload.`,
-        `ဓာတ်ပုံ Upload ပြီးပါပြီ။ စောင့်ဆိုင်းနေသော ဓာတ်ပုံ ${okCount}/${pending.length} ပုံ တင်ပြီးပါပြီ။ ဓာတ်ပုံတင်ရန် အလေးချိန် မလိုပါ။`
+        `Photo upload completed: ${okCount}/${pending.length} pending photo(s) uploaded. Uploaded photos remain visible and ready for parcel save/review.`,
+        `ဓာတ်ပုံ Upload ပြီးပါပြီ။ စောင့်ဆိုင်းနေသော ဓာတ်ပုံ ${okCount}/${pending.length} ပုံ တင်ပြီးပါပြီ။ တင်ပြီးသောဓာတ်ပုံများကို မပျောက်စေဘဲ Parcel သိမ်းရန်/စစ်ဆေးရန် အဆင်သင့်ထားပါမည်။`
       ));
     } finally {
       setActionBusy("");
@@ -839,10 +850,10 @@ export default function RiderPickupPhotoQrPortal() {
                       )}
                     </p>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <button disabled={!selectedPickup?.can_open_workspace || !!actionBusy || readyToSaveCount === 0} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
+                    <button disabled={!selectedPickup?.can_open_workspace || !!actionBusy || uploadingLine !== null || savingLine !== null || readyToSaveCount === 0} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Save All Ready Parcels","အဆင်သင့် Parcel အားလုံး သိမ်းရန်")}
                     </button>
-                    <button disabled={!selectedPickup?.can_open_workspace || !!actionBusy} onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
+                    <button disabled={!selectedPickup?.can_open_workspace || !!actionBusy || uploadingLine !== null || savingLine !== null} onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Upload All Photos for Review","ဓာတ်ပုံအားလုံး စစ်ဆေးရန် တင်ရန်")}
                     </button>
                     <button onClick={() => printQrCards(parcels)} className="rounded-2xl bg-slate-950 px-5 py-4 font-black text-white">
