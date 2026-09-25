@@ -141,7 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     mountedRef.current = true;
-    let bootstrapFinished = false;
+    let authSubscription: any = null;
 
     const watchdog = window.setTimeout(() => {
       if (!mountedRef.current) return;
@@ -150,24 +150,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthError((current) => current || "Enterprise connection timed out. Please retry.");
     }, 12000);
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+    const handleAuthEvent = (event: string, nextSession: any | null) => {
       if (!mountedRef.current) return;
 
       setSession(nextSession);
       setUser(nextSession?.user || null);
-
-      // During bootstrap, getSession() is the single owner of profile hydration.
-      // Supabase may emit INITIAL_SESSION/SIGNED_IN at nearly the same time.
-      // Starting a second hydrateProfile here increments requestRef and can leave
-      // the first request unable to clear loading, producing a permanent splash.
-      if (!bootstrapFinished) {
-        if (!nextSession?.user) {
-          setProfile(null);
-          setProfileState("checking");
-          setAuthError(null);
-        }
-        return;
-      }
 
       if (!nextSession?.user) {
         requestRef.current += 1;
@@ -178,16 +165,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // Token refreshes should never throw the whole UI back onto the splash.
+      if (event === "TOKEN_REFRESHED") return;
+
       setLoading(true);
       window.setTimeout(() => {
         if (mountedRef.current) void hydrateProfile(nextSession, `auth-event:${event}`);
       }, 0);
-    });
+    };
 
     void (async () => {
       try {
+        // Bootstrap is the single owner of initial auth state. Do not subscribe
+        // until it has fully settled; this prevents INITIAL_SESSION/SIGNED_IN
+        // callbacks from racing getSession() and cancelling profile hydration.
         const result: any = await withTimeout(supabase.auth.getSession(), 5000, "Session check");
         if (!mountedRef.current) return;
+
         const nextSession = result?.data?.session || null;
         setSession(nextSession);
         setUser(nextSession?.user || null);
@@ -211,23 +205,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthError(normalizeNetworkMessage(error));
         setLoading(false);
       } finally {
-        bootstrapFinished = true;
-        // Never clear the watchdog while the UI is still owned by a stale
-        // "checking" request. The bootstrap path above should have settled
-        // loading; this is a final safety net against an auth callback race.
-        if (mountedRef.current) {
-          setLoading((current) => {
-            if (!current) window.clearTimeout(watchdog);
-            return current;
-          });
-        }
+        if (!mountedRef.current) return;
+        window.clearTimeout(watchdog);
+
+        const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+          handleAuthEvent(event, nextSession);
+        });
+        authSubscription = data?.subscription || null;
       }
     })();
 
     return () => {
       mountedRef.current = false;
       window.clearTimeout(watchdog);
-      listener.subscription.unsubscribe();
+      authSubscription?.unsubscribe?.();
     };
   }, [hydrateProfile]);
 
