@@ -211,17 +211,6 @@ export default function RiderPickupPhotoQrPortal() {
       return;
     }
 
-    if (!row.can_capture) {
-      setParcels(buildParcels(row));
-      setMessage(
-        tx(
-          `Pickup selected. Next action: ${String(row.next_action || "REFRESH").replaceAll("_"," ")}.`,
-          `Pickup ရွေးပြီးပါပြီ။ နောက်လုပ်ဆောင်ရန်: ${String(row.next_action || "REFRESH").replaceAll("_"," ")}။`
-        )
-      );
-      return;
-    }
-
     const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_snapshot", {
       p_pickup_id: pickupId,
     });
@@ -292,7 +281,7 @@ export default function RiderPickupPhotoQrPortal() {
   function updateParcel(lineNo: number, patch: Partial<ParcelDraft>) {
     setParcels((current) =>
       current.map((parcel) =>
-        parcel.line_no === lineNo ? { ...parcel, ...patch, saved: false } : parcel
+        parcel.line_no === lineNo ? { ...parcel, ...patch, saved: patch.saved ?? false } : parcel
       )
     );
   }
@@ -459,25 +448,26 @@ export default function RiderPickupPhotoQrPortal() {
       temp_qr_code: parcel.temp_qr_code,
     };
 
-    const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_save", {
-      p_payload: payload,
-    });
+    try {
+      const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_save", {
+        p_payload: payload,
+      });
+      if (error) throw error;
+      if (data?.ok !== true) throw new Error(data?.error || "Enterprise did not confirm the parcel save.");
 
-    if (error) {
-      console.error(error);
-      setMessage(`Save failed for parcel ${parcel.line_no}: ${error.message}`);
-      setSavingLine(null);
+      updateParcel(parcel.line_no, {
+        photo_status: data.photo_status || "photo_uploaded",
+        saved: true,
+      });
+      setMessage(tx(`Parcel ${parcel.line_no} saved successfully.`,`Parcel ${parcel.line_no} ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။`));
+      return true;
+    } catch (error: any) {
+      console.error("Parcel save failed", error);
+      setMessage(`Parcel ${parcel.line_no}: ${error?.message || "Save failed. Please retry."}`);
       return false;
+    } finally {
+      setSavingLine(null);
     }
-
-    updateParcel(parcel.line_no, {
-      photo_status: data?.photo_status || "photo_uploaded",
-      saved: true,
-    });
-
-    setMessage(tx(`Parcel ${parcel.line_no} saved successfully.`,`Parcel ${parcel.line_no} ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။`));
-    setSavingLine(null);
-    return true;
   }
 
   async function submitPickupVerification() {
