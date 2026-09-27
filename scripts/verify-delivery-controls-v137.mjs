@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const page=fs.readFileSync("src/pages/DeliveryPage.tsx","utf8");
+assert.match(page,/Delivery Drop Workflow/);
+assert.match(page,/acceptDeliveryStep/);
+assert.match(page,/startDeliveryStep/);
+assert.match(page,/arriveDeliveryStep/);
+assert.match(page,/setConfirmDelivered\(true\)/);
+assert.match(page,/disabled=\{!failureMode\}/);
+assert.match(page,/setFailureMode\(true\)/);
+assert.match(page,/failAndReturnToWarehouse/);
+assert.doesNotMatch(page,/disabled=\{busy \|\| !canDeliver\}/);
+console.log("Delivery controls V137 PASS");

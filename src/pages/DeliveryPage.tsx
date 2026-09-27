@@ -91,6 +91,8 @@ export default function DeliveryPage() {
   const [proofPreview, setProofPreview] = useState("");
   const [signaturePreview, setSignaturePreview] = useState("");
   const [busy, setBusy] = useState(false);
+  const [failureMode, setFailureMode] = useState(false);
+  const [confirmDelivered, setConfirmDelivered] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const [form, setForm] = useState({
@@ -100,7 +102,7 @@ export default function DeliveryPage() {
     payment_method: "CASH",
     transaction_reference: "",
     cod_collected: "",
-    failed_reason: "NO_ANSWER",
+    failed_reason: "",
     signature_name: "",
     reschedule_date: "",
   });
@@ -123,6 +125,8 @@ export default function DeliveryPage() {
 
   function selectJob(job: any) {
     setSelected(job);
+    setFailureMode(false);
+    setConfirmDelivered(false);
     resetProofs();
     setForm((current) => ({
       ...current,
@@ -132,7 +136,7 @@ export default function DeliveryPage() {
       transaction_reference: "",
       remarks: "",
       signature_name: "",
-      failed_reason: "NO_ANSWER",
+      failed_reason: "",
     }));
   }
 
@@ -167,6 +171,40 @@ export default function DeliveryPage() {
     if (next) selectJob(next);
     else setSelected(null);
     setMsg(tx(`Loaded ${list.length} assigned delivery stop(s).`,`တာဝန်ပေးထားသော ပို့ဆောင်မှတ်တိုင် ${list.length} ခု ဖွင့်ပြီးပါပြီ။`));
+  }
+
+  function currentDeliveryState() {
+    return String(selected?.stop_status || selected?.rider_status || selected?.dispatch_status || "").toUpperCase();
+  }
+
+  async function acceptDeliveryStep() {
+    const s=currentDeliveryState();
+    if (["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY","OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER","DELIVERED"].includes(s)) {
+      return setMsg(tx("Parcel is already accepted.","ပါဆယ်ကို လက်ခံပြီးဖြစ်ပါသည်။"));
+    }
+    await act("accept");
+  }
+
+  async function startDeliveryStep() {
+    const s=currentDeliveryState();
+    if (["OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER","DELIVERED"].includes(s)) {
+      return setMsg(tx("Delivery has already started.","ပို့ဆောင်မှု စတင်ပြီးဖြစ်ပါသည်။"));
+    }
+    if (!["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY"].includes(s)) {
+      return setMsg(tx("Accept the parcel before starting delivery.","ပို့ဆောင်မှု မစတင်မီ ပါဆယ်ကို အရင်လက်ခံပါ။"));
+    }
+    await act("start_delivery");
+  }
+
+  async function arriveDeliveryStep() {
+    const s=currentDeliveryState();
+    if (["ARRIVED_AT_CUSTOMER","DELIVERED"].includes(s)) {
+      return setMsg(tx("Customer arrival is already recorded.","Customer နေရာသို့ ရောက်ရှိမှု မှတ်တမ်းတင်ပြီးဖြစ်ပါသည်။"));
+    }
+    if (s!=="OUT_FOR_DELIVERY") {
+      return setMsg(tx("Start Delivery before recording customer arrival.","Customer နေရာရောက်ရှိမှု မမှတ်တမ်းတင်မီ ပို့ဆောင်မှုကို စတင်ပါ။"));
+    }
+    await arriveAtCustomer();
   }
 
   async function choosePhoto(file?: File) {
@@ -419,6 +457,62 @@ export default function DeliveryPage() {
     }
   }
 
+  async function failAndReturnToWarehouse() {
+    if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
+    if (!failureMode) {
+      return setMsg(tx("Click Failed Delivery first, then choose a failed reason.","ပို့ဆောင်မှုမအောင်မြင် ကို အရင်နှိပ်ပြီး အကြောင်းပြချက်ကို ရွေးပါ။"));
+    }
+    if (!form.failed_reason) {
+      return setMsg(tx("Choose a failed delivery reason.","ပို့ဆောင်မှုမအောင်မြင်ရသည့် အကြောင်းပြချက်ကို ရွေးပါ။"));
+    }
+
+    if (form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE") {
+      await failDelivery();
+      return;
+    }
+
+    const gps=await currentGps();
+    setBusy(true);
+    try {
+      const failedResult=await (supabase as any).rpc("be_rider_wayplan_action", {
+        p_payload: {
+          wayplan_id:selected.wayplan_id,
+          delivery_way_id:selected.delivery_way_id,
+          action:"failed",
+          failed_reason:form.failed_reason,
+          remark:form.remarks || null,
+          ...gps,
+        },
+      });
+      if (failedResult.error) throw failedResult.error;
+      if (failedResult.data?.ok===false) throw new Error(failedResult.data?.error || "Failed delivery submission failed.");
+
+      const returnResult=await (supabase as any).rpc("be_rider_wayplan_action", {
+        p_payload: {
+          wayplan_id:selected.wayplan_id,
+          delivery_way_id:selected.delivery_way_id,
+          action:"return",
+          failed_reason:form.failed_reason,
+          remark:form.remarks || null,
+          ...gps,
+        },
+      });
+      if (returnResult.error) throw returnResult.error;
+      if (returnResult.data?.ok===false) throw new Error(returnResult.data?.error || "Return to Warehouse failed.");
+
+      setMsg(tx(
+        `${selected.delivery_way_id}: failed delivery recorded and parcel sent to Warehouse return workflow.`,
+        `${selected.delivery_way_id}: ပို့ဆောင်မှုမအောင်မြင်ကြောင်း မှတ်တမ်းတင်ပြီး Warehouse ပြန်ပို့လုပ်ငန်းစဉ်သို့ လွှဲပြောင်းပြီးပါပြီ။`
+      ));
+      setFailureMode(false);
+      await load(selected.delivery_way_id);
+    } catch(error:any) {
+      setMsg(error?.message || "Unable to return parcel to Warehouse.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendGps() {
     if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
     const gps = await currentGps();
@@ -484,6 +578,21 @@ export default function DeliveryPage() {
                   <div className="md:col-span-2"><b>Address:</b> {selected.address || "-"}</div>
                 </div>
 
+                <section className="mt-4 rounded-3xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-lg font-black text-blue-950">{tx("Delivery Drop Workflow","ပို့ဆောင်ပစ္စည်းချ လုပ်ငန်းစဉ်")}</h3>
+                      <p className="text-xs font-bold text-blue-700">{tx("Follow the three field steps in order. Buttons remain clickable and explain any missing prerequisite.","Field လုပ်ငန်းအဆင့် ၃ ဆင့်ကို အစဉ်လိုက် ဆောင်ရွက်ပါ။ လိုအပ်ချက်မပြည့်စုံပါက Button ကို disable မလုပ်ဘဲ အကြောင်းပြချက်ပြပါမည်။")}</p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-blue-900">{status || "PENDING"}</span>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <button type="button" onClick={acceptDeliveryStep} className="rounded-2xl bg-slate-900 p-3 font-black text-white">{tx("Accept","လက်ခံရန်")}</button>
+                    <button type="button" onClick={startDeliveryStep} className="rounded-2xl bg-blue-700 p-3 font-black text-white">{tx("Start Delivery","ပို့ဆောင်မှု စတင်ရန်")}</button>
+                    <button type="button" onClick={arriveDeliveryStep} className="rounded-2xl bg-indigo-700 p-3 font-black text-white">{tx("Arrived at Customer","Customer နေရာသို့ ရောက်ရှိပြီ")}</button>
+                  </div>
+                </section>
+
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <input className="rounded-2xl border p-3 font-bold" placeholder={tx("Receiver name","လက်ခံသူအမည်")} value={form.receiver_name} onChange={(e) => setForm({ ...form, receiver_name: e.target.value })} />
                   <input className="rounded-2xl border p-3 font-bold" placeholder={tx("Receiver phone","လက်ခံသူဖုန်း")} value={form.receiver_phone} onChange={(e) => setForm({ ...form, receiver_phone: e.target.value })} />
@@ -548,24 +657,80 @@ export default function DeliveryPage() {
                   )}
                 </div>
 
-                <div className="mt-5 grid gap-3 md:grid-cols-3">
-                  <button disabled={busy} onClick={() => act("accept")} className="rounded-2xl bg-slate-900 p-3 font-black text-white disabled:opacity-50">{tx("Accept","လက်ခံရန်")}</button>
-                  <button disabled={busy} onClick={() => act("start_delivery")} className="rounded-2xl bg-blue-700 p-3 font-black text-white disabled:opacity-50">{tx("Start Delivery","ပို့ဆောင်မှု စတင်ရန်")}</button>
-                  <button disabled={busy} onClick={arriveAtCustomer} className="rounded-2xl bg-indigo-700 p-3 font-black text-white disabled:opacity-50">{tx("Arrived at Customer","Customer နေရာသို့ ရောက်ရှိပြီ")}</button>
-                  <button disabled={busy || !canDeliver} onClick={deliver} className="rounded-2xl bg-emerald-600 p-3 font-black text-white disabled:opacity-50">{tx("Delivered","ပို့ဆောင်ပြီး")}</button>
-                  <select className="rounded-2xl border p-3 font-bold" value={form.failed_reason} onChange={(e) => setForm({ ...form, failed_reason: e.target.value })}>
-                    {failureReasons.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-                  </select>
-                  {form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
-                    <label className="rounded-2xl border p-3 font-bold">
+                <section className="mt-5 rounded-3xl border bg-slate-50 p-4">
+                  <h3 className="text-lg font-black">{tx("Completion / Exception Control","ပို့ဆောင်ပြီး / မအောင်မြင် ထိန်းချုပ်မှု")}</h3>
+                  <p className="mt-1 text-xs font-bold text-slate-500">{tx("Successful delivery and failed-delivery return are separate paths.","ပို့ဆောင်အောင်မြင်မှုနှင့် မအောင်မြင်၍ Warehouse ပြန်ပို့မှုကို သီးခြားလုပ်ငန်းစဉ်ဖြင့် ဆောင်ရွက်ပါ။")}</p>
+
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelivered(true)}
+                      className="rounded-2xl bg-emerald-600 p-3 font-black text-white"
+                    >
+                      {tx("Delivered","ပို့ဆောင်ပြီး")}
+                    </button>
+
+                    <select
+                      disabled={!failureMode}
+                      className="rounded-2xl border p-3 font-bold disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                      value={form.failed_reason}
+                      onChange={(e) => setForm({ ...form, failed_reason: e.target.value })}
+                    >
+                      <option value="">{tx("Choose failed reason","မအောင်မြင်ရသည့်အကြောင်းပြချက် ရွေးပါ")}</option>
+                      {failureReasons.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                    </select>
+                  </div>
+
+                  {failureMode && form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
+                    <label className="mt-3 block rounded-2xl border bg-white p-3 font-bold">
                       {tx("Dedicated delivery date","သတ်မှတ်ပို့ဆောင်ရက်")}
                       <input type="date" className="mt-1 w-full rounded-xl border p-2" value={form.reschedule_date} onChange={(e) => setForm({ ...form, reschedule_date: e.target.value })} />
                     </label>
                   )}
-                  <button disabled={busy} onClick={failDelivery} className="rounded-2xl bg-rose-600 p-3 font-black text-white disabled:opacity-50">{tx("Failed Delivery","ပို့ဆောင်မအောင်မြင်")}</button>
-                  <button disabled={busy} onClick={() => act("return", { failed_reason: form.failed_reason, remark: form.remarks || null })} className="rounded-2xl bg-orange-600 p-3 font-black text-white disabled:opacity-50">{tx("Return to Warehouse","Warehouse သို့ ပြန်ပို့ရန်")}</button>
-                  <button disabled={busy} onClick={sendGps} className="rounded-2xl border p-3 font-black md:col-span-2 disabled:opacity-50">{tx("Check Current GPS","လက်ရှိ GPS စစ်ရန်")}</button>
-                </div>
+
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFailureMode(true);
+                        setMsg(tx("Choose the failed reason, then press Return to Warehouse.","မအောင်မြင်ရသည့် အကြောင်းပြချက်ကို ရွေးပြီးနောက် Warehouse သို့ ပြန်ပို့ရန် ကို နှိပ်ပါ။"));
+                      }}
+                      className={`rounded-2xl p-3 font-black text-white ${failureMode ? "bg-rose-800 ring-4 ring-rose-200" : "bg-rose-600"}`}
+                    >
+                      {tx("Failed Delivery","ပို့ဆောင်မှုမအောင်မြင်")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={failAndReturnToWarehouse}
+                      className="rounded-2xl bg-orange-600 p-3 font-black text-white"
+                    >
+                      {tx("Return to Warehouse","Warehouse သို့ ပြန်ပို့ရန်")}
+                    </button>
+                    <button type="button" onClick={sendGps} className="rounded-2xl border bg-white p-3 font-black">{tx("Check Current GPS","လက်ရှိ GPS စစ်ရန်")}</button>
+                  </div>
+                </section>
+
+                {confirmDelivered && (
+                  <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+                    <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+                      <h3 className="text-xl font-black">{tx("Confirm successful delivery?","ပို့ဆောင်ပြီးကြောင်း အတည်ပြုမည်လား?")}</h3>
+                      <p className="mt-2 font-semibold text-slate-600">{tx("This will validate arrival, receiver, COD/payment, proof photo and signature before saving Delivered.","Customer ရောက်ရှိမှု၊ လက်ခံသူ၊ COD/ငွေပေးချေမှု၊ ဓာတ်ပုံနှင့် လက်မှတ်တို့ကို စစ်ဆေးပြီး Delivered အဖြစ် သိမ်းမည်။")}</p>
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <button type="button" onClick={() => setConfirmDelivered(false)} className="rounded-2xl border p-3 font-black">{tx("No","မဟုတ်ပါ")}</button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setConfirmDelivered(false);
+                            await deliver();
+                          }}
+                          className="rounded-2xl bg-violet-700 p-3 font-black text-white"
+                        >
+                          {tx("Yes, confirm","ဟုတ်ကဲ့၊ အတည်ပြုမည်")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </section>
