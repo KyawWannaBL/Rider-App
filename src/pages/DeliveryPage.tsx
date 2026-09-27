@@ -110,7 +110,7 @@ export default function DeliveryPage() {
   const [failureReasons, setFailureReasons] = useState<any[]>(FALLBACK_FAILED_REASONS);
   const [msg, setMsg] = useState(language === "my" ? "ပို့ဆောင်ရေးအလုပ်များကို ဖွင့်နေသည်..." : "Loading delivery jobs...");
 
-  const requiredCod = Number(selected?.cod_amount || 0);
+  const requiredCod = Number(selected?.calculated_cod_amount ?? selected?.cod_amount ?? 0);
   const status = String(selected?.stop_status || selected?.rider_status || "").toUpperCase();
   const electronicPayment = ["QR", "BANK_TRANSFER", "MOBILE_WALLET"].includes(form.payment_method);
   const canDeliver = status === "ARRIVED_AT_CUSTOMER";
@@ -132,7 +132,7 @@ export default function DeliveryPage() {
       ...current,
       receiver_name: job.receiver_name || job.recipient_name || "",
       receiver_phone: job.receiver_phone || job.recipient_phone || "",
-      cod_collected: String(job.cod_collected ?? job.cod_amount ?? ""),
+      cod_collected: String(job.calculated_cod_amount ?? job.cod_amount ?? 0),
       transaction_reference: "",
       remarks: "",
       signature_name: "",
@@ -207,48 +207,51 @@ export default function DeliveryPage() {
 
   async function executeConfirmedAction(action:string) {
     setConfirmAction(null);
-    markActionActive(action);
-    if (action==="accept") return await acceptDeliveryStep();
-    if (action==="start") return await startDeliveryStep();
-    if (action==="arrive") return await arriveDeliveryStep();
-    if (action==="delivered") return await deliver();
-    if (action==="failed") {
+    let ok:any=false;
+
+    if (action==="accept") ok=await acceptDeliveryStep();
+    else if (action==="start") ok=await startDeliveryStep();
+    else if (action==="arrive") ok=await arriveDeliveryStep();
+    else if (action==="delivered") ok=await deliver();
+    else if (action==="failed") {
       setFailureMode(true);
       setMsg(tx("Choose the failed reason, then press Return to Warehouse.","မအောင်မြင်ရသည့် အကြောင်းပြချက်ကို ရွေးပြီးနောက် Warehouse သို့ ပြန်ပို့ရန် ကို နှိပ်ပါ။"));
-      return;
-    }
-    if (action==="return") return await failAndReturnToWarehouse();
-    if (action==="gps") return await sendGps();
+      ok=true;
+    } else if (action==="return") ok=await failAndReturnToWarehouse();
+    else if (action==="gps") ok=await sendGps();
+
+    if (ok !== false) markActionActive(action);
+    return ok;
   }
 
   async function acceptDeliveryStep() {
     const s=currentDeliveryState();
     if (["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY","OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER","DELIVERED"].includes(s)) {
-      return setMsg(tx("Parcel is already accepted.","ပါဆယ်ကို လက်ခံပြီးဖြစ်ပါသည်။"));
+      setMsg(tx("Parcel is already accepted.","ပါဆယ်ကို လက်ခံပြီးဖြစ်ပါသည်။")); return true;
     }
-    await act("accept");
+    return await act("accept");
   }
 
   async function startDeliveryStep() {
     const s=currentDeliveryState();
     if (["OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER","DELIVERED"].includes(s)) {
-      return setMsg(tx("Delivery has already started.","ပို့ဆောင်မှု စတင်ပြီးဖြစ်ပါသည်။"));
+      setMsg(tx("Delivery has already started.","ပို့ဆောင်မှု စတင်ပြီးဖြစ်ပါသည်။")); return true;
     }
     if (!["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY"].includes(s)) {
-      return setMsg(tx("Accept the parcel before starting delivery.","ပို့ဆောင်မှု မစတင်မီ ပါဆယ်ကို အရင်လက်ခံပါ။"));
+      setMsg(tx("Accept the parcel before starting delivery.","ပို့ဆောင်မှု မစတင်မီ ပါဆယ်ကို အရင်လက်ခံပါ။")); return false;
     }
-    await act("start_delivery");
+    return await act("start_delivery");
   }
 
   async function arriveDeliveryStep() {
     const s=currentDeliveryState();
     if (["ARRIVED_AT_CUSTOMER","DELIVERED"].includes(s)) {
-      return setMsg(tx("Customer arrival is already recorded.","Customer နေရာသို့ ရောက်ရှိမှု မှတ်တမ်းတင်ပြီးဖြစ်ပါသည်။"));
+      setMsg(tx("Customer arrival is already recorded.","Customer နေရာသို့ ရောက်ရှိမှု မှတ်တမ်းတင်ပြီးဖြစ်ပါသည်။")); return true;
     }
     if (s!=="OUT_FOR_DELIVERY") {
-      return setMsg(tx("Start Delivery before recording customer arrival.","Customer နေရာရောက်ရှိမှု မမှတ်တမ်းတင်မီ ပို့ဆောင်မှုကို စတင်ပါ။"));
+      setMsg(tx("Start Delivery before recording customer arrival.","Customer နေရာရောက်ရှိမှု မမှတ်တမ်းတင်မီ ပို့ဆောင်မှုကို စတင်ပါ။")); return false;
     }
-    await arriveAtCustomer();
+    return await arriveAtCustomer();
   }
 
   async function choosePhoto(file?: File) {
@@ -358,7 +361,7 @@ export default function DeliveryPage() {
   }
 
   async function act(action: string, extra: any = {}) {
-    if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
+    if (!selected) { setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။")); return false; }
     setBusy(true);
     try {
       const payload = {
@@ -372,8 +375,10 @@ export default function DeliveryPage() {
       if (data?.ok === false) throw new Error(data?.error || "Rider action failed.");
       setMsg(`${selected.delivery_way_id}: ${data?.status || action} saved.`);
       await load(selected.delivery_way_id);
+      return true;
     } catch (error: any) {
       setMsg(error?.message || "Unable to save Rider action.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -381,16 +386,16 @@ export default function DeliveryPage() {
 
   async function deliver() {
     if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
-    if (!canDeliver) return setMsg(tx("Record Arrived at Customer before confirming delivery.","ပို့ဆောင်ပြီးအတည်ပြုမီ Customer နေရာသို့ ရောက်ရှိကြောင်း အရင်မှတ်တမ်းတင်ပါ။"));
-    if (!form.receiver_name.trim()) return setMsg(tx("Receiver name is required.","လက်ခံသူအမည် ဖြည့်ရန်လိုအပ်ပါသည်။"));
-    if (!approvedProofFile) return setMsg(tx("Capture, review and approve the delivery proof photo first.","ပို့ဆောင်မှုဓာတ်ပုံကို ရိုက်ယူ၊ စစ်ဆေးပြီး အတည်ပြုပါ။"));
+    if (!canDeliver) { setMsg(tx("Record Arrived at Customer before confirming delivery.","ပို့ဆောင်ပြီးအတည်ပြုမီ Customer နေရာသို့ ရောက်ရှိကြောင်း အရင်မှတ်တမ်းတင်ပါ။")); return false; }
+    if (!form.receiver_name.trim()) { setMsg(tx("Receiver name is required.","လက်ခံသူအမည် ဖြည့်ရန်လိုအပ်ပါသည်။")); return false; }
+    if (!approvedProofFile) { setMsg(tx("Capture, review and approve the delivery proof photo first.","ပို့ဆောင်မှုဓာတ်ပုံကို ရိုက်ယူ၊ စစ်ဆေးပြီး အတည်ပြုပါ။")); return false; }
     const drawnSignature = await signatureCanvasFile();
-    if (!signatureFile && !drawnSignature && !form.signature_name.trim()) return setMsg(tx("Customer electronic signature is required.","Customer အီလက်ထရွန်နစ်လက်မှတ် လိုအပ်ပါသည်။"));
-    if (requiredCod > 0 && Number(form.cod_collected || 0) !== requiredCod) {
-      return setMsg(tx(`COD collected must equal required COD: ${requiredCod.toLocaleString()} Ks.`,`ကောက်ခံပြီး COD သည် ရရှိရမည့် COD ${requiredCod.toLocaleString()} Ks နှင့် တူညီရပါမည်။`));
+    if (!signatureFile && !drawnSignature && !form.signature_name.trim()) { setMsg(tx("Customer electronic signature is required.","Customer အီလက်ထရွန်နစ်လက်မှတ် လိုအပ်ပါသည်။")); return false; }
+    if (Number(form.cod_collected || requiredCod || 0) !== requiredCod) {
+      setForm((current) => ({ ...current, cod_collected: String(requiredCod) }));
     }
     if (electronicPayment && !form.transaction_reference.trim()) {
-      return setMsg(tx("Transaction reference is required for electronic payment.","အီလက်ထရွန်နစ်ငွေပေးချေမှုအတွက် ငွေလွှဲအမှတ် လိုအပ်ပါသည်။"));
+      setMsg(tx("Transaction reference is required for electronic payment.","အီလက်ထရွန်နစ်ငွေပေးချေမှုအတွက် ငွေလွှဲအမှတ် လိုအပ်ပါသည်။")); return false;
     }
 
     setBusy(true);
@@ -422,7 +427,7 @@ export default function DeliveryPage() {
           signature_payload,
           payment_method: form.payment_method,
           transaction_reference: form.transaction_reference.trim() || null,
-          cod_collected: Number(form.cod_collected || 0),
+          cod_collected: requiredCod,
           remark: form.remarks.trim() || null,
           ...gps,
         },
@@ -433,18 +438,20 @@ export default function DeliveryPage() {
       setMsg(`${selected.delivery_way_id}: delivery confirmed with proof, payment and signature.`);
       resetProofs();
       await load(selected.delivery_way_id);
+      return true;
     } catch (error: any) {
       setMsg(error?.message || "Delivery confirmation failed.");
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
   async function arriveAtCustomer() {
-    if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
+    if (!selected) { setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။")); return false; }
     const gps = await currentGps();
-    if (!gps.gps_lat || !gps.gps_lng) return setMsg(tx("GPS permission is required to record arrival.","ရောက်ရှိမှုမှတ်တမ်းတင်ရန် GPS ခွင့်ပြုချက် လိုအပ်ပါသည်။"));
-    await act("arrived", gps);
+    if (!gps.gps_lat || !gps.gps_lng) { setMsg(tx("GPS permission is required to record arrival.","ရောက်ရှိမှုမှတ်တမ်းတင်ရန် GPS ခွင့်ပြုချက် လိုအပ်ပါသည်။")); return false; }
+    return await act("arrived", gps);
   }
 
   async function failDelivery() {
@@ -708,7 +715,16 @@ export default function DeliveryPage() {
                   </label>
                   <label className="font-bold">
                     {tx("COD collected","ကောက်ခံပြီး COD")}
-                    <input className="mt-1 w-full rounded-2xl border p-3" inputMode="decimal" value={form.cod_collected} onChange={(e) => setForm({ ...form, cod_collected: e.target.value })} />
+                    <input
+                      className="mt-1 w-full cursor-not-allowed rounded-2xl border bg-slate-100 p-3 font-black text-slate-800"
+                      inputMode="decimal"
+                      value={String(requiredCod)}
+                      readOnly
+                      aria-readonly="true"
+                    />
+                    <span className="mt-1 block text-xs font-bold text-slate-500">
+                      {tx("Synchronized automatically from Data Entry calculated amount.","Data Entry တွက်ချက်ထားသည့် ငွေပမာဏမှ အလိုအလျောက် Synchronize လုပ်ထားပါသည်။")}
+                    </span>
                   </label>
                   {electronicPayment && (
                     <label className="font-bold md:col-span-2">

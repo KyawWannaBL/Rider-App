@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const page=fs.readFileSync("src/pages/DeliveryPage.tsx","utf8");
+assert.match(page,/calculated_cod_amount/);
+assert.match(page,/readOnly/);
+assert.match(page,/aria-readonly="true"/);
+assert.match(page,/Synchronized automatically from Data Entry calculated amount/);
+assert.match(page,/cod_collected: requiredCod/);
+assert.match(page,/if \(ok !== false\) markActionActive\(action\)/);
+assert.doesNotMatch(page,/value=\{form\.cod_collected\} onChange/);
+console.log("Delivered + COD sync V139 PASS");
