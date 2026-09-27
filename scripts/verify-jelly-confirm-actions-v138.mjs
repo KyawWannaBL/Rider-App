@@ -1,0 +1,16 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const page=fs.readFileSync("src/pages/DeliveryPage.tsx","utf8");
+assert.match(page,/beJellyPress/);
+assert.match(page,/be-jelly-action/);
+assert.match(page,/requestConfirm\("accept"\)/);
+assert.match(page,/requestConfirm\("start"\)/);
+assert.match(page,/requestConfirm\("arrive"\)/);
+assert.match(page,/requestConfirm\("delivered"\)/);
+assert.match(page,/requestConfirm\("failed"\)/);
+assert.match(page,/requestConfirm\("return"\)/);
+assert.match(page,/requestConfirm\("gps"\)/);
+assert.match(page,/Confirm action\?/);
+assert.match(page,/executeConfirmedAction/);
+assert.match(page,/bg-violet-700 ring-4 ring-violet-200/);
+console.log("Rider jelly confirm controls V138 PASS");
