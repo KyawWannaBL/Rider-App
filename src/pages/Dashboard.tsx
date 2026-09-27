@@ -1,6 +1,19 @@
 // @ts-nocheck
-import { useEffect, useState } from "react";
-import { Bell, Building2, Package, RefreshCw, Truck, WalletCards } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Banknote,
+  Bell,
+  Building2,
+  CheckCircle2,
+  Package,
+  RefreshCw,
+  Scale,
+  Smartphone,
+  Truck,
+  WalletCards,
+  XCircle,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
@@ -11,52 +24,197 @@ export default function Dashboard() {
   const { language } = useAppState();
   const tx = (en:string,my:string) => language === "my" ? my : en;
   const [data,setData]=useState<any>({counts:{},wallet:{},pickups:[],deliveries:[],notifications:[],identity:{},branch:{}});
+  const [daily,setDaily]=useState<any>({summary:{},payment_channels:{},failure_reasons:[],rows:[],identity:{}});
   const [loading,setLoading]=useState(false);
   const [message,setMessage]=useState(language === "my" ? "Enterprise Portal အခြေအနေကို ဖွင့်နေသည်..." : "Loading Enterprise Portal status...");
 
   async function load(){
     setLoading(true);
-    const {data:result,error}=await (supabase as any).rpc("be_rider_dashboard_snapshot");
-    if(error){ setMessage(error.message); setLoading(false); return; }
-    setData(result||{});
-    setMessage(tx("Enterprise Portal synchronized.","Enterprise Portal နှင့် ချိတ်ဆက်ပြီးပါပြီ။"));
+    const [portal,dailyResult]=await Promise.all([
+      (supabase as any).rpc("be_rider_dashboard_snapshot"),
+      (supabase as any).rpc("be_field_team_delivery_daily_dashboard_v172",{p_work_date:null}),
+    ]);
+    if(portal.error){
+      setMessage(portal.error.message);
+      setLoading(false);
+      return;
+    }
+    setData(portal.data||{});
+    if(!dailyResult.error && dailyResult.data?.ok!==false) setDaily(dailyResult.data||{});
+    else if(dailyResult.error) setMessage(dailyResult.error.message);
+    else setMessage(dailyResult.data?.error || tx("Unable to load today's delivery summary.","ယနေ့ ပို့ဆောင်မှုအနှစ်ချုပ်ကို ဖွင့်၍မရပါ။"));
+    if(!dailyResult.error && dailyResult.data?.ok!==false){
+      setMessage(tx("Enterprise Portal and today's field settlement are synchronized.","Enterprise Portal နှင့် ယနေ့ Field Settlement အချက်အလက်များ ချိတ်ဆက်ပြီးပါပြီ။"));
+    }
     setLoading(false);
   }
   useEffect(()=>{load();},[]);
 
   const counts=data.counts||{};
   const wallet=data.wallet||{};
-  const cards=[
+  const summary=daily.summary||{};
+  const channels=daily.payment_channels||{};
+  const failureReasons=Array.isArray(daily.failure_reasons)?daily.failure_reasons:[];
+  const rows=Array.isArray(daily.rows)?daily.rows:[];
+  const reconciliation=String(summary.cash_reconciliation_status||"MATCH").toUpperCase();
+  const reconciliationClass=reconciliation==="MATCH"
+    ?"border-emerald-200 bg-emerald-50 text-emerald-900"
+    :reconciliation==="SHORT"
+      ?"border-rose-200 bg-rose-50 text-rose-900"
+      :"border-amber-200 bg-amber-50 text-amber-900";
+
+  const mobileBanking = Number(channels.QR||0)+Number(channels.BANK_TRANSFER||0)+Number(channels.MOBILE_WALLET||0);
+  const completedRows=useMemo(()=>rows.filter((r:any)=>["SUCCESS","FAILED"].includes(String(r.result||"").toUpperCase())),[rows]);
+
+  const portalCards=[
     [tx("Assigned Pickups","တာဝန်ပေးထားသော Pickup များ"),counts.pickups||counts.pickup_jobs||0,Truck],
-    [tx("Delivery Jobs","ပို့ဆောင်ရမည့်အလုပ်များ"),counts.deliveries||counts.delivery_jobs||0,Package],
+    [tx("Active Delivery Jobs","လက်ရှိ ပို့ဆောင်ရမည့်အလုပ်များ"),summary.active_ways??counts.deliveries??counts.delivery_jobs??0,Package],
     [tx("Unread / Active Notifications","မဖတ်ရသေးသော အသိပေးချက်များ"),counts.notifications||0,Bell],
     [tx("COD Balance","COD လက်ကျန်"),money(wallet.cod_balance||0),WalletCards],
   ];
 
+  const dailyCards=[
+    [tx("Total Ways","စုစုပေါင်း Way"),summary.total_ways||0,Package],
+    [tx("Successful","ပို့ဆောင်အောင်မြင်"),summary.success_ways||0,CheckCircle2],
+    [tx("Failed","ပို့ဆောင်မအောင်မြင်"),summary.failed_ways||0,XCircle],
+    [tx("Wayplan Expected","Wayplan အရ ကောက်ခံရမည့်ငွေ"),money(summary.wayplan_expected_total||0),Scale],
+    [tx("Actual Collected","အမှန်တကယ် ကောက်ခံရရှိငွေ"),money(summary.actual_collected_total||0),Banknote],
+    [tx("Cash Collected","ငွေသား ကောက်ခံရရှိ"),money(channels.CASH||0),Banknote],
+    [tx("Mobile Banking","Mobile Banking / QR"),money(mobileBanking),Smartphone],
+    [tx("Successful Expected","အောင်မြင် Way များအတွက် ကောက်ခံရမည့်ငွေ"),money(summary.success_expected_total||0),WalletCards],
+  ];
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-6xl space-y-5">
+      <div className="mx-auto max-w-7xl space-y-5">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black tracking-[0.35em] text-blue-600">BRITIUM EXPRESS</p>
-              <h1 className="mt-2 text-3xl font-black text-slate-950">{tx("Rider Dashboard","Rider ပင်မစာမျက်နှာ")}</h1>
+              <h1 className="mt-2 text-3xl font-black text-slate-950">{tx("Field Team Daily Dashboard","Rider / Driver / Helper နေ့စဉ် Dashboard")}</h1>
               <p className="mt-2 font-semibold text-slate-600">
-                {tx("Live assignments, delivery work, notifications, COD and branch information synchronized with Enterprise Portal.","တာဝန်ပေးမှုများ၊ ပို့ဆောင်ရေးအလုပ်များ၊ အသိပေးချက်များ၊ COD နှင့် ဌာနခွဲအချက်အလက်များကို Enterprise Portal နှင့် တစ်ပြိုင်နက်တည်း ချိတ်ဆက်ထားပါသည်။")}
+                {tx(
+                  "Completed and failed delivery stops leave the active work screen and are summarized here for the day, including Finance reconciliation.",
+                  "ပို့ဆောင်အောင်မြင်ပြီးသော Way နှင့် မအောင်မြင်သော Way များကို Active လုပ်ငန်းစာရင်းမှ ဖယ်ရှားပြီး ယနေ့ Dashboard တွင် Finance စာရင်းညှိနှိုင်းမှုနှင့်အတူ စုစည်းပြသပါသည်။"
+                )}
               </p>
               <p className="mt-2 text-sm font-bold text-slate-500">
-                {data.identity?.display_name||data.identity?.worker_code||"Rider"} · {data.identity?.worker_code||"-"} · {data.identity?.branch_code||"No branch"}
+                {daily.identity?.display_name||data.identity?.display_name||daily.identity?.worker_code||data.identity?.worker_code||"Field Team"} · {daily.identity?.worker_code||data.identity?.worker_code||"-"} · {daily.identity?.role||data.identity?.role||"-"} · {data.identity?.branch_code||"No branch"}
               </p>
+              <p className="mt-1 text-xs font-black text-blue-700">{tx("Work date","လုပ်ငန်းရက်")}: {daily.work_date||"-"}</p>
             </div>
             <button onClick={load} disabled={loading} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50">
-              <RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`} /> Sync Enterprise
+              <RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`} /> {tx("Sync Enterprise","Enterprise နှင့် Sync")}
             </button>
           </div>
           <div className="mt-4 rounded-2xl bg-blue-50 p-3 text-sm font-bold text-blue-900">{message}</div>
         </section>
 
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-black text-slate-950">{tx("Today's Delivery & Collection Summary","ယနေ့ ပို့ဆောင်မှုနှင့် ငွေကောက်ခံမှု အနှစ်ချုပ်")}</h2>
+              <p className="text-sm font-semibold text-slate-500">{tx("Shared from the same delivery records used by Finance and Warehouse.","Finance နှင့် Warehouse တို့အသုံးပြုသော Delivery record တစ်ခုတည်းမှ ချိတ်ဆက်ပြသထားပါသည်။")}</p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {dailyCards.map(([label,value,Icon]:any)=>(
+              <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><Icon className="h-5 w-5 text-blue-700"/></div>
+                <p className="mt-3 text-2xl font-black text-slate-950">{value}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={`rounded-3xl border p-5 shadow-sm ${reconciliationClass}`}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                {reconciliation==="MATCH" ? <CheckCircle2 className="h-6 w-6"/> : <AlertTriangle className="h-6 w-6"/>}
+                <h2 className="text-xl font-black">{tx("Cash / Collection Reconciliation","ငွေကောက်ခံမှု စာရင်းညှိနှိုင်းခြင်း")}: {reconciliation}</h2>
+              </div>
+              <p className="mt-2 text-sm font-bold">
+                {tx(
+                  "Reconciliation compares the expected amount for successful deliveries only against the actual amount collected, so failed ways do not create a false cash shortage.",
+                  "စာရင်းညှိနှိုင်းရာတွင် ပို့ဆောင်အောင်မြင်သော Way များအတွက် ကောက်ခံရမည့်ငွေနှင့် အမှန်တကယ်ကောက်ခံရရှိငွေကိုသာ နှိုင်းယှဉ်သဖြင့် Failed Way များကြောင့် ငွေလိုငွေပျောက် အမှားမဖြစ်စေပါ။"
+                )}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/70 px-5 py-3 text-right">
+              <p className="text-xs font-black uppercase">{tx("Variance","ကွာဟချက်")}</p>
+              <p className="text-2xl font-black">{money(summary.cash_reconciliation_variance||0)}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black text-slate-950">{tx("Collection by Payment Channel","ငွေပေးချေမှုနည်းလမ်းအလိုက် ကောက်ခံရရှိငွေ")}</h2>
+            <div className="mt-4 grid gap-2 text-sm font-bold">
+              {[
+                ["CASH",channels.CASH],
+                ["QR",channels.QR],
+                ["BANK TRANSFER",channels.BANK_TRANSFER],
+                ["MOBILE WALLET",channels.MOBILE_WALLET],
+                ["PREPAID",channels.PREPAID],
+                ["UNKNOWN / LEGACY",channels.UNKNOWN],
+              ].map(([label,value]:any)=>(
+                <div key={label} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span>{label}</span><span>{money(value||0)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-black text-slate-950">{tx("Failed Ways & Reasons","Failed Way များနှင့် အကြောင်းပြချက်များ")}</h2>
+            <div className="mt-4 space-y-2">
+              {failureReasons.length===0 && <p className="rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-900">{tx("No failed ways recorded for today.","ယနေ့ Failed Way မရှိသေးပါ။")}</p>}
+              {failureReasons.map((r:any)=>(
+                <div key={r.reason_code||r.reason} className="rounded-2xl border border-rose-100 bg-rose-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div><p className="font-black text-rose-950">{r.reason||r.reason_code||"FAILED"}</p><p className="mt-1 text-xs font-bold text-rose-700">{Array.isArray(r.ways)?r.ways.join(", "):""}</p></div>
+                    <span className="rounded-full bg-rose-600 px-3 py-1 text-sm font-black text-white">{r.count||0}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-black text-slate-950">{tx("Today's Completed / Failed Ways","ယနေ့ ပြီးစီး / Failed Way များ")}</h2>
+              <p className="text-sm font-semibold text-slate-500">{tx("These ways no longer remain in the active Delivery screen.","ဤ Way များသည် Active Delivery Screen တွင် ဆက်လက်မပြတော့ပါ။")}</p>
+            </div>
+            <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-black text-white">{completedRows.length}</span>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead><tr className="border-b text-xs uppercase text-slate-500">
+                <th className="px-3 py-2">Way ID</th><th className="px-3 py-2">{tx("Result","ရလဒ်")}</th><th className="px-3 py-2">{tx("Reason","အကြောင်းပြချက်")}</th><th className="px-3 py-2">{tx("Expected","ကောက်ခံရမည့်ငွေ")}</th><th className="px-3 py-2">{tx("Actual","ကောက်ခံရရှိငွေ")}</th><th className="px-3 py-2">{tx("Channel","နည်းလမ်း")}</th>
+              </tr></thead>
+              <tbody>
+                {completedRows.map((r:any)=>(
+                  <tr key={`${r.wayplan_id}-${r.delivery_way_id}`} className="border-b last:border-0">
+                    <td className="px-3 py-3 font-mono font-black text-blue-700">{r.delivery_way_id}</td>
+                    <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-black ${r.result==="SUCCESS"?"bg-emerald-100 text-emerald-800":"bg-rose-100 text-rose-800"}`}>{r.result}</span></td>
+                    <td className="px-3 py-3 font-semibold">{r.failed_reason||"-"}</td>
+                    <td className="px-3 py-3 font-bold">{money(r.expected_collect||0)}</td>
+                    <td className="px-3 py-3 font-bold">{money(r.actual_collected||0)}</td>
+                    <td className="px-3 py-3 font-bold">{r.payment_mode||"-"}</td>
+                  </tr>
+                ))}
+                {completedRows.length===0 && <tr><td colSpan={6} className="px-3 py-8 text-center font-bold text-slate-400">{tx("No completed or failed ways yet today.","ယနေ့ ပြီးစီး သို့မဟုတ် Failed Way မရှိသေးပါ။")}</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {cards.map(([label,value,Icon]:any)=>(
+          {portalCards.map(([label,value,Icon]:any)=>(
             <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><Icon className="h-5 w-5 text-blue-700"/></div>
               <p className="mt-3 text-2xl font-black text-slate-950">{value}</p>
@@ -70,8 +228,8 @@ export default function Dashboard() {
             <p className="mt-2 font-semibold text-slate-600">{tx("Open Enterprise-assigned pickups, capture proof, weight, and submit parcels for review.","Enterprise မှ တာဝန်ပေးထားသော Pickup များကို ဖွင့်ပြီး ဓာတ်ပုံသက်သေ၊ အလေးချိန် ထည့်သွင်းကာ စစ်ဆေးရန် ပို့ပါ။")}</p>
           </Link>
           <Link to="/delivery" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
-            <h2 className="text-xl font-black text-slate-950">{tx("Delivery / Drop-Off","ပို့ဆောင် / ပစ္စည်းချခြင်း")}</h2>
-            <p className="mt-2 font-semibold text-slate-600">{tx("Open Enterprise Wayplan stops and complete strict delivery verification.","Enterprise Wayplan မှတ်တိုင်များကို ဖွင့်ပြီး ပို့ဆောင်မှု စစ်ဆေးအတည်ပြုခြင်းကို ပြီးစီးအောင် ဆောင်ရွက်ပါ။")}</p>
+            <h2 className="text-xl font-black text-slate-950">{tx("Active Delivery / Drop-Off","လက်ရှိ ပို့ဆောင် / ပစ္စည်းချခြင်း")}</h2>
+            <p className="mt-2 font-semibold text-slate-600">{tx("Only active Wayplan stops remain here; completed and failed stops move to today's dashboard.","Active Wayplan မှတ်တိုင်များကိုသာ ပြသပြီး ပြီးစီး/Failed Way များကို ယနေ့ Dashboard သို့ ရွှေ့ပြပါသည်။")}</p>
           </Link>
           <Link to="/cod-settlement" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
             <h2 className="text-xl font-black text-slate-950">{tx("COD Settlement","COD ငွေစာရင်းရှင်းခြင်း")}</h2>
