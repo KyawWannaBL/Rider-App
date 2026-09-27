@@ -92,7 +92,8 @@ export default function DeliveryPage() {
   const [signaturePreview, setSignaturePreview] = useState("");
   const [busy, setBusy] = useState(false);
   const [failureMode, setFailureMode] = useState(false);
-  const [confirmDelivered, setConfirmDelivered] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<string | null>(null);
+  const [activeActions, setActiveActions] = useState<Record<string, boolean>>({});
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const [form, setForm] = useState({
@@ -126,7 +127,6 @@ export default function DeliveryPage() {
   function selectJob(job: any) {
     setSelected(job);
     setFailureMode(false);
-    setConfirmDelivered(false);
     resetProofs();
     setForm((current) => ({
       ...current,
@@ -175,6 +175,50 @@ export default function DeliveryPage() {
 
   function currentDeliveryState() {
     return String(selected?.stop_status || selected?.rider_status || selected?.dispatch_status || "").toUpperCase();
+  }
+
+  function visualActionKey(action:string) {
+    return `${selected?.delivery_way_id || "NO-WAY"}:${action}`;
+  }
+
+  function actionActive(action:string) {
+    const s=currentDeliveryState();
+    if (activeActions[visualActionKey(action)]) return true;
+    if (action==="accept") return ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY","OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER","DELIVERED"].includes(s);
+    if (action==="start") return ["OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER","DELIVERED"].includes(s);
+    if (action==="arrive") return ["ARRIVED_AT_CUSTOMER","DELIVERED"].includes(s);
+    if (action==="delivered") return ["DELIVERED","DELIVERY_COMPLETED","POD_VERIFIED"].includes(s);
+    if (action==="failed") return failureMode || ["FAILED_DELIVERY","DELIVERY_FAILED","ATTEMPTED_FAILED","RETURN_TO_WAREHOUSE"].includes(s);
+    if (action==="return") return ["RETURN_TO_WAREHOUSE","AWAITING_RETURN_SCAN"].includes(s);
+    return false;
+  }
+
+  function markActionActive(action:string) {
+    setActiveActions((current)=>({...current,[visualActionKey(action)]:true}));
+  }
+
+  function actionClass(action:string, normal:string) {
+    return `be-jelly-action rounded-2xl p-3 font-black text-white ${actionActive(action) ? "bg-violet-700 ring-4 ring-violet-200" : normal}`;
+  }
+
+  function requestConfirm(action:string) {
+    setConfirmAction(action);
+  }
+
+  async function executeConfirmedAction(action:string) {
+    setConfirmAction(null);
+    markActionActive(action);
+    if (action==="accept") return await acceptDeliveryStep();
+    if (action==="start") return await startDeliveryStep();
+    if (action==="arrive") return await arriveDeliveryStep();
+    if (action==="delivered") return await deliver();
+    if (action==="failed") {
+      setFailureMode(true);
+      setMsg(tx("Choose the failed reason, then press Return to Warehouse.","မအောင်မြင်ရသည့် အကြောင်းပြချက်ကို ရွေးပြီးနောက် Warehouse သို့ ပြန်ပို့ရန် ကို နှိပ်ပါ။"));
+      return;
+    }
+    if (action==="return") return await failAndReturnToWarehouse();
+    if (action==="gps") return await sendGps();
   }
 
   async function acceptDeliveryStep() {
@@ -533,6 +577,23 @@ export default function DeliveryPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4">
+      <style>{`
+        @keyframes beJellyPress {
+          0% { transform: scale(1,1); }
+          25% { transform: scale(.93,1.08); }
+          50% { transform: scale(1.07,.94); }
+          75% { transform: scale(.98,1.03); }
+          100% { transform: scale(1,1); }
+        }
+        .be-jelly-action {
+          cursor:pointer;
+          transform-origin:center;
+          touch-action:manipulation;
+          transition:transform .15s ease, box-shadow .2s ease, background-color .2s ease;
+        }
+        .be-jelly-action:active { animation:beJellyPress .38s ease-out; }
+        .be-jelly-action:hover { transform:translateY(-1px); box-shadow:0 10px 24px rgba(15,23,42,.14); }
+      `}</style>
       <div className="mx-auto max-w-6xl space-y-4">
         <section className="rounded-3xl bg-white p-5 shadow-sm border">
           <h1 className="text-3xl font-black">{tx("Delivery / Drop-Off Process","ပို့ဆောင် / ပစ္စည်းချ လုပ်ငန်းစဉ်")}</h1>
@@ -587,9 +648,9 @@ export default function DeliveryPage() {
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-blue-900">{status || "PENDING"}</span>
                   </div>
                   <div className="grid gap-3 md:grid-cols-3">
-                    <button type="button" onClick={acceptDeliveryStep} className="rounded-2xl bg-slate-900 p-3 font-black text-white">{tx("Accept","လက်ခံရန်")}</button>
-                    <button type="button" onClick={startDeliveryStep} className="rounded-2xl bg-blue-700 p-3 font-black text-white">{tx("Start Delivery","ပို့ဆောင်မှု စတင်ရန်")}</button>
-                    <button type="button" onClick={arriveDeliveryStep} className="rounded-2xl bg-indigo-700 p-3 font-black text-white">{tx("Arrived at Customer","Customer နေရာသို့ ရောက်ရှိပြီ")}</button>
+                    <button type="button" onClick={() => requestConfirm("accept")} className={actionClass("accept","bg-slate-900")}>{tx("Accept","လက်ခံရန်")}</button>
+                    <button type="button" onClick={() => requestConfirm("start")} className={actionClass("start","bg-blue-700")}>{tx("Start Delivery","ပို့ဆောင်မှု စတင်ရန်")}</button>
+                    <button type="button" onClick={() => requestConfirm("arrive")} className={actionClass("arrive","bg-indigo-700")}>{tx("Arrived at Customer","Customer နေရာသို့ ရောက်ရှိပြီ")}</button>
                   </div>
                 </section>
 
@@ -664,8 +725,8 @@ export default function DeliveryPage() {
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <button
                       type="button"
-                      onClick={() => setConfirmDelivered(true)}
-                      className="rounded-2xl bg-emerald-600 p-3 font-black text-white"
+                      onClick={() => requestConfirm("delivered")}
+                      className={actionClass("delivered","bg-emerald-600")}
                     >
                       {tx("Delivered","ပို့ဆောင်ပြီး")}
                     </button>
@@ -691,42 +752,38 @@ export default function DeliveryPage() {
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
                     <button
                       type="button"
-                      onClick={() => {
-                        setFailureMode(true);
-                        setMsg(tx("Choose the failed reason, then press Return to Warehouse.","မအောင်မြင်ရသည့် အကြောင်းပြချက်ကို ရွေးပြီးနောက် Warehouse သို့ ပြန်ပို့ရန် ကို နှိပ်ပါ။"));
-                      }}
-                      className={`rounded-2xl p-3 font-black text-white ${failureMode ? "bg-rose-800 ring-4 ring-rose-200" : "bg-rose-600"}`}
+                      onClick={() => requestConfirm("failed")}
+                      className={actionClass("failed","bg-rose-600")}
                     >
                       {tx("Failed Delivery","ပို့ဆောင်မှုမအောင်မြင်")}
                     </button>
                     <button
                       type="button"
-                      onClick={failAndReturnToWarehouse}
-                      className="rounded-2xl bg-orange-600 p-3 font-black text-white"
+                      onClick={() => requestConfirm("return")}
+                      className={actionClass("return","bg-orange-600")}
                     >
                       {tx("Return to Warehouse","Warehouse သို့ ပြန်ပို့ရန်")}
                     </button>
-                    <button type="button" onClick={sendGps} className="rounded-2xl border bg-white p-3 font-black">{tx("Check Current GPS","လက်ရှိ GPS စစ်ရန်")}</button>
+                    <button type="button" onClick={() => requestConfirm("gps")} className={`be-jelly-action rounded-2xl border p-3 font-black ${activeActions[visualActionKey("gps")] ? "border-violet-700 bg-violet-700 text-white ring-4 ring-violet-200" : "bg-white text-slate-900"}`}>{tx("Check Current GPS","လက်ရှိ GPS စစ်ရန်")}</button>
                   </div>
                 </section>
 
-                {confirmDelivered && (
+                {confirmAction && (
                   <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
                     <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
-                      <h3 className="text-xl font-black">{tx("Confirm successful delivery?","ပို့ဆောင်ပြီးကြောင်း အတည်ပြုမည်လား?")}</h3>
-                      <p className="mt-2 font-semibold text-slate-600">{tx("This will validate arrival, receiver, COD/payment, proof photo and signature before saving Delivered.","Customer ရောက်ရှိမှု၊ လက်ခံသူ၊ COD/ငွေပေးချေမှု၊ ဓာတ်ပုံနှင့် လက်မှတ်တို့ကို စစ်ဆေးပြီး Delivered အဖြစ် သိမ်းမည်။")}</p>
+                      <h3 className="text-xl font-black">{tx("Confirm action?","လုပ်ဆောင်ချက်ကို အတည်ပြုမည်လား?")}</h3>
+                      <p className="mt-2 font-semibold text-slate-600">
+                        {confirmAction==="accept" && tx("Accept this parcel?","ဤပါဆယ်ကို လက်ခံမည်လား?")}
+                        {confirmAction==="start" && tx("Start delivery now?","ယခု ပို့ဆောင်မှု စတင်မည်လား?")}
+                        {confirmAction==="arrive" && tx("Confirm arrival at the customer?","Customer နေရာသို့ ရောက်ရှိကြောင်း အတည်ပြုမည်လား?")}
+                        {confirmAction==="delivered" && tx("Confirm successful delivery? Required proof, signature and COD/payment will be validated.","ပို့ဆောင်ပြီးကြောင်း အတည်ပြုမည်လား? လိုအပ်သော ဓာတ်ပုံ၊ လက်မှတ်နှင့် COD/ငွေပေးချေမှုကို စစ်ဆေးပါမည်။")}
+                        {confirmAction==="failed" && tx("Open failed-delivery mode and enable the failed reason list?","ပို့ဆောင်မှုမအောင်မြင် လုပ်ငန်းစဉ်ကို ဖွင့်ပြီး အကြောင်းပြချက်စာရင်းကို အသုံးပြုမည်လား?")}
+                        {confirmAction==="return" && tx("Record the failed delivery and return this parcel to Warehouse?","ပို့ဆောင်မှုမအောင်မြင်ကြောင်း မှတ်တမ်းတင်ပြီး Warehouse သို့ ပြန်ပို့မည်လား?")}
+                        {confirmAction==="gps" && tx("Check current GPS now?","လက်ရှိ GPS တည်နေရာကို စစ်ဆေးမည်လား?")}
+                      </p>
                       <div className="mt-4 grid grid-cols-2 gap-3">
-                        <button type="button" onClick={() => setConfirmDelivered(false)} className="rounded-2xl border p-3 font-black">{tx("No","မဟုတ်ပါ")}</button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setConfirmDelivered(false);
-                            await deliver();
-                          }}
-                          className="rounded-2xl bg-violet-700 p-3 font-black text-white"
-                        >
-                          {tx("Yes, confirm","ဟုတ်ကဲ့၊ အတည်ပြုမည်")}
-                        </button>
+                        <button type="button" onClick={() => setConfirmAction(null)} className="be-jelly-action rounded-2xl border p-3 font-black">{tx("No","မဟုတ်ပါ")}</button>
+                        <button type="button" onClick={() => void executeConfirmedAction(confirmAction)} className="be-jelly-action rounded-2xl bg-violet-700 p-3 font-black text-white">{tx("Yes","ဟုတ်ကဲ့")}</button>
                       </div>
                     </div>
                   </div>
