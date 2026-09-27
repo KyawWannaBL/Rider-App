@@ -26,13 +26,17 @@ export default function Dashboard() {
   const [data,setData]=useState<any>({counts:{},wallet:{},pickups:[],deliveries:[],notifications:[],identity:{},branch:{}});
   const [daily,setDaily]=useState<any>({summary:{},payment_channels:{},failure_reasons:[],rows:[],identity:{}});
   const [loading,setLoading]=useState(false);
+  const [settlements,setSettlements]=useState<any[]>([]);
+  const [signerNames,setSignerNames]=useState<Record<string,string>>({});
+  const [settlementBusy,setSettlementBusy]=useState("");
   const [message,setMessage]=useState(language === "my" ? "Enterprise Portal အခြေအနေကို ဖွင့်နေသည်..." : "Loading Enterprise Portal status...");
 
   async function load(){
     setLoading(true);
-    const [portal,dailyResult]=await Promise.all([
+    const [portal,dailyResult,settlementResult]=await Promise.all([
       (supabase as any).rpc("be_rider_dashboard_snapshot"),
       (supabase as any).rpc("be_field_team_delivery_daily_dashboard_v172",{p_work_date:null}),
+      (supabase as any).rpc("be_finance_field_settlement_center_v1",{p_work_date:null}),
     ]);
     if(portal.error){
       setMessage(portal.error.message);
@@ -42,12 +46,39 @@ export default function Dashboard() {
     setData(portal.data||{});
     if(!dailyResult.error && dailyResult.data?.ok!==false) setDaily(dailyResult.data||{});
     else if(dailyResult.error) setMessage(dailyResult.error.message);
+    if(!settlementResult.error && settlementResult.data?.ok!==false) setSettlements(Array.isArray(settlementResult.data?.rows)?settlementResult.data.rows:[]);
+    else if(settlementResult.error) setMessage(settlementResult.error.message);
     else setMessage(dailyResult.data?.error || tx("Unable to load today's delivery summary.","ယနေ့ ပို့ဆောင်မှုအနှစ်ချုပ်ကို ဖွင့်၍မရပါ။"));
     if(!dailyResult.error && dailyResult.data?.ok!==false){
       setMessage(tx("Enterprise Portal and today's field settlement are synchronized.","Enterprise Portal နှင့် ယနေ့ Field Settlement အချက်အလက်များ ချိတ်ဆက်ပြီးပါပြီ။"));
     }
     setLoading(false);
   }
+  async function signSettlement(row:any){
+    const signedName=(signerNames[row.wayplan_id]||"").trim();
+    if(!signedName){
+      setMessage(tx("Type your full name before signing the Finance settlement.","Finance Settlement လက်မှတ်ထိုးမီ သင့်အမည်အပြည့်အစုံ ရိုက်ထည့်ပါ။"));
+      return;
+    }
+    setSettlementBusy(row.wayplan_id);
+    const {data,error}=await (supabase as any).rpc("be_finance_field_settlement_sign_v1",{
+      p_work_date:daily.work_date||null,
+      p_wayplan_id:row.wayplan_id,
+      p_signed_name:signedName,
+      p_note:"Field-team end-of-day electronic signature",
+    });
+    if(error || data?.ok===false){
+      setMessage(error?.message || data?.code || "Settlement signature failed.");
+    } else {
+      setMessage(tx(
+        row.wayplan_id+": electronic settlement signature recorded. Finance will clear after all assigned persons sign and collections reconcile.",
+        row.wayplan_id+": အီလက်ထရွန်နစ် Settlement လက်မှတ် မှတ်တမ်းတင်ပြီးပါပြီ။ သက်ဆိုင်သူအားလုံး လက်မှတ်ထိုးပြီး ငွေစာရင်းညီပါက Finance မှ Cleared ပြုလုပ်ပါမည်။"
+      ));
+      await load();
+    }
+    setSettlementBusy("");
+  }
+
   useEffect(()=>{load();},[]);
 
   const counts=data.counts||{};
@@ -210,6 +241,39 @@ export default function Dashboard() {
                 {completedRows.length===0 && <tr><td colSpan={6} className="px-3 py-8 text-center font-bold text-slate-400">{tx("No completed or failed ways yet today.","ယနေ့ ပြီးစီး သို့မဟုတ် Failed Way မရှိသေးပါ။")}</td></tr>}
               </tbody>
             </table>
+          </div>
+        </section>
+
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <h2 className="text-xl font-black text-slate-950">{tx("End-of-Day Financial Settlement","နေ့ကုန် ဘဏ္ဍာရေး စာရင်းရှင်းတမ်း")}</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">{tx(
+              "Each assigned Rider / Driver / Helper signs electronically. Finance can mark the route CLEARED only after every required signature and collection reconciliation are complete.",
+              "တာဝန်ကျ Rider / Driver / Helper တစ်ဦးချင်းစီ အီလက်ထရွန်နစ်လက်မှတ်ထိုးရပါမည်။ လိုအပ်သော လက်မှတ်အားလုံးနှင့် ငွေစာရင်းညှိနှိုင်းမှု ပြည့်စုံပြီးမှ Finance မှ CLEARED ပြုလုပ်နိုင်ပါသည်။"
+            )}</p>
+          </div>
+          <div className="mt-4 space-y-3">
+            {settlements.map((r:any)=>(
+              <div key={r.id||r.wayplan_id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div><p className="text-xs font-black text-slate-500">WAYPLAN / VEHICLE</p><p className="font-black text-slate-950">{r.wayplan_id}</p><p className="text-xs font-bold text-blue-700">{r.vehicle_code||r.vehicle_name||"-"}</p></div>
+                  <div><p className="text-xs font-black text-slate-500">WAYS</p><p className="font-black">{r.total_ways} total · {r.delivered_ways} success · {r.failed_ways} failed · {r.remaining_ways} left</p></div>
+                  <div><p className="text-xs font-black text-slate-500">{tx("COLLECTION","ငွေကောက်ခံမှု")}</p><p className="font-black">{money(r.actual_collected)}</p><p className="text-xs font-bold text-slate-500">Cash {money(r.cash_collected)} · Digital {money(r.digital_collected)}</p></div>
+                  <div><p className="text-xs font-black text-slate-500">STATUS</p><span className={r.status==="CLEARED"?"inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800":"inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800"}>{r.status}</span></div>
+                </div>
+                <div className="mt-3 text-xs font-bold text-slate-500">
+                  Signatures: Finance {r.signature_status?.finance?"✓":"—"} · Rider {r.signature_status?.rider?"✓":"—"} · Driver {r.signature_status?.driver?"✓":"—"} · Helper {r.signature_status?.helper?"✓":"—"}
+                </div>
+                {r.status!=="CLEARED" && (
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <input value={signerNames[r.wayplan_id]||""} onChange={(e)=>setSignerNames({...signerNames,[r.wayplan_id]:e.target.value})} placeholder={tx("Your full name for electronic signature","အီလက်ထရွန်နစ်လက်မှတ်အတွက် အမည်အပြည့်အစုံ")} className="h-11 flex-1 rounded-xl border border-slate-300 bg-white px-3 font-bold" />
+                    <button disabled={settlementBusy===r.wayplan_id} onClick={()=>void signSettlement(r)} className="h-11 rounded-xl bg-blue-700 px-5 font-black text-white disabled:opacity-50">{settlementBusy===r.wayplan_id?tx("Signing...","လက်မှတ်ထိုးနေသည်..."):tx("Electronic Sign","အီလက်ထရွန်နစ် လက်မှတ်ထိုးမည်")}</button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {settlements.length===0 && <div className="rounded-2xl bg-slate-50 p-5 text-center font-bold text-slate-400">{tx("No Finance settlement is assigned to you for today.","ယနေ့ သင့်အတွက် Finance Settlement မရှိသေးပါ။")}</div>}
           </div>
         </section>
 
