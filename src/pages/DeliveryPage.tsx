@@ -390,7 +390,13 @@ export default function DeliveryPage() {
     if (!form.receiver_name.trim()) { setMsg(tx("Receiver name is required.","လက်ခံသူအမည် ဖြည့်ရန်လိုအပ်ပါသည်။")); return false; }
     if (!approvedProofFile) { setMsg(tx("Capture, review and approve the delivery proof photo first.","ပို့ဆောင်မှုဓာတ်ပုံကို ရိုက်ယူ၊ စစ်ဆေးပြီး အတည်ပြုပါ။")); return false; }
     const drawnSignature = await signatureCanvasFile();
-    if (!signatureFile && !drawnSignature && !form.signature_name.trim()) { setMsg(tx("Customer electronic signature is required.","Customer အီလက်ထရွန်နစ်လက်မှတ် လိုအပ်ပါသည်။")); return false; }
+    if (!signatureFile && !drawnSignature) {
+      setMsg(tx(
+        "Capture or upload the customer signature before confirming delivery.",
+        "ပို့ဆောင်ပြီးအတည်ပြုမီ Customer လက်မှတ်ကို ရေးထိုး သို့မဟုတ် ဓာတ်ပုံတင်ပါ။"
+      ));
+      return false;
+    }
     if (Number(form.cod_collected || requiredCod || 0) !== requiredCod) {
       setForm((current) => ({ ...current, cod_collected: String(requiredCod) }));
     }
@@ -415,19 +421,19 @@ export default function DeliveryPage() {
           }
         : {};
 
-      const { data, error } = await (supabase as any).rpc("be_rider_wayplan_action", {
+      const { data, error } = await (supabase as any).rpc("be_field_team_delivery_action_v77", {
         p_payload: {
           wayplan_id: selected.wayplan_id,
           delivery_way_id: selected.delivery_way_id,
           action: "deliver",
-          receiver_name: form.receiver_name.trim(),
-          receiver_phone: form.receiver_phone.trim() || null,
+          recipient_name: form.receiver_name.trim(),
+          recipient_phone: form.receiver_phone.trim() || null,
           proof_url,
-          signature_path,
+          signature_url: signature_path,
           signature_payload,
           payment_method: form.payment_method,
           transaction_reference: form.transaction_reference.trim() || null,
-          cod_collected: requiredCod,
+          cod_collected_amount: requiredCod,
           remark: form.remarks.trim() || null,
           ...gps,
         },
@@ -525,11 +531,12 @@ export default function DeliveryPage() {
     const gps=await currentGps();
     setBusy(true);
     try {
-      const failedResult=await (supabase as any).rpc("be_rider_wayplan_action", {
+      const failedResult=await (supabase as any).rpc("be_field_team_delivery_action_v77", {
         p_payload: {
           wayplan_id:selected.wayplan_id,
           delivery_way_id:selected.delivery_way_id,
-          action:"failed",
+          action:"exception",
+          exception_reason:form.failed_reason,
           failed_reason:form.failed_reason,
           remark:form.remarks || null,
           ...gps,
@@ -538,22 +545,9 @@ export default function DeliveryPage() {
       if (failedResult.error) throw failedResult.error;
       if (failedResult.data?.ok===false) throw new Error(failedResult.data?.error || "Failed delivery submission failed.");
 
-      const returnResult=await (supabase as any).rpc("be_rider_wayplan_action", {
-        p_payload: {
-          wayplan_id:selected.wayplan_id,
-          delivery_way_id:selected.delivery_way_id,
-          action:"return",
-          failed_reason:form.failed_reason,
-          remark:form.remarks || null,
-          ...gps,
-        },
-      });
-      if (returnResult.error) throw returnResult.error;
-      if (returnResult.data?.ok===false) throw new Error(returnResult.data?.error || "Return to Warehouse failed.");
-
       setMsg(tx(
-        `${selected.delivery_way_id}: failed delivery recorded and parcel sent to Warehouse return workflow.`,
-        `${selected.delivery_way_id}: ပို့ဆောင်မှုမအောင်မြင်ကြောင်း မှတ်တမ်းတင်ပြီး Warehouse ပြန်ပို့လုပ်ငန်းစဉ်သို့ လွှဲပြောင်းပြီးပါပြီ။`
+        `${selected.delivery_way_id}: failed delivery recorded. Warehouse Return Scan is now the next physical step.`,
+        `${selected.delivery_way_id}: ပို့ဆောင်မှုမအောင်မြင်ကြောင်း မှတ်တမ်းတင်ပြီးပါပြီ။ နောက်တစ်ဆင့်မှာ Warehouse Return Scan လုပ်ရန်ဖြစ်ပါသည်။`
       ));
       setFailureMode(false);
       await load(selected.delivery_way_id);
