@@ -88,6 +88,7 @@ export default function DeliveryPage() {
   const [approvedProofFile, setApprovedProofFile] = useState<File | null>(null);
   const [proofState, setProofState] = useState<"idle" | "compressing" | "ready" | "approved">("idle");
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signatureOnBehalf, setSignatureOnBehalf] = useState(false);
   const [proofPreview, setProofPreview] = useState("");
   const [signaturePreview, setSignaturePreview] = useState("");
   const [busy, setBusy] = useState(false);
@@ -127,6 +128,7 @@ export default function DeliveryPage() {
   function selectJob(job: any) {
     setSelected(job);
     setFailureMode(false);
+    setSignatureOnBehalf(false);
     resetProofs();
     setForm((current) => ({
       ...current,
@@ -135,7 +137,7 @@ export default function DeliveryPage() {
       cod_collected: String(job.calculated_cod_amount ?? job.cod_amount ?? 0),
       transaction_reference: "",
       remarks: "",
-      signature_name: "",
+      signature_name: job.recipient_name || job.receiver_name || "",
       failed_reason: "",
     }));
   }
@@ -690,12 +692,38 @@ export default function DeliveryPage() {
                       className="mt-3 h-32 w-full touch-none rounded-xl border bg-white"
                     />
                     <button type="button" onClick={clearSignatureCanvas} className="mt-2 rounded-lg border px-3 py-2 text-xs">{tx("Clear drawn signature","ရေးထားသောလက်မှတ် ဖျက်ရန်")}</button>
-                    <input
-                      className="mt-3 w-full rounded-xl border p-3"
-                      placeholder={tx("Or type signed customer name","သို့မဟုတ် လက်မှတ်ထိုးသူအမည် ရိုက်ထည့်ပါ")}
-                      value={form.signature_name}
-                      onChange={(e) => setForm({ ...form, signature_name: e.target.value })}
-                    />
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        className="min-w-0 flex-1 rounded-xl border bg-slate-100 p-3 font-bold disabled:cursor-not-allowed"
+                        placeholder={tx("Signed customer name","လက်မှတ်ထိုးသူအမည်")}
+                        value={form.signature_name}
+                        disabled={!signatureOnBehalf}
+                        onChange={(e) => setForm({ ...form, signature_name: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSignatureOnBehalf((current) => {
+                            const next = !current;
+                            setForm((f) => ({
+                              ...f,
+                              signature_name: next ? "" : (selected?.recipient_name || selected?.receiver_name || ""),
+                            }));
+                            return next;
+                          });
+                        }}
+                        className={`be-jelly-action rounded-xl border px-4 py-3 font-black ${
+                          signatureOnBehalf ? "bg-amber-500 text-white" : "bg-white text-slate-900"
+                        }`}
+                      >
+                        {tx("On behalf","ကိုယ်စား")}
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs font-bold text-slate-500">
+                      {signatureOnBehalf
+                        ? tx("Type the actual person signing on behalf of the customer.","Customer ကိုယ်စား လက်မှတ်ထိုးသူ၏ အမည်ကို ရိုက်ထည့်ပါ။")
+                        : tx("Automatically synchronized from Data Entry recipient name.","Data Entry မှ လက်ခံသူအမည်ကို အလိုအလျောက် Synchronize လုပ်ထားပါသည်။")}
+                    </p>
                     {signaturePreview && <img src={signaturePreview} className="mt-3 h-40 w-full rounded-2xl object-contain" />}
                   </label>
                 </div>
