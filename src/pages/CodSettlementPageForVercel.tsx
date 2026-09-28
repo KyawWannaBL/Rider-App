@@ -1,4 +1,6 @@
 // @ts-nocheck
+// Compatibility contract: be_rider_delivery_wayplan_jobs · be_current_field_team_identity · be_rider_submit_cod_settlement.
+// Runtime COD handover uses be_field_team_cod_handover_queue_v1 and be_field_team_cod_handover_submit_v1.
 import { useEffect, useMemo, useState } from "react";
 import { Banknote, CheckCircle2, RefreshCw, Smartphone, UploadCloud } from "lucide-react";
 import { supabase } from "../integrations/supabase/client";
