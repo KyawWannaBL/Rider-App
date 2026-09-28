@@ -1,6 +1,6 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
-// Rider V141 signed APK rebuild trigger: cosmetic production release.
+// Rider V142 signed APK rebuild trigger: motion and portal visual release.
 const config: CapacitorConfig = {
   appId: 'com.britiumexpress.rider',
   appName: 'Britium Express Rider',
