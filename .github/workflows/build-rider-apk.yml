@@ -145,7 +145,7 @@ jobs:
                       storeFile file(System.getenv("RIDER_ANDROID_KEYSTORE_PATH"))
                       storePassword System.getenv("RIDER_ANDROID_KEYSTORE_PASSWORD")
                       keyAlias System.getenv("RIDER_ANDROID_KEY_ALIAS")
-                      keyPassword System.getenv("RIDER_ANDROID_KEY_PASSWORD")
+                      // The generated permanent keystore is PKCS12, which uses the store password for the private key entry.\n                      // RIDER_ANDROID_KEY_PASSWORD remains a required legacy secret but is intentionally not used for signing.\n                      keyPassword System.getenv("RIDER_ANDROID_KEYSTORE_PASSWORD")
                   }
               }
               buildTypes {
