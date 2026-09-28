@@ -70,6 +70,7 @@ export function Layout() {
   const links = [
     ["/dashboard", tx("Dashboard", "ပင်မစာမျက်နှာ")],
     ["/jobs", tx("Pickup Verification", "Pickup စစ်ဆေးအတည်ပြုခြင်း")],
+    ["/route", tx("Active Route", "လက်ရှိပို့ဆောင်ရေးလမ်းကြောင်း")],
     ["/delivery", tx("Delivery / Drop-Off", "ပို့ဆောင် / ပစ္စည်းချခြင်း")],
     ["/cod-settlement", tx("COD Settlement", "COD ငွေစာရင်းရှင်းခြင်း")],
     ["/wallet", tx("Rider Wallet", "Rider ငွေစာရင်း")],
