@@ -11,7 +11,7 @@ import { useAppState } from "@/hooks/useAppState";
 
 export default function CodSettlementPage() {
   const { language } = useAppState();
-  const tx = (en: string, my: string) => (language === "my" ? my : en);
+  const tx = useCallback((en: string, my: string) => (language === "my" ? my : en), [language]);
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [selectedLine, setSelectedLine] = useState<SettlementLine | null>(null);
