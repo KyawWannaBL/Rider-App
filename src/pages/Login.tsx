@@ -411,12 +411,12 @@ export default function Login() {
                       {t("Request Access", "အကောင့်လုပ်မည်")}
                     </button>
                     <a
-                      href="/android.apk"
-                      download="android.apk"
-                      className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 text-xs font-black text-slate-200 hover:bg-white/10"
+                      href="/downloads/Britium-Express-Rider.apk"
+                      download="Britium-Express-Rider.apk"
+                      className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 text-xs font-black text-cyan-100 hover:bg-cyan-400/15"
                     >
                       <Download className="h-4 w-4 text-cyan-300" />
-                      {t("Android APK", "Android APK")}
+                      {t("Download Rider APK", "Rider APK ဒေါင်းလုဒ်")}
                     </a>
                   </div>
                 </>
