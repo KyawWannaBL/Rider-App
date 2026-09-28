@@ -17,22 +17,22 @@ export function CODSettlementScreen({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-3xl bg-slate-950 p-5 text-white shadow-lg">
-        <div className="flex items-center gap-2 text-slate-300">
+      <section className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-5 text-white shadow-[0_22px_60px_rgba(15,23,42,.22)]">
+        <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-cyan-400/10 blur-2xl" /><div className="absolute -bottom-16 -left-8 h-40 w-40 rounded-full bg-blue-500/10 blur-2xl" /><div className="relative flex items-center gap-2 text-slate-300">
           <WalletCards className="h-5 w-5" />
           <span className="text-sm font-semibold">Cash to Deposit</span>
         </div>
-        <div className="mt-3">
+        <div className="relative mt-3">
           <span className="text-4xl font-black tracking-tight">{money(settlement.summary.cashToDeposit)}</span>
           <span className="ml-2 text-sm font-bold text-slate-300">MMK</span>
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-2">
+        <div className="relative mt-5 grid grid-cols-2 gap-2">
           <DarkMetric label="Delivered" value={String(settlement.summary.deliveredCount)} />
           <DarkMetric label="Collected" value={`${money(settlement.summary.collectedCod)} MMK`} />
         </div>
       </section>
 
-      <MobileCard className="p-4">
+      <MobileCard className="border-0 p-4 shadow-[0_14px_36px_rgba(15,23,42,.07)]">
         <div className="flex items-center gap-3">
           <div className={["grid h-12 w-12 place-items-center rounded-full", balanced ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"].join(" ")}>
             {balanced ? <ShieldCheck className="h-6 w-6" /> : <TriangleAlert className="h-6 w-6" />}
@@ -46,7 +46,7 @@ export function CODSettlementScreen({
         </div>
       </MobileCard>
 
-      <MobileCard className="overflow-hidden">
+      <MobileCard className="overflow-hidden border-0 shadow-[0_14px_36px_rgba(15,23,42,.07)]">
         <div className="border-b border-slate-200 p-4">
           <h2 className="font-black">Daily Summary</h2>
         </div>
@@ -69,7 +69,7 @@ export function CODSettlementScreen({
               type="button"
               key={line.id}
               onClick={() => onSelectLine?.(line)}
-              className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm active:scale-[0.99]"
+              className="w-full rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-[0_10px_28px_rgba(15,23,42,.05)] transition hover:-translate-y-0.5 hover:shadow-md active:scale-[0.99]"
             >
               <div className="flex items-center gap-3">
                 <div className={["grid h-11 w-11 place-items-center rounded-xl", Math.abs(line.variance) < 0.01 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"].join(" ")}>
