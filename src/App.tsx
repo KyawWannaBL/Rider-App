@@ -20,6 +20,7 @@ import AvailabilityPage from "./pages/AvailabilityPage";
 import SupportPage from "./pages/SupportPage";
 import BranchOfficeSyncPage from "./pages/BranchOfficeSyncPage";
 import PendingApprovalPage from "./pages/PendingApprovalPage";
+import RiderRoutePage from "./pages/RiderRoutePage";
 
 function Splash() {
   return (
@@ -116,6 +117,7 @@ export default function App() {
             <Route path="pickup-verification" element={<RiderPickupPhotoQrPortal />} />
             <Route path="history"      element={<History />} />
             <Route path="profile"      element={<Profile />} />
+            <Route path="route" element={<RiderRoutePage />} />
             <Route path="delivery" element={<DeliveryPage />} />
             <Route path="branch-sync" element={<BranchOfficeSyncPage />} />
             <Route path="cod-settlement" element={<CodSettlementPage />} />
