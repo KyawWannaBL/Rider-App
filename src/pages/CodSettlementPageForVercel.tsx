@@ -1,177 +1,242 @@
-// @ts-nocheck
-// Compatibility contract: be_rider_delivery_wayplan_jobs · be_current_field_team_identity · be_rider_submit_cod_settlement.
-// Runtime COD handover uses be_field_team_cod_handover_queue_v1 and be_field_team_cod_handover_submit_v1.
-import { useEffect, useMemo, useState } from "react";
-import { Banknote, CheckCircle2, RefreshCw, Smartphone, UploadCloud } from "lucide-react";
-import { supabase } from "../integrations/supabase/client";
-import { useAppState } from "../hooks/useAppState";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Loader2, RefreshCw, UploadCloud } from "lucide-react";
+import { CODSettlementScreen } from "@/components/rider/CODSettlementScreen";
+import { RiderNotification } from "@/components/rider/RiderNotification";
+import { loadRiderSettlement, submitCodHandover } from "@/lib/riderOperations";
+import { useRiderRealtime } from "@/hooks/useRiderRealtime";
+import type { Settlement, SettlementLine } from "@/types/rider";
+import { useAppState } from "@/hooks/useAppState";
 
-function money(v:any){ return Number(v||0).toLocaleString()+" MMK"; }
-
-export default function CodSettlementPage(){
+export default function CodSettlementPage() {
   const { language } = useAppState();
-  const tx=(en:string,my:string)=>language==="my"?my:en;
-  const [jobs,setJobs]=useState<any[]>([]);
-  const [selectedId,setSelectedId]=useState("");
-  const [message,setMessage]=useState(tx("Loading delivered COD records...","ပို့ဆောင်ပြီး COD မှတ်တမ်းများကို ဖွင့်နေသည်..."));
-  const [loading,setLoading]=useState(false);
-  const [proof,setProof]=useState({name:"",data_url:""});
-  const [note,setNote]=useState("");
-  const [search,setSearch]=useState("");
+  const tx = (en: string, my: string) => (language === "my" ? my : en);
+  const [settlement, setSettlement] = useState<Settlement | null>(null);
+  const [rows, setRows] = useState<any[]>([]);
+  const [selectedLine, setSelectedLine] = useState<SettlementLine | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const [proof, setProof] = useState({ name: "", dataUrl: "" });
+  const [note, setNote] = useState("");
+  const [notification, setNotification] = useState<any>(null);
 
-  async function load(){
+  const load = useCallback(async () => {
     setLoading(true);
-    const {data,error}=await (supabase as any).rpc("be_field_team_cod_handover_queue_v1",{p_limit:300});
-    if(error){
-      setMessage(error.message);
+    try {
+      const next = await loadRiderSettlement();
+      setSettlement(next.settlement);
+      setRows(next.rawRows);
+      setSelectedLine((current) => {
+        if (!current) return null;
+        return next.settlement.lines.find((line) => line.id === current.id) || null;
+      });
+      setMessage(
+        tx(
+          `Synchronized ${next.settlement.lines.length} delivered COD record(s).`,
+          `ပို့ဆောင်ပြီး COD မှတ်တမ်း ${next.settlement.lines.length} ခု ချိတ်ဆက်ပြီးပါပြီ။`,
+        ),
+      );
+    } catch (error: any) {
+      setMessage(error?.message || tx("Unable to load COD settlement.", "COD စာရင်းရှင်းတမ်း ဖွင့်၍မရပါ။"));
+    } finally {
       setLoading(false);
+    }
+  }, [tx]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useRiderRealtime({
+    onSettlementChange: load,
+    onNotification: (payload) => setNotification(payload),
+  });
+
+  const rawSelected = useMemo(
+    () => rows.find((row) => String(row?.delivery_way_id || "") === selectedLine?.deliveryWayId) || null,
+    [rows, selectedLine],
+  );
+
+  const status = String(rawSelected?.cod_settlement_status || "PENDING_HANDOVER").toUpperCase();
+  const cleared = ["CLEARED", "SETTLED", "FINANCE_SETTLED"].includes(status);
+  const submitted = ["SUBMITTED_TO_FINANCE", "PENDING_FINANCE"].includes(status);
+
+  function selectFile(file?: File) {
+    if (!file) return;
+    if (file.size > 6 * 1024 * 1024) {
+      setMessage(tx("Proof photo must be 6 MB or less.", "သက်သေဓာတ်ပုံသည် 6 MB ထက်မကျော်ရပါ။"));
       return;
     }
-    if(data?.ok===false){
-      setMessage(data?.error||data?.code||tx("Unable to load COD handover queue.","COD လွှဲပြောင်းစာရင်းကို ဖွင့်၍မရပါ။"));
-      setLoading(false);
-      return;
-    }
-    const rows=Array.isArray(data?.jobs)?data.jobs:[];
-    setJobs(rows);
-    setSelectedId((current)=>current && rows.some((r:any)=>r.delivery_way_id===current)?current:(rows[0]?.delivery_way_id||""));
-    setMessage(tx(
-      `Synchronized ${rows.length} delivered COD record(s). ${Number(data?.pending_count||0)} pending Finance handover.`,
-      `ပို့ဆောင်ပြီး COD မှတ်တမ်း ${rows.length} ခု ချိတ်ဆက်ပြီးပါပြီ။ Finance လွှဲပြောင်းရန် ${Number(data?.pending_count||0)} ခု စောင့်နေပါသည်။`
-    ));
-    setLoading(false);
-  }
-
-  useEffect(()=>{ void load(); },[]);
-
-  const filtered=useMemo(()=>{
-    const q=search.trim().toLowerCase();
-    if(!q)return jobs;
-    return jobs.filter((r:any)=>[
-      r.delivery_way_id,r.waybill_no,r.recipient_name,r.recipient_phone,r.township,
-      r.vehicle_code,r.rider_name,r.driver_name,r.helper_name,r.cod_settlement_status
-    ].filter(Boolean).join(" ").toLowerCase().includes(q));
-  },[jobs,search]);
-
-  const selected=jobs.find((r:any)=>r.delivery_way_id===selectedId)||null;
-  const status=String(selected?.cod_settlement_status||"PENDING_HANDOVER").toUpperCase();
-  const cleared=["CLEARED","SETTLED","FINANCE_SETTLED"].includes(status);
-  const submitted=["SUBMITTED_TO_FINANCE","PENDING_FINANCE"].includes(status);
-
-  function selectFile(file?:File){
-    if(!file)return;
-    if(file.size>6*1024*1024){
-      setMessage(tx("Proof photo must be 6 MB or less.","သက်သေဓာတ်ပုံသည် 6 MB ထက်မကျော်ရပါ။"));
-      return;
-    }
-    const reader=new FileReader();
-    reader.onload=()=>setProof({name:file.name,data_url:String(reader.result||"")});
+    const reader = new FileReader();
+    reader.onload = () => setProof({ name: file.name, dataUrl: String(reader.result || "") });
     reader.readAsDataURL(file);
   }
 
-  async function submit(){
-    if(!selected?.delivery_way_id)return;
-    if(cleared){
-      setMessage(tx("This COD settlement is already cleared.","ဤ COD စာရင်းရှင်းတမ်းကို Cleared ပြုလုပ်ပြီးပါပြီ။"));
+  async function submitSelected() {
+    if (!selectedLine || !rawSelected) return;
+    if (cleared) {
+      setMessage(tx("This settlement is already cleared.", "ဤ COD စာရင်းရှင်းတမ်းကို Cleared ပြုလုပ်ပြီးပါပြီ။"));
       return;
     }
+
     setLoading(true);
-    const {data,error}=await (supabase as any).rpc("be_field_team_cod_handover_submit_v1",{
-      p_delivery_way_id:selected.delivery_way_id,
-      p_proof_photo_name:proof.name||null,
-      p_proof_photo_data_url:proof.data_url||null,
-      p_note:note.trim()||null,
-    });
-    if(error || data?.ok===false){
-      setMessage(error?.message||data?.error||data?.code||tx("COD handover failed.","COD လွှဲပြောင်းမှု မအောင်မြင်ပါ။"));
+    try {
+      const result = await submitCodHandover(selectedLine.deliveryWayId, {
+        proofPhotoName: proof.name || undefined,
+        proofDataUrl: proof.dataUrl || undefined,
+        note: note.trim() || undefined,
+      });
+
+      setMessage(
+        tx(
+          `${selectedLine.deliveryWayId}: submitted to Finance. Reference ${result?.settlement_reference || "-"}.`,
+          `${selectedLine.deliveryWayId}: Finance သို့ လွှဲပြောင်းတင်သွင်းပြီးပါပြီ။ Reference ${result?.settlement_reference || "-"}။`,
+        ),
+      );
+      setProof({ name: "", dataUrl: "" });
+      setNote("");
+      setSelectedLine(null);
+      await load();
+    } catch (error: any) {
+      setMessage(error?.message || tx("COD handover failed.", "COD လွှဲပြောင်းမှု မအောင်မြင်ပါ။"));
+    } finally {
       setLoading(false);
-      return;
     }
-    setMessage(tx(
-      `${selected.delivery_way_id}: COD handover submitted to Finance. Reference ${data.settlement_reference||"-"}.`,
-      `${selected.delivery_way_id}: COD ကို Finance သို့ လွှဲပြောင်းတင်သွင်းပြီးပါပြီ။ Reference ${data.settlement_reference||"-"}။`
-    ));
-    setProof({name:"",data_url:""});
-    setNote("");
-    await load();
+  }
+
+  if (loading && !settlement) {
+    return (
+      <div className="flex min-h-[65vh] items-center justify-center bg-slate-100">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-700" />
+          <p className="mt-3 font-black text-slate-700">{tx("Loading COD ledger...", "COD စာရင်းကို ဖွင့်နေသည်...")}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-7xl space-y-5">
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="min-h-screen bg-slate-100 p-4 pb-10 sm:p-6">
+      {notification && (
+        <RiderNotification
+          title={String(notification.title || tx("Settlement update", "COD စာရင်းအသိပေးချက်"))}
+          message={String(notification.message || notification.body || tx("Finance status changed.", "Finance အခြေအနေ ပြောင်းလဲထားပါသည်။"))}
+          actionLabel={tx("Refresh", "ပြန်ဖွင့်ရန်")}
+          onAction={() => {
+            setNotification(null);
+            void load();
+          }}
+          onClose={() => setNotification(null)}
+        />
+      )}
+
+      <div className="mx-auto max-w-2xl space-y-4">
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-black tracking-[0.3em] text-blue-600">BRITIUM EXPRESS</p>
-              <h1 className="mt-2 text-3xl font-black text-slate-950">{tx("COD Handover & Settlement","COD ငွေလွှဲပြောင်း / စာရင်းရှင်းခြင်း")}</h1>
-              <p className="mt-2 font-semibold text-slate-600">{tx(
-                "Only completed deliveries are shown. Expected and collected COD values are read-only and synchronized from Data Entry and Delivery.",
-                "ပို့ဆောင်ပြီး Way များကိုသာ ပြသပါသည်။ ရရှိရမည့် COD နှင့် ကောက်ခံပြီး COD တန်ဖိုးများကို Data Entry နှင့် Delivery မှ အလိုအလျောက်ချိတ်ဆက်ထားပြီး ပြင်ဆင်၍မရပါ။"
-              )}</p>
+              <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-700">BRITIUM EXPRESS</p>
+              <h1 className="mt-2 text-2xl font-black text-slate-950">{tx("COD Settlement", "COD ငွေစာရင်းရှင်းခြင်း")}</h1>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+                {tx(
+                  "Expected COD is server-authoritative and read-only. Rider only submits the actual Finance handover.",
+                  "ရရှိရမည့် COD တန်ဖိုးကို Backend မှ အတည်ပြုထားပြီး Rider မှ ပြင်ဆင်၍မရပါ။ Rider သည် Finance လွှဲပြောင်းမှုကိုသာ တင်သွင်းပါသည်။",
+                )}
+              </p>
             </div>
-            <button onClick={()=>void load()} disabled={loading} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50">
-              <RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`} /> {tx("Synchronize","ချိတ်ဆက်ပြန်ယူရန်")}
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-white"
+            >
+              <RefreshCw className={["h-5 w-5", loading ? "animate-spin" : ""].join(" ")} />
             </button>
           </div>
-          <div className="mt-4 rounded-2xl bg-blue-50 p-3 text-sm font-bold text-blue-900">{message}</div>
+          {message && <div className="mt-4 rounded-2xl bg-blue-50 p-3 text-sm font-bold text-blue-900">{message}</div>}
         </section>
 
-        <div className="grid gap-5 xl:grid-cols-[390px_1fr]">
-          <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder={tx("Search Way ID / recipient / status","Way ID / လက်ခံသူ / Status ရှာရန်")} className="mb-3 h-11 w-full rounded-2xl border border-slate-200 px-4 font-semibold outline-none focus:border-blue-500"/>
-            <div className="max-h-[720px] space-y-3 overflow-y-auto">
-              {filtered.length===0 && <div className="rounded-2xl bg-slate-50 p-6 text-center font-bold text-slate-500">{tx("No delivered COD records.","ပို့ဆောင်ပြီး COD မှတ်တမ်း မရှိပါ။")}</div>}
-              {filtered.map((r:any)=>{
-                const active=r.delivery_way_id===selectedId;
-                const s=String(r.cod_settlement_status||"PENDING_HANDOVER").toUpperCase();
-                return <button key={r.delivery_way_id} onClick={()=>setSelectedId(r.delivery_way_id)} className={`w-full rounded-2xl border p-4 text-left transition ${active?"border-blue-500 bg-blue-50":"border-slate-200 bg-white hover:bg-slate-50"}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div><p className="font-mono text-sm font-black text-blue-700">{r.delivery_way_id}</p><p className="mt-1 font-black text-slate-950">{r.recipient_name||"-"}</p></div>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black">{s}</span>
-                  </div>
-                  <p className="mt-2 text-sm font-bold text-slate-600">{money(r.authoritative_cod_collected||r.cod_collected)}</p>
-                  <p className="mt-1 text-xs text-slate-500">{r.township||"-"} · {r.payment_mode||"CASH"}</p>
-                </button>
-              })}
+        {settlement && <CODSettlementScreen settlement={settlement} onSelectLine={setSelectedLine} />}
+
+        {selectedLine && (
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-sm font-black text-blue-700">{selectedLine.deliveryWayId}</p>
+                <h2 className="mt-1 text-xl font-black text-slate-950">{tx("Finance Handover", "Finance သို့ COD လွှဲပြောင်းခြင်း")}</h2>
+              </div>
+              <span className={[
+                "rounded-full px-3 py-2 text-xs font-black",
+                cleared ? "bg-emerald-100 text-emerald-800" : submitted ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800",
+              ].join(" ")}>{status}</span>
             </div>
-          </aside>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            {!selected ? <div className="p-10 text-center font-bold text-slate-500">{tx("Select a delivered Way.","ပို့ဆောင်ပြီး Way တစ်ခုရွေးပါ။")}</div> : <>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div><p className="font-mono text-sm font-black text-blue-700">{selected.delivery_way_id}</p><h2 className="mt-1 text-2xl font-black text-slate-950">{selected.recipient_name||"-"}</h2><p className="text-sm font-semibold text-slate-500">{selected.address||selected.township||"-"}</p></div>
-                <span className={`rounded-full px-3 py-2 text-xs font-black ${cleared?"bg-emerald-100 text-emerald-800":submitted?"bg-blue-100 text-blue-800":"bg-amber-100 text-amber-800"}`}>{status}</span>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-black text-slate-500">{tx("Expected COD", "ရရှိရမည့် COD")}</p>
+                <p className="mt-2 text-lg font-black">{selectedLine.expectedCod.toLocaleString()} MMK</p>
               </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-black text-slate-500">{tx("Expected COD","ရရှိရမည့် COD")}</p><p className="mt-2 text-xl font-black">{money(selected.authoritative_cod_expected||selected.calculated_cod_amount||selected.cod_amount)}</p></div>
-                <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-black text-slate-500">{tx("Collected COD","ကောက်ခံပြီး COD")}</p><p className="mt-2 text-xl font-black">{money(selected.authoritative_cod_collected||selected.cod_collected)}</p></div>
-                <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-black text-slate-500">{tx("Payment Channel","ငွေပေးချေမှုနည်းလမ်း")}</p><p className="mt-2 flex items-center gap-2 text-lg font-black">{String(selected.payment_mode||"CASH").toUpperCase()==="CASH"?<Banknote className="h-5 w-5"/>:<Smartphone className="h-5 w-5"/>}{selected.payment_mode||"CASH"}</p></div>
-                <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-black text-slate-500">{tx("Vehicle / Wayplan","ယာဉ် / Wayplan")}</p><p className="mt-2 text-sm font-black">{selected.vehicle_code||selected.vehicle_name||"-"}</p><p className="text-xs font-bold text-slate-500">{selected.wayplan_id||"-"}</p></div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-black text-slate-500">{tx("Collected COD", "ကောက်ခံပြီး COD")}</p>
+                <p className="mt-2 text-lg font-black">{selectedLine.collectedCod.toLocaleString()} MMK</p>
               </div>
+            </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border p-4"><p className="text-xs font-black text-slate-500">Rider</p><p className="mt-1 font-black">{selected.rider_name||selected.rider_code||"-"}</p></div>
-                <div className="rounded-2xl border p-4"><p className="text-xs font-black text-slate-500">Driver</p><p className="mt-1 font-black">{selected.driver_name||selected.driver_code||"-"}</p></div>
-                <div className="rounded-2xl border p-4"><p className="text-xs font-black text-slate-500">Helper</p><p className="mt-1 font-black">{selected.helper_name||selected.helper_code||"-"}</p></div>
-              </div>
-
-              {!cleared && <>
-                <div className="mt-5 rounded-2xl border border-dashed border-slate-300 p-4">
-                  <label className="flex cursor-pointer items-center gap-3 font-black text-slate-700"><UploadCloud className="h-5 w-5"/>{tx("Attach handover proof photo (optional)","ငွေလွှဲပြောင်းသက်သေဓာတ်ပုံ ထည့်ရန် (မလိုအပ်လျှင်ကျော်နိုင်)")}</label>
-                  <input type="file" accept="image/*" capture="environment" onChange={(e)=>selectFile(e.target.files?.[0])} className="mt-3 w-full rounded-xl border p-3"/>
-                  {proof.name && <p className="mt-2 text-sm font-bold text-blue-700">{proof.name}</p>}
-                  {proof.data_url && <img src={proof.data_url} className="mt-3 h-44 rounded-2xl object-cover"/>}
+            {!cleared && !submitted && (
+              <>
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-300 p-4">
+                  <label className="flex cursor-pointer items-center gap-3 font-black text-slate-700">
+                    <UploadCloud className="h-5 w-5" />
+                    {tx("Attach handover proof (optional)", "ငွေလွှဲပြောင်းသက်သေဓာတ်ပုံ ထည့်ရန် (မလိုအပ်လျှင်ကျော်နိုင်)")}
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(event) => selectFile(event.target.files?.[0])}
+                    className="mt-3 w-full rounded-xl border border-slate-200 p-3"
+                  />
+                  {proof.dataUrl && <img src={proof.dataUrl} alt="COD handover proof" className="mt-3 h-44 w-full rounded-2xl object-cover" />}
                 </div>
-                <textarea value={note} onChange={(e)=>setNote(e.target.value)} placeholder={tx("Handover note (optional)","လွှဲပြောင်းမှတ်ချက် (မလိုအပ်လျှင်ကျော်နိုင်)")} className="mt-4 min-h-[100px] w-full rounded-2xl border border-slate-200 p-4 font-semibold outline-none focus:border-blue-500"/>
-                <button onClick={()=>void submit()} disabled={loading || submitted || !selected.eligible_to_handover} className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-blue-700 px-5 font-black text-white disabled:opacity-50">
-                  {submitted?<><CheckCircle2 className="h-5 w-5"/>{tx("Submitted to Finance","Finance သို့တင်သွင်းပြီး")}</>:tx("Submit COD Handover to Finance","COD ကို Finance သို့ လွှဲပြောင်းတင်သွင်းမည်")}
+
+                <textarea
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder={tx("Handover note (optional)", "လွှဲပြောင်းမှတ်ချက် (မလိုအပ်လျှင်ကျော်နိုင်)")}
+                  className="mt-4 min-h-[96px] w-full rounded-2xl border border-slate-200 p-4 font-semibold outline-none focus:border-blue-500"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => void submitSelected()}
+                  disabled={loading || !rawSelected?.eligible_to_handover}
+                  className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 font-black text-white disabled:opacity-40"
+                >
+                  <CheckCircle2 className="h-5 w-5" />
+                  {tx("Submit COD Handover to Finance", "COD ကို Finance သို့ လွှဲပြောင်းတင်သွင်းမည်")}
                 </button>
-              </>}
-              {cleared && <div className="mt-5 flex items-center gap-2 rounded-2xl bg-emerald-50 p-4 font-black text-emerald-800"><CheckCircle2 className="h-5 w-5"/>{tx("Finance settlement cleared.","Finance စာရင်းရှင်းတမ်း Cleared ဖြစ်ပြီးပါပြီ။")}</div>}
-            </>}
+              </>
+            )}
+
+            {submitted && (
+              <div className="mt-4 rounded-2xl bg-blue-50 p-4 font-black text-blue-800">
+                {tx("Submitted to Finance and waiting for verification.", "Finance သို့ တင်သွင်းပြီး စစ်ဆေးအတည်ပြုရန် စောင့်နေပါသည်။")}
+              </div>
+            )}
+
+            {cleared && (
+              <div className="mt-4 rounded-2xl bg-emerald-50 p-4 font-black text-emerald-800">
+                {tx("Finance settlement cleared.", "Finance စာရင်းရှင်းတမ်း Cleared ဖြစ်ပြီးပါပြီ။")}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setSelectedLine(null)}
+              className="mt-3 min-h-12 w-full rounded-2xl border border-slate-200 bg-white font-black text-slate-700"
+            >
+              {tx("Close", "ပိတ်ရန်")}
+            </button>
           </section>
-        </div>
+        )}
       </div>
     </div>
   );
