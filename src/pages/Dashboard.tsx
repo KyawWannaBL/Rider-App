@@ -17,6 +17,7 @@ import {
 import { Link } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
+import { riderFeedback } from "../lib/riderFeedback";
 
 function money(value:any){ return Number(value||0).toLocaleString()+" MMK"; }
 
@@ -50,6 +51,7 @@ export default function Dashboard() {
     else if(settlementResult.error) setMessage(settlementResult.error.message);
     else setMessage(dailyResult.data?.error || tx("Unable to load today's delivery summary.","ယနေ့ ပို့ဆောင်မှုအနှစ်ချုပ်ကို ဖွင့်၍မရပါ။"));
     if(!dailyResult.error && dailyResult.data?.ok!==false){
+      riderFeedback("success");
       setMessage(tx("Enterprise Portal and today's field settlement are synchronized.","Enterprise Portal နှင့် ယနေ့ Field Settlement အချက်အလက်များ ချိတ်ဆက်ပြီးပါပြီ။"));
     }
     setLoading(false);
@@ -116,25 +118,25 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="be-page min-h-screen p-4 sm:p-6">
+    <div className="v142-portal-bg min-h-screen p-4 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-5">
-        <section className="be-surface rounded-[30px] p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <section className="relative overflow-hidden rounded-[32px] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,.22)]">
+          <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" /><div className="pointer-events-none absolute -bottom-16 left-10 h-44 w-44 rounded-full bg-[#d4af37]/10 blur-3xl" /><div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-black tracking-[0.35em] text-blue-600">BRITIUM EXPRESS</p>
-              <h1 className="mt-2 text-3xl font-black text-slate-950">{tx("Field Team Daily Dashboard","Rider / Driver / Helper နေ့စဉ် Dashboard")}</h1>
-              <p className="mt-2 font-semibold text-slate-600">
+              <p className="text-xs font-black tracking-[0.35em] text-[#f4d66d]">BRITIUM EXPRESS</p>
+              <h1 className="mt-2 text-3xl font-black text-white">{tx("Field Team Daily Dashboard","Rider / Driver / Helper နေ့စဉ် Dashboard")}</h1>
+              <p className="mt-2 font-semibold text-slate-300">
                 {tx(
                   "Completed and failed delivery stops leave the active work screen and are summarized here for the day, including Finance reconciliation.",
                   "ပို့ဆောင်အောင်မြင်ပြီးသော Way နှင့် မအောင်မြင်သော Way များကို Active လုပ်ငန်းစာရင်းမှ ဖယ်ရှားပြီး ယနေ့ Dashboard တွင် Finance စာရင်းညှိနှိုင်းမှုနှင့်အတူ စုစည်းပြသပါသည်။"
                 )}
               </p>
-              <p className="mt-2 text-sm font-bold text-slate-500">
+              <p className="mt-2 text-sm font-bold text-slate-400">
                 {daily.identity?.display_name||data.identity?.display_name||daily.identity?.worker_code||data.identity?.worker_code||"Field Team"} · {daily.identity?.worker_code||data.identity?.worker_code||"-"} · {daily.identity?.role||data.identity?.role||"-"} · {data.identity?.branch_code||"No branch"}
               </p>
-              <p className="mt-1 text-xs font-black text-blue-700">{tx("Work date","လုပ်ငန်းရက်")}: {daily.work_date||"-"}</p>
+              <p className="mt-1 text-xs font-black text-cyan-300">{tx("Work date","လုပ်ငန်းရက်")}: {daily.work_date||"-"}</p>
             </div>
-            <button onClick={load} disabled={loading} className="be-primary-button min-h-12 px-4 text-sm disabled:opacity-50">
+            <button onClick={load} disabled={loading} className="v142-button-sheen v142-jelly inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#d4af37] to-[#f4d66d] px-4 text-sm font-black text-slate-950 shadow-[0_14px_30px_rgba(212,175,55,.18)] disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`} /> {tx("Sync Enterprise","Enterprise နှင့် Sync")}
             </button>
           </div>
@@ -150,8 +152,8 @@ export default function Dashboard() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {dailyCards.map(([label,value,Icon]:any)=>(
-              <div key={label} className="be-kpi-card p-5 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(15,23,42,.09)]">
-                <div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><Icon className="h-5 w-5 text-blue-700"/></div>
+              <div key={label} className="v142-portal-card group p-5 transition duration-200 hover:-translate-y-1 hover:shadow-[0_20px_46px_rgba(15,23,42,.12)]">
+                <div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-amber-50 to-cyan-50 text-[#b38d13] shadow-sm"><Icon className="h-5 w-5"/></div></div>
                 <p className="mt-3 text-2xl font-black text-slate-950">{value}</p>
               </div>
             ))}
@@ -280,7 +282,7 @@ export default function Dashboard() {
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {portalCards.map(([label,value,Icon]:any)=>(
             <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><Icon className="h-5 w-5 text-blue-700"/></div>
+              <div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-amber-50 to-cyan-50 text-[#b38d13] shadow-sm"><Icon className="h-5 w-5"/></div></div>
               <p className="mt-3 text-2xl font-black text-slate-950">{value}</p>
             </div>
           ))}

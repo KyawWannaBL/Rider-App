@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bell,
   CheckCheck,
@@ -16,11 +16,13 @@ import {
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
+import { riderFeedback } from "../lib/riderFeedback";
 
 type NotificationRow = Record<string, any>;
 
 const navItems = [
   { to: "/dashboard", en: "Dashboard", my: "ပင်မ", icon: Home },
+  { to: "/rider-portal", en: "Portal", my: "Portal", icon: UserRound },
   { to: "/jobs", en: "Pickup", my: "Pickup", icon: PackageCheck },
   { to: "/route", en: "Route", my: "လမ်းကြောင်း", icon: MapPinned },
   { to: "/delivery", en: "Delivery", my: "ပို့ဆောင်", icon: Route },
@@ -53,6 +55,7 @@ export function Layout() {
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const unreadCount = notifications.filter((n) => !(n.is_read || n.read_at)).length;
+  const previousUnread = useRef(0);
 
   async function loadNotifications() {
     setLoadingNotifications(true);
@@ -61,7 +64,11 @@ export function Layout() {
         p_payload: { notification_limit: 50 },
       });
       if (error) throw error;
-      setNotifications(Array.isArray(data?.notifications) ? data.notifications : []);
+      const next = Array.isArray(data?.notifications) ? data.notifications : [];
+      const nextUnread = next.filter((n: any) => !(n.is_read || n.read_at)).length;
+      if (previousUnread.current > 0 && nextUnread > previousUnread.current) riderFeedback("dispatch");
+      previousUnread.current = nextUnread;
+      setNotifications(next);
     } catch (error) {
       console.error("Unable to load Rider notifications", error);
       setNotifications([]);
@@ -107,7 +114,7 @@ export function Layout() {
         <div className="mx-auto max-w-7xl">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[18px] bg-slate-950 text-white shadow-[0_12px_30px_rgba(15,23,42,.22)]">
+              <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[18px] bg-slate-950 text-white shadow-[0_12px_30px_rgba(15,23,42,.22)] v142-glow">
                 <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-amber-300" />
                 <span className="text-xl font-black tracking-tight">B</span>
               </div>
@@ -126,7 +133,7 @@ export function Layout() {
               <button
                 type="button"
                 onClick={toggleLanguage}
-                className="be-icon-button"
+                className="be-icon-button v142-jelly"
                 aria-label={tx("Switch language", "ဘာသာစကားပြောင်းရန်")}
                 title={tx("Switch to Myanmar", "English သို့ပြောင်းရန်")}
               >
@@ -140,7 +147,7 @@ export function Layout() {
                   setOpenNotifications((value) => !value);
                   void loadNotifications();
                 }}
-                className="be-icon-button relative"
+                className="be-icon-button relative v142-jelly"
                 aria-label={tx("Notifications", "အသိပေးချက်များ")}
               >
                 <Bell className="h-5 w-5" />
@@ -154,7 +161,7 @@ export function Layout() {
               <button
                 type="button"
                 onClick={signOut}
-                className="be-icon-button text-rose-600 hover:border-rose-200 hover:bg-rose-50"
+                className="be-icon-button v142-jelly text-rose-600 hover:border-rose-200 hover:bg-rose-50"
                 aria-label={tx("Sign Out", "အကောင့်မှထွက်ရန်")}
               >
                 <LogOut className="h-5 w-5" />
@@ -225,12 +232,12 @@ export function Layout() {
                   className={[
                     "cursor-pointer rounded-2xl border p-4 transition-all duration-200",
                     unread
-                      ? "border-blue-100 bg-blue-50/80 shadow-sm hover:-translate-y-0.5 hover:shadow-md"
+                      ? "border-blue-100 bg-amber-50/80 shadow-sm hover:-translate-y-0.5 hover:shadow-md"
                       : "border-slate-100 bg-white hover:bg-slate-50",
                   ].join(" ")}
                 >
                   <div className="flex items-start gap-3">
-                    <span className={["mt-1 h-2.5 w-2.5 shrink-0 rounded-full", unread ? "bg-blue-600" : "bg-slate-300"].join(" ")} />
+                    <span className={["mt-1 h-2.5 w-2.5 shrink-0 rounded-full", unread ? "bg-[#d4af37]" : "bg-slate-300"].join(" ")} />
                     <div className="min-w-0 flex-1">
                       <h3 className="font-black text-slate-950">{n.title || tx("Workflow notification", "လုပ်ငန်းစဉ်အသိပေးချက်")}</h3>
                       <p className="mt-1 text-sm font-semibold leading-5 text-slate-600">{n.message || "-"}</p>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
   AlertCircle,
   ArrowLeft,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
+import { riderFeedback } from "../lib/riderFeedback";
 
 type View = "password" | "forgot" | "request";
 
@@ -91,9 +93,11 @@ export default function Login() {
       });
       if (error) throw error;
 
+      riderFeedback("success");
       setSuccessMsg(t("Login successful. Opening Rider jobs…", "အောင်မြင်ပါပြီ။ Rider jobs ဖွင့်နေသည်…"));
       window.setTimeout(() => navigate("/jobs", { replace: true }), 250);
     } catch (error: any) {
+      riderFeedback("error");
       setErrorMsg(error?.message || t("Invalid login credentials.", "အကောင့်ဝင် အချက်အလက်မှားနေသည်။"));
     } finally {
       setLoading(false);
@@ -109,6 +113,7 @@ export default function Login() {
         redirectTo: `${window.location.origin}/#/login`,
       });
       if (error) throw error;
+      riderFeedback("success");
       setSuccessMsg(t("Recovery link sent. Please check your email.", "Recovery link ပို့ပြီးပါပြီ။"));
     } catch (error: any) {
       setErrorMsg(error?.message || t("Unable to send recovery link.", "Recovery link ပို့မရပါ။"));
@@ -135,6 +140,7 @@ export default function Login() {
       });
       if (error) throw error;
 
+      riderFeedback("success");
       setSuccessMsg(t(
         "Request submitted. Admin approval may be required.",
         "Request တင်ပြီးပါပြီ။ Admin approval လိုနိုင်ပါသည်။"
@@ -147,7 +153,7 @@ export default function Login() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#07111f] text-slate-100">
+    <main className="v142-shell-bg relative min-h-screen overflow-hidden text-slate-100">
       <div
         className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-20"
         style={{ backgroundImage: "url('/images/rider-login-bg.jpg'), url('/logo.png')" }}
@@ -165,7 +171,7 @@ export default function Login() {
       </button>
 
       <div className="relative z-10 mx-auto grid min-h-screen w-full max-w-6xl items-center gap-8 px-4 py-16 lg:grid-cols-[1.05fr_.95fr] lg:px-8">
-        <section className="hidden lg:block">
+        <motion.section initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .5 }} className="hidden lg:block">
           <div className="max-w-xl">
             <div className="mb-7 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md">
               {!logoFailed ? (
@@ -208,9 +214,9 @@ export default function Login() {
               ))}
             </div>
           </div>
-        </section>
+        </motion.section>
 
-        <section className="mx-auto w-full max-w-md">
+        <motion.section initial={{ opacity: 0, y: 18, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: .42, delay: .06 }} className="mx-auto w-full max-w-md">
           <div className="mb-6 text-center lg:hidden">
             {!logoFailed ? (
               <img
@@ -226,8 +232,8 @@ export default function Login() {
             <p className="mt-1 text-sm font-semibold text-slate-300">{t("Rider App", "Rider App")}</p>
           </div>
 
-          <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#0b1320]/95 shadow-2xl backdrop-blur-xl">
-            <div className="h-1.5 bg-gradient-to-r from-emerald-500 via-cyan-400 to-blue-500" />
+          <div className="v142-panel overflow-hidden rounded-[30px] border border-white/10 shadow-2xl backdrop-blur-xl">
+            <div className="h-1.5 bg-gradient-to-r from-[#d4af37] via-[#f4d66d] to-cyan-400" />
             <div className="p-6 sm:p-8">
               <div className="mb-6 flex items-center gap-3">
                 <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-300">
@@ -315,7 +321,7 @@ export default function Login() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="v142-button-sheen v142-jelly flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#d4af37] via-[#f4d66d] to-[#d4af37] px-4 font-black uppercase tracking-wider text-slate-950 shadow-[0_16px_38px_rgba(212,175,55,.18)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
                     {loading ? t("Authenticating…", "စစ်ဆေးနေသည်…") : t("Login", "အကောင့်ဝင်မည်")}
@@ -413,7 +419,7 @@ export default function Login() {
                     <a
                       href="/downloads/Britium-Express-Rider.apk"
                       download="Britium-Express-Rider.apk"
-                      className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 text-xs font-black text-cyan-100 hover:bg-cyan-400/15"
+                      className="v142-jelly flex h-11 items-center justify-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 text-xs font-black text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-400/15 hover:shadow-[0_12px_28px_rgba(34,211,238,.12)]"
                     >
                       <Download className="h-4 w-4 text-cyan-300" />
                       {t("Download Rider APK", "Rider APK ဒေါင်းလုဒ်")}
@@ -427,7 +433,7 @@ export default function Login() {
           <p className="mt-5 text-center text-[11px] font-semibold text-slate-500">
             © {new Date().getFullYear()} Britium Express · {t("Field Operations Platform", "Field Operations Platform")}
           </p>
-        </section>
+        </motion.section>
       </div>
     </main>
   );

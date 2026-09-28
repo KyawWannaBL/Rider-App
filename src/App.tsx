@@ -21,6 +21,7 @@ import SupportPage from "./pages/SupportPage";
 import BranchOfficeSyncPage from "./pages/BranchOfficeSyncPage";
 import PendingApprovalPage from "./pages/PendingApprovalPage";
 import RiderRoutePage from "./pages/RiderRoutePage";
+import RiderPortalPage from "./pages/RiderDashboard";
 
 function Splash() {
   return (
@@ -118,6 +119,7 @@ export default function App() {
             <Route path="history"      element={<History />} />
             <Route path="profile"      element={<Profile />} />
             <Route path="route" element={<RiderRoutePage />} />
+            <Route path="rider-portal" element={<RiderPortalPage />} />
             <Route path="delivery" element={<DeliveryPage />} />
             <Route path="branch-sync" element={<BranchOfficeSyncPage />} />
             <Route path="cod-settlement" element={<CodSettlementPage />} />

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import {
   AlertCircle,
   Award,
@@ -23,6 +24,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { ProfileDrawer } from "@/components/ProfileDrawer";
 import { supabase } from "@/integrations/supabase/client";
+import { riderFeedback } from "@/lib/riderFeedback";
 
 type RiderTab = "dashboard" | "jobs" | "route" | "cod" | "earnings" | "support" | "sync";
 
@@ -236,7 +238,9 @@ export default function RiderDashboard() {
     try {
       const next = await rpcSnapshot();
       setSnapshot(next);
+      riderFeedback("success");
     } catch (err: any) {
+      riderFeedback("error");
       setNotice({ type: "error", text: err?.message || "Enterprise sync failed." });
     } finally {
       setLoading(false);
@@ -260,20 +264,20 @@ export default function RiderDashboard() {
   return (
     <>
       <AppShell role="rider" onOpenProfile={() => setProfileOpen(true)}>
-        <main className="min-h-screen bg-slate-50 pb-28">
-          <section className="border-b border-slate-200 bg-white px-4 py-4">
-            <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+        <main className="v142-portal-bg min-h-screen pb-28">
+          <section className="relative overflow-hidden border-b border-slate-800 bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 px-4 py-5 text-white">
+            <div className="pointer-events-none absolute -right-12 -top-16 h-52 w-52 rounded-full bg-cyan-400/10 blur-3xl" /><div className="pointer-events-none absolute -bottom-20 left-20 h-52 w-52 rounded-full bg-[#d4af37]/10 blur-3xl" /><div className="relative mx-auto flex max-w-6xl items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-700">
+                  <span className="rounded-full border border-[#d4af37]/25 bg-[#d4af37]/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#f4d66d]">
                     Enterprise Sync
                   </span>
-                  <span className="text-xs font-bold text-slate-500">{dateTime(snapshot.generated_at)}</span>
+                  <span className="text-xs font-bold text-slate-400">{dateTime(snapshot.generated_at)}</span>
                 </div>
-                <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+                <h1 className="mt-2 text-2xl font-black tracking-tight text-white">
                   {snapshot.account?.display_name || "Rider Portal"}
                 </h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-slate-300">
                   Jobs, COD, route and proof are synchronized with Enterprise Portal.
                 </p>
               </div>
@@ -281,7 +285,7 @@ export default function RiderDashboard() {
               <button
                 type="button"
                 onClick={() => void refresh()}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-800 shadow-sm"
+                className="v142-button-sheen v142-jelly inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#f4d66d] px-4 text-sm font-black text-slate-950 shadow-[0_12px_30px_rgba(212,175,55,.18)]"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                 Sync
@@ -311,10 +315,10 @@ export default function RiderDashboard() {
                     key={tab.key}
                     type="button"
                     onClick={() => setActiveTab(tab.key)}
-                    className={`rounded-2xl border px-2 py-3 text-xs font-black transition ${
+                    className={`v142-jelly rounded-2xl border px-2 py-3 text-xs font-black transition-all duration-200 ${
                       active
-                        ? "border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200"
-                        : "border-slate-200 bg-white text-slate-600"
+                        ? "border-[#d4af37] bg-gradient-to-br from-[#d4af37] to-[#f4d66d] text-slate-950 shadow-[0_12px_28px_rgba(212,175,55,.18)]"
+                        : "border-slate-200 bg-white/95 text-slate-600 hover:-translate-y-0.5 hover:shadow-md"
                     }`}
                   >
                     <Icon className="mx-auto mb-1 h-4 w-4" />
@@ -394,7 +398,7 @@ function DashboardTab({ snapshot, jobs, pickups, notifications, stats, handleSta
           ) : (
             <div className="space-y-3">
               {nextNotifications.map((n) => (
-                <div key={n.id || `${n.pickup_id}-${n.created_at}`} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div key={n.id || `${n.pickup_id}-${n.created_at}`} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,.045)] transition hover:-translate-y-0.5 hover:shadow-md">
                   <div className="font-black text-slate-950">{n.title || "Notification"}</div>
                   <div className="mt-1 text-sm text-slate-600">{n.message || n.body || "-"}</div>
                   <div className="mt-2 text-xs font-bold text-slate-400">{dateTime(n.created_at)}</div>
@@ -442,7 +446,7 @@ function RouteTab({ jobs, handleStatus }: TabProps) {
       ) : (
         <div className="space-y-3">
           {routeJobs.map((job, index) => (
-            <div key={job.deliver_way_id} className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div key={job.deliver_way_id} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,.045)] transition hover:-translate-y-0.5 hover:shadow-md">
               <div className="flex gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-black text-blue-700">
                   {index + 1}
@@ -467,7 +471,7 @@ function RouteTab({ jobs, handleStatus }: TabProps) {
                     <button
                       type="button"
                       onClick={() => void handleStatus(job, "open")}
-                      className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-black text-white"
+                      className="v142-jelly rounded-xl bg-gradient-to-r from-slate-950 to-slate-800 px-3 py-2 text-xs font-black text-white shadow-sm"
                     >
                       Open Delivery Verification
                     </button>
@@ -665,7 +669,7 @@ function JobList({
   return (
     <div className="space-y-3">
       {jobs.map((job) => (
-        <div key={`${job.pickup_id}-${job.deliver_way_id}`} className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div key={`${job.pickup_id}-${job.deliver_way_id}`} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,.045)] transition hover:-translate-y-0.5 hover:shadow-md">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="font-mono text-sm font-black text-blue-700">{job.deliver_way_id}</div>
@@ -698,7 +702,7 @@ function JobList({
 
           {onStatus && (
             <div className="mt-4 flex flex-wrap gap-2">
-              <button onClick={() => void onStatus(job, "open")} className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-black text-white">
+              <button onClick={() => void onStatus(job, "open")} className="v142-jelly rounded-xl bg-gradient-to-r from-slate-950 to-slate-800 px-3 py-2 text-xs font-black text-white shadow-sm">
                 Open Delivery Verification
               </button>
             </div>
@@ -711,7 +715,7 @@ function JobList({
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Package; label: string; value: string | number }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="v142-portal-card rounded-[28px] p-5 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(15,23,42,.10)]">
       <div className="flex items-center justify-between">
         <div className="text-xs font-black uppercase tracking-widest text-slate-400">{label}</div>
         <Icon className="h-5 w-5 text-blue-700" />
@@ -723,7 +727,7 @@ function Metric({ icon: Icon, label, value }: { icon: typeof Package; label: str
 
 function Card({ title, icon: Icon, children }: { title: string; icon: typeof Package; children: React.ReactNode }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="v142-portal-card rounded-[28px] p-5 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(15,23,42,.10)]">
       <div className="mb-4 flex items-center gap-2">
         <Icon className="h-5 w-5 text-blue-700" />
         <h2 className="text-lg font-black text-slate-950">{title}</h2>
