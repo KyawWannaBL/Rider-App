@@ -15,6 +15,8 @@ export default function Profile() {
   const [snapshot, setSnapshot] = useState<any>({ identity: {}, workforce: {}, profile: {}, counts: {} });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(language === "my" ? "Rider Profile ကို ဖွင့်နေသည်..." : "Loading Rider profile...");
+  const [editMode,setEditMode]=useState(false);
+  const [editForm,setEditForm]=useState({full_name:"",phone:""});
 
   async function load() {
     setLoading(true);
@@ -25,9 +27,31 @@ export default function Profile() {
       setLoading(false);
       return;
     }
-    setSnapshot(data || { identity: {}, workforce: {}, profile: {}, counts: {} });
+    const next=data || { identity: {}, workforce: {}, profile: {}, counts: {} };
+    setSnapshot(next);
+    setEditForm({
+      full_name:String(next?.canonical?.display_name || next?.identity?.display_name || next?.workforce?.display_name || next?.workforce?.full_name || next?.profile?.full_name || ""),
+      phone:String(next?.workforce?.phone_primary || next?.workforce?.phone_e164 || next?.workforce?.phone || next?.profile?.phone || "")
+    });
     setMessage(tx("Profile synchronized with the authenticated workforce account.","Profile ကို အတည်ပြုထားသော Workforce အကောင့်နှင့် ချိတ်ဆက်ပြီးပါပြီ။"));
     setLoading(false);
+  }
+
+  async function saveProfile(){
+    setLoading(true);
+    setMessage(tx("Saving profile changes...","Profile အပြောင်းအလဲများကို သိမ်းနေသည်..."));
+    const {data,error}=await (supabase as any).rpc("be_field_profile_update_v1",{
+      p_full_name:editForm.full_name.trim()||null,
+      p_phone:editForm.phone.trim()||null,
+    });
+    if(error || data?.ok===false){
+      setMessage(error?.message || data?.error || tx("Unable to update profile.","Profile အချက်အလက် ပြင်ဆင်၍မရပါ။"));
+      setLoading(false);
+      return;
+    }
+    setMessage(tx("Profile synchronized to the workforce master and assignment system.","Profile ကို Workforce Master နှင့် Assignment System သို့ ချိတ်ဆက်သိမ်းဆည်းပြီးပါပြီ။"));
+    setEditMode(false);
+    await load();
   }
 
   useEffect(() => { load(); }, []);
@@ -92,14 +116,23 @@ export default function Profile() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={load}
-                disabled={loading}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 text-sm font-black ring-1 ring-white/20 hover:bg-white/15 disabled:opacity-50"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                {tx("Refresh Profile","Profile ပြန်ဖွင့်ရန်")}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={()=>setEditMode(v=>!v)}
+                  disabled={loading}
+                  className="inline-flex h-11 items-center justify-center rounded-2xl bg-white px-4 text-sm font-black text-blue-900 disabled:opacity-50"
+                >
+                  {editMode?tx("Cancel Edit","ပြင်ဆင်မှု ပယ်ဖျက်ရန်"):tx("Edit Profile","Profile ပြင်ဆင်ရန်")}
+                </button>
+                <button
+                  onClick={load}
+                  disabled={loading}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 text-sm font-black ring-1 ring-white/20 hover:bg-white/15 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                  {tx("Refresh Profile","Profile ပြန်ဖွင့်ရန်")}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -127,6 +160,17 @@ export default function Profile() {
                 <p className="text-sm font-semibold text-slate-500">{tx("Authenticated workforce identity and operational assignment.","အတည်ပြုထားသော ဝန်ထမ်းအချက်အလက်နှင့် လုပ်ငန်းတာဝန်ပေးမှု။")}</p>
               </div>
             </div>
+            {editMode && (
+              <div className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                <h3 className="font-black text-blue-950">{tx("Editable Personal Information","ပြင်ဆင်နိုင်သော ကိုယ်ရေးအချက်အလက်")}</h3>
+                <p className="mt-1 text-xs font-bold text-blue-700">{tx("Name and phone synchronize to the authenticated workforce master. Email, role, worker code and assignments remain controlled by Enterprise administrators.","အမည်နှင့် ဖုန်းနံပါတ်ကို Workforce Master သို့ ချိတ်ဆက်ပြောင်းလဲပါမည်။ Email, Role, Worker Code နှင့် Assignment များကို Enterprise Administrator မှသာ ထိန်းချုပ်ပါသည်။")}</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <label className="text-xs font-black text-slate-600">{tx("Full Name","အမည်အပြည့်အစုံ")}<input value={editForm.full_name} onChange={(e)=>setEditForm({...editForm,full_name:e.target.value})} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"/></label>
+                  <label className="text-xs font-black text-slate-600">{tx("Phone","ဖုန်း")}<input value={editForm.phone} onChange={(e)=>setEditForm({...editForm,phone:e.target.value})} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"/></label>
+                </div>
+                <button onClick={()=>void saveProfile()} disabled={loading || (!editForm.full_name.trim()&&!editForm.phone.trim())} className="mt-4 h-11 w-full rounded-xl bg-blue-700 px-4 text-sm font-black text-white disabled:opacity-50">{loading?tx("Saving...","သိမ်းနေသည်..."):tx("Save + Synchronize Profile","Profile သိမ်းပြီး ချိတ်ဆက်မည်")}</button>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               {details.map(([label, item]) => (
                 <div key={label} className="rounded-2xl border border-slate-200 p-4">
