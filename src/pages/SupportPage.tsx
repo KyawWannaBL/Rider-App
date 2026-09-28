@@ -85,11 +85,11 @@ export default function SupportPage(){
           <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-black">{tx("My Support History","အကူအညီတောင်းဆိုမှု မှတ်တမ်း")}</h2><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black">{tickets.length}</span></div>
           <div className="mt-4 space-y-3">
             {tickets.length===0?<p className="rounded-2xl bg-slate-50 p-6 text-center font-bold text-slate-500">{tx("No support tickets yet.","အကူအညီ Ticket မရှိသေးပါ။")}</p>:tickets.map(t=>{
-              const status=String(t.status||"OPEN").toUpperCase();
+              const status=String(t.enterprise_status||t.status||"OPEN").toUpperCase();
               const cls=["RESOLVED","CLOSED"].includes(status)?"bg-emerald-100 text-emerald-800":status==="REJECTED"?"bg-rose-100 text-rose-800":"bg-amber-100 text-amber-800";
               return <div key={t.id} className="rounded-2xl border border-slate-200 p-4">
                 <div className="flex items-start justify-between gap-3"><div><p className="font-black">{t.subject||t.ticket_type||"Support ticket"}</p><p className="mt-1 text-sm font-semibold text-slate-600">{t.message||"-"}</p></div><span className={`rounded-full px-3 py-1 text-xs font-black ${cls}`}>{status}</span></div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500"><span>{t.pickup_id||"-"}</span><span>·</span><span>{String(t.priority||"normal").toUpperCase()}</span><span>·</span><span>{t.created_at?new Date(t.created_at).toLocaleString():"-"}</span></div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500"><span>{t.cs_ticket_no||t.pickup_id||"-"}</span><span>·</span><span>{String(t.enterprise_priority||t.priority||"normal").toUpperCase()}</span><span>·</span><span>{t.enterprise_updated_at?new Date(t.enterprise_updated_at).toLocaleString():(t.created_at?new Date(t.created_at).toLocaleString():"-")}</span></div>
               </div>
             })}
           </div>
