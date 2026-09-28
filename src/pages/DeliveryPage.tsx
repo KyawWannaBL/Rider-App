@@ -579,7 +579,7 @@ export default function DeliveryPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4">
+    <div className="be-page min-h-screen p-4 pb-28 lg:pb-6">
       <style>{`
         @keyframes beJellyPress {
           0% { transform: scale(1,1); }
@@ -598,7 +598,7 @@ export default function DeliveryPage() {
         .be-jelly-action:hover { transform:translateY(-1px); box-shadow:0 10px 24px rgba(15,23,42,.14); }
       `}</style>
       <div className="mx-auto max-w-6xl space-y-4">
-        <section className="rounded-3xl bg-white p-5 shadow-sm border">
+        <section className="be-surface rounded-[30px] p-5">
           <h1 className="text-3xl font-black">{tx("Delivery / Drop-Off Process","ပို့ဆောင် / ပစ္စည်းချ လုပ်ငန်းစဉ်")}</h1>
           <p className="font-semibold text-slate-600">{tx("Assigned Wayplan stops, arrival, delivery proof, signature, COD/payment confirmation and failed delivery.","တာဝန်ပေးထားသော Wayplan မှတ်တိုင်များ၊ ရောက်ရှိမှု၊ ပို့ဆောင်သက်သေ၊ လက်မှတ်၊ COD/ငွေပေးချေမှု အတည်ပြုခြင်းနှင့် ပို့ဆောင်မအောင်မြင်မှုတို့ကို စီမံပါ။")}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
@@ -609,7 +609,7 @@ export default function DeliveryPage() {
         </section>
 
         <div className="grid gap-4 lg:grid-cols-[330px_1fr]">
-          <aside className="rounded-3xl bg-white p-4 shadow-sm border space-y-3 max-h-[78vh] overflow-y-auto">
+          <aside className="be-surface be-scrollbar max-h-[78vh] space-y-3 overflow-y-auto rounded-[30px] p-4">
             {pickups.map((p) => {
               const current = p.delivery_way_id === selected?.delivery_way_id;
               return (
@@ -630,7 +630,7 @@ export default function DeliveryPage() {
             })}
           </aside>
 
-          <section className="rounded-3xl bg-white p-5 shadow-sm border">
+          <section className="be-surface rounded-[30px] p-5">
             <h2 className="text-xl font-black">{selected?.delivery_way_id || "No delivery stop selected"}</h2>
             {selected && (
               <>
@@ -642,7 +642,7 @@ export default function DeliveryPage() {
                   <div className="md:col-span-2"><b>Address:</b> {selected.address || "-"}</div>
                 </div>
 
-                <section className="mt-4 rounded-3xl border border-blue-200 bg-blue-50 p-4">
+                <section className="mt-4 rounded-[26px] border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50/50 p-4 shadow-sm">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-lg font-black text-blue-950">{tx("Delivery Drop Workflow","ပို့ဆောင်ပစ္စည်းချ လုပ်ငန်းစဉ်")}</h3>
@@ -756,7 +756,7 @@ export default function DeliveryPage() {
                   )}
                 </div>
 
-                <section className="mt-5 rounded-3xl border bg-slate-50 p-4">
+                <section className="mt-5 rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-4">
                   <h3 className="text-lg font-black">{tx("Completion / Exception Control","ပို့ဆောင်ပြီး / မအောင်မြင် ထိန်းချုပ်မှု")}</h3>
                   <p className="mt-1 text-xs font-bold text-slate-500">{tx("Successful delivery and failed-delivery return are separate paths.","ပို့ဆောင်အောင်မြင်မှုနှင့် မအောင်မြင်၍ Warehouse ပြန်ပို့မှုကို သီးခြားလုပ်ငန်းစဉ်ဖြင့် ဆောင်ရွက်ပါ။")}</p>
 
@@ -808,7 +808,7 @@ export default function DeliveryPage() {
 
                 {confirmAction && (
                   <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-                    <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+                    <div className="w-full max-w-md rounded-[30px] border border-white/70 bg-white/95 p-5 shadow-[0_30px_80px_rgba(15,23,42,.22)] backdrop-blur-2xl">
                       <h3 className="text-xl font-black">{tx("Confirm action?","လုပ်ဆောင်ချက်ကို အတည်ပြုမည်လား?")}</h3>
                       <p className="mt-2 font-semibold text-slate-600">
                         {confirmAction==="accept" && tx("Accept this parcel?","ဤပါဆယ်ကို လက်ခံမည်လား?")}
