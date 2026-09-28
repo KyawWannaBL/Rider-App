@@ -22,6 +22,7 @@ type NotificationRow = Record<string, any>;
 
 const navItems = [
   { to: "/dashboard", en: "Dashboard", my: "ပင်မ", icon: Home },
+  { to: "/rider-portal", en: "Portal", my: "Portal", icon: UserRound },
   { to: "/jobs", en: "Pickup", my: "Pickup", icon: PackageCheck },
   { to: "/route", en: "Route", my: "လမ်းကြောင်း", icon: MapPinned },
   { to: "/delivery", en: "Delivery", my: "ပို့ဆောင်", icon: Route },
