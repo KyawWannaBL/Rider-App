@@ -1,0 +1,92 @@
+name: Build Rider Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "capacitor.config.ts"
+      - ".github/workflows/build-rider-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Install Capacitor Android tooling
+        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+
+      - name: Prepare shell web directory
+        run: |
+          mkdir -p dist
+          cat > dist/index.html <<'HTML'
+          <!doctype html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width,initial-scale=1">
+              <title>Britium Express Rider</title>
+            </head>
+            <body><p>Britium Express Rider</p></body>
+          </html>
+          HTML
+
+      - name: Generate Android project
+        run: npx cap add android
+
+      - name: Add Android permissions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("android/app/src/main/AndroidManifest.xml")
+          s=p.read_text()
+          perms=[
+            "android.permission.INTERNET",
+            "android.permission.CAMERA",
+            "android.permission.ACCESS_FINE_LOCATION",
+            "android.permission.ACCESS_COARSE_LOCATION"
+          ]
+          marker="<application"
+          additions=""
+          for perm in perms:
+              token=f'android:name="{perm}"'
+              if token not in s:
+                  additions += f'    <uses-permission android:name="{perm}" />\n'
+          s=s.replace(marker, additions+marker, 1)
+          p.write_text(s)
+          PY
+
+      - name: Build installable debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk Britium-Express-Rider.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Britium-Express-Rider-APK
+          path: Britium-Express-Rider.apk
+          retention-days: 30
