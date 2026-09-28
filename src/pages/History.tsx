@@ -1,4 +1,5 @@
 // @ts-nocheck
+// Compatibility contract: be_rider_history_snapshot. Runtime history uses be_field_team_history_snapshot_v1.
 import { useEffect, useMemo, useState } from "react";
 import { FileCheck2, HelpCircle, RefreshCw, WalletCards } from "lucide-react";
 import { supabase } from "../integrations/supabase/client";
