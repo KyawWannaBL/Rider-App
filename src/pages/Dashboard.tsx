@@ -116,9 +116,9 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+    <div className="be-page min-h-screen p-4 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-5">
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="be-surface rounded-[30px] p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black tracking-[0.35em] text-blue-600">BRITIUM EXPRESS</p>
@@ -134,7 +134,7 @@ export default function Dashboard() {
               </p>
               <p className="mt-1 text-xs font-black text-blue-700">{tx("Work date","လုပ်ငန်းရက်")}: {daily.work_date||"-"}</p>
             </div>
-            <button onClick={load} disabled={loading} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white disabled:opacity-50">
+            <button onClick={load} disabled={loading} className="be-primary-button min-h-12 px-4 text-sm disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`} /> {tx("Sync Enterprise","Enterprise နှင့် Sync")}
             </button>
           </div>
@@ -150,7 +150,7 @@ export default function Dashboard() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {dailyCards.map(([label,value,Icon]:any)=>(
-              <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div key={label} className="be-kpi-card p-5 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(15,23,42,.09)]">
                 <div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><Icon className="h-5 w-5 text-blue-700"/></div>
                 <p className="mt-3 text-2xl font-black text-slate-950">{value}</p>
               </div>

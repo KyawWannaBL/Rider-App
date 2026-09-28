@@ -75,6 +75,30 @@
     cursor: not-allowed;
   }
 
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+    box-shadow: var(--be-focus-ring);
+  }
+
+  @media (max-width: 1023px) {
+    button,
+    a,
+    input,
+    select {
+      min-height: 44px;
+    }
+  }
+
   img,
   video,
   canvas {

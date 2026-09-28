@@ -117,7 +117,7 @@ export default function CodSettlementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 pb-10 sm:p-6">
+    <div className="be-page min-h-screen p-4 pb-10 sm:p-6">
       {notification && (
         <RiderNotification
           title={String(notification.title || tx("Settlement update", "COD စာရင်းအသိပေးချက်"))}
@@ -132,7 +132,7 @@ export default function CodSettlementPage() {
       )}
 
       <div className="mx-auto max-w-2xl space-y-4">
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="be-surface rounded-[30px] p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-700">BRITIUM EXPRESS</p>
@@ -148,7 +148,7 @@ export default function CodSettlementPage() {
               type="button"
               onClick={() => void load()}
               disabled={loading}
-              className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-white"
+              className="be-icon-button h-12 w-12 shrink-0 p-0"
             >
               <RefreshCw className={["h-5 w-5", loading ? "animate-spin" : ""].join(" ")} />
             </button>
@@ -159,7 +159,7 @@ export default function CodSettlementPage() {
         {settlement && <CODSettlementScreen settlement={settlement} onSelectLine={setSelectedLine} />}
 
         {selectedLine && (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl">
+          <section className="be-surface rounded-[30px] p-5 shadow-[0_24px_64px_rgba(15,23,42,.12)]">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-mono text-sm font-black text-blue-700">{selectedLine.deliveryWayId}</p>
@@ -210,7 +210,7 @@ export default function CodSettlementPage() {
                   type="button"
                   onClick={() => void submitSelected()}
                   disabled={loading || !rawSelected?.eligible_to_handover}
-                  className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 font-black text-white disabled:opacity-40"
+                  className="be-primary-button mt-4 w-full disabled:opacity-40"
                 >
                   <CheckCircle2 className="h-5 w-5" />
                   {tx("Submit COD Handover to Finance", "COD ကို Finance သို့ လွှဲပြောင်းတင်သွင်းမည်")}

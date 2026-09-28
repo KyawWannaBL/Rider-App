@@ -21,26 +21,26 @@ export function ActiveRouteScreen({
   const arrived = ["ARRIVED", "DELIVERED"].includes(waybill.status);
 
   return (
-    <div className="min-h-dvh bg-slate-100 pb-28">
-      <section className="relative h-[38vh] min-h-[280px] overflow-hidden bg-gradient-to-br from-slate-200 via-slate-100 to-blue-100">
-        <div className="absolute inset-0 opacity-40">
-          <div className="absolute left-[15%] top-[28%] h-24 w-44 rotate-12 rounded-full border-4 border-white" />
-          <div className="absolute right-[5%] top-[48%] h-32 w-56 -rotate-12 rounded-full border-4 border-blue-300" />
-          <div className="absolute bottom-[10%] left-[35%] h-20 w-32 rotate-6 rounded-full border-4 border-slate-400" />
+    <div className="be-page min-h-dvh pb-28">
+      <section className="relative h-[40vh] min-h-[300px] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-blue-900">
+        <div className="absolute inset-0 opacity-25">
+          <div className="absolute left-[15%] top-[28%] h-24 w-44 rotate-12 rounded-full border-4 border-cyan-300" />
+          <div className="absolute right-[5%] top-[48%] h-32 w-56 -rotate-12 rounded-full border-4 border-blue-400" />
+          <div className="absolute bottom-[10%] left-[35%] h-20 w-32 rotate-6 rounded-full border-4 border-white/50" />
         </div>
 
         <div className="absolute left-4 right-4 top-4 flex items-center justify-between">
-          <div className="rounded-2xl bg-slate-950/90 px-4 py-3 text-white shadow-lg">
+          <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-white shadow-xl backdrop-blur-xl">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Active Route</p>
             <p className="mt-1 font-mono text-sm font-black">{dispatch.dispatchNo}</p>
           </div>
-          <div className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950 shadow-lg">
+          <div className="rounded-2xl border border-white/20 bg-white/95 px-4 py-3 text-sm font-black text-slate-950 shadow-xl backdrop-blur-xl">
             Stop #{stop?.sequence || waybill.sequenceNo || "-"}
           </div>
         </div>
 
         <div className="absolute inset-x-4 bottom-4">
-          <MobileCard className="p-3 shadow-xl">
+          <MobileCard className="be-surface p-3 shadow-2xl">
             <div className="flex items-center gap-3">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-700 text-white">
                 <Route className="h-5 w-5" />
@@ -55,8 +55,8 @@ export function ActiveRouteScreen({
         </div>
       </section>
 
-      <main className="space-y-3 p-4">
-        <MobileCard className="overflow-hidden">
+      <main className="mx-auto max-w-lg space-y-3 p-4">
+        <MobileCard className="overflow-hidden border-0 shadow-[0_16px_42px_rgba(15,23,42,.08)]">
           <div className="p-4">
             <div className="flex items-start gap-3">
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-slate-100">
@@ -117,7 +117,7 @@ export function ActiveRouteScreen({
         </MobileCard>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/60 bg-white/92 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-18px_50px_rgba(15,23,42,.12)] backdrop-blur-2xl">
         <div className="mx-auto flex max-w-lg gap-2">
           <button
             type="button"
