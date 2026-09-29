@@ -390,3 +390,106 @@
     background: #0b1424 !important;
   }
 }
+
+
+/* Rider V183 — deterministic Android tablet compatibility mode.
+   Avoid translucent GPU layers that render washed-out on some older Android Chrome/WebView builds. */
+html.be-android-tablet-compat,
+html.be-android-tablet-compat body,
+html.be-android-tablet-compat #root {
+  background: #f4f7fb !important;
+  color: #0f172a !important;
+}
+
+html.be-android-tablet-compat *,
+html.be-android-tablet-compat *::before,
+html.be-android-tablet-compat *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html.be-android-tablet-compat .v142-portal-bg {
+  background: #f4f7fb !important;
+}
+
+html.be-android-tablet-compat .v142-portal-card,
+html.be-android-tablet-compat .be-premium-card,
+html.be-android-tablet-compat .be-surface {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  opacity: 1 !important;
+  filter: none !important;
+  box-shadow: 0 10px 28px rgba(15,23,42,.10) !important;
+}
+
+html.be-android-tablet-compat .rider-dashboard-hero {
+  background: #07111f !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+html.be-android-tablet-compat .rider-dashboard-hero > .pointer-events-none {
+  display: none !important;
+}
+
+html.be-android-tablet-compat .rider-dashboard-hero h1,
+html.be-android-tablet-compat .rider-dashboard-hero h2,
+html.be-android-tablet-compat .rider-dashboard-hero h3 {
+  color: #ffffff !important;
+}
+
+html.be-android-tablet-compat .rider-dashboard-hero p {
+  color: #cbd5e1 !important;
+  opacity: 1 !important;
+}
+
+html.be-android-tablet-compat .rider-dashboard-hero .text-\[\#f4d66d\] {
+  color: #f4d66d !important;
+}
+
+html.be-android-tablet-compat .rider-dashboard-message {
+  background: #dbeafe !important;
+  color: #1e3a8a !important;
+  opacity: 1 !important;
+  border: 1px solid #bfdbfe !important;
+}
+
+html.be-android-tablet-compat header {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+html.be-android-tablet-compat .be-mobile-bottom-nav {
+  background: #ffffff !important;
+  opacity: 1 !important;
+  border-color: #dbe3ee !important;
+}
+
+html.be-android-tablet-compat .v142-glow,
+html.be-android-tablet-compat .v142-float,
+html.be-android-tablet-compat .v142-shimmer,
+html.be-android-tablet-compat .v142-live-dot::after {
+  animation: none !important;
+}
+
+html.be-android-tablet-compat .v142-button-sheen::before {
+  display: none !important;
+}
+
+html.be-android-tablet-compat .v142-portal-card p,
+html.be-android-tablet-compat .v142-portal-card span,
+html.be-android-tablet-compat .v142-portal-card h1,
+html.be-android-tablet-compat .v142-portal-card h2,
+html.be-android-tablet-compat .v142-portal-card h3 {
+  opacity: 1 !important;
+}
+
+html.be-android-tablet-compat img,
+html.be-android-tablet-compat svg,
+html.be-android-tablet-compat canvas {
+  filter: none !important;
+  opacity: 1 !important;
+}
