@@ -16,6 +16,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(language === "my" ? "Rider Profile ကို ဖွင့်နေသည်..." : "Loading Rider profile...");
   const [editMode,setEditMode]=useState(false);
+  const [identityDialog,setIdentityDialog]=useState<"same-person"|"new-account"|null>(null);
   const [editForm,setEditForm]=useState({full_name:"",phone:""});
 
   async function load() {
@@ -59,6 +60,31 @@ export default function Profile() {
   async function signOut() {
     await supabase.auth.signOut();
     navigate("/login", { replace: true });
+  }
+
+  function beginEditFlow(){
+    if(editMode){
+      setEditMode(false);
+      return;
+    }
+    setIdentityDialog("same-person");
+  }
+
+  function confirmSamePerson(){
+    setIdentityDialog(null);
+    setEditMode(true);
+    setMessage("လက်ရှိအကောင့်၏ Worker Code / User ID ကို မပြောင်းဘဲ အမည်နှင့် ကိုယ်ရေးအချက်အလက်ကိုသာ ပြင်ဆင်ပါမည်။ ယခင်လုပ်ငန်းမှတ်တမ်းများကို မဖျက်ဘဲ ဤအကောင့်နှင့် ဆက်လက်ချိတ်ဆက်ထားပါမည်။");
+  }
+
+  function rejectSamePerson(){
+    setIdentityDialog("new-account");
+  }
+
+  async function createSeparateAccount(){
+    setIdentityDialog(null);
+    setMessage("လက်ရှိအကောင့်နှင့် ယခင်မှတ်တမ်းများကို မပြောင်းလဲပါ။ လူအသစ်အတွက် အကောင့်အသစ်ဖန်တီးရန် Create Account စာမျက်နှာသို့ ပို့နေပါသည်။");
+    await supabase.auth.signOut();
+    navigate("/login?view=request", { replace: true });
   }
 
   async function sendPasswordReset() {
@@ -118,11 +144,11 @@ export default function Profile() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={()=>setEditMode(v=>!v)}
+                  onClick={beginEditFlow}
                   disabled={loading}
                   className="inline-flex h-11 items-center justify-center rounded-2xl bg-white px-4 text-sm font-black text-blue-900 disabled:opacity-50"
                 >
-                  {editMode?tx("Cancel Edit","ပြင်ဆင်မှု ပယ်ဖျက်ရန်"):tx("Edit Profile","Profile ပြင်ဆင်ရန်")}
+                  {editMode?tx("Cancel Edit","ပြင်ဆင်မှု ပယ်ဖျက်ရန်"):tx("Edit Profile","အမည်/အချက်အလက် ပြင်ဆင်ရန်")}
                 </button>
                 <button
                   onClick={load}
@@ -163,7 +189,7 @@ export default function Profile() {
             {editMode && (
               <div className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-4">
                 <h3 className="font-black text-blue-950">{tx("Editable Personal Information","ပြင်ဆင်နိုင်သော ကိုယ်ရေးအချက်အလက်")}</h3>
-                <p className="mt-1 text-xs font-bold text-blue-700">{tx("Name and phone synchronize to the authenticated workforce master. Email, role, worker code and assignments remain controlled by Enterprise administrators.","အမည်နှင့် ဖုန်းနံပါတ်ကို Workforce Master သို့ ချိတ်ဆက်ပြောင်းလဲပါမည်။ Email, Role, Worker Code နှင့် Assignment များကို Enterprise Administrator မှသာ ထိန်းချုပ်ပါသည်။")}</p>
+                <p className="mt-1 text-xs font-bold text-blue-700">{tx("Name and phone synchronize to the same authenticated workforce identity. Historical operational records remain linked to the existing Worker Code/User ID.","အမည်နှင့် ဖုန်းနံပါတ်ကို လက်ရှိ Workforce Identity တစ်ခုတည်းအတွင်း ပြင်ဆင်ပါမည်။ ယခင်လုပ်ငန်းမှတ်တမ်းများကို မဖျက်ဘဲ လက်ရှိ Worker Code / User ID နှင့် ဆက်လက်ချိတ်ဆက်ထားပါမည်။")}</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <label className="text-xs font-black text-slate-600">{tx("Full Name","အမည်အပြည့်အစုံ")}<input value={editForm.full_name} onChange={(e)=>setEditForm({...editForm,full_name:e.target.value})} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"/></label>
                   <label className="text-xs font-black text-slate-600">{tx("Phone","ဖုန်း")}<input value={editForm.phone} onChange={(e)=>setEditForm({...editForm,phone:e.target.value})} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-950 outline-none focus:border-blue-500"/></label>
@@ -228,6 +254,60 @@ export default function Profile() {
 
         <div className="rounded-2xl bg-blue-50 p-4 text-sm font-bold text-blue-900">{message}</div>
       </div>
+
+      {identityDialog === "same-person" && (
+        <div className="fixed inset-0 z-[120] grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-[30px] border border-white/20 bg-white shadow-[0_30px_90px_rgba(2,6,23,.35)]">
+            <div className="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 p-5 text-white">
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">အကောင့်အတည်ပြုခြင်း</p>
+              <h2 className="mt-2 text-xl font-black">လက်ရှိလူတစ်ဦးတည်း၏ အချက်အလက်ပြင်ဆင်မှု ဟုတ်ပါသလား?</h2>
+            </div>
+            <div className="p-5">
+              <p className="text-sm font-bold leading-6 text-slate-700">
+                ယခု ပြင်ဆင်မည့် အမည်နှင့် အချက်အလက်များသည် <b>{String(displayName)}</b> ၏ လက်ရှိအကောင့်ကိုသာ ပြင်ဆင်ခြင်း ဖြစ်ပါသလား?
+              </p>
+              <p className="mt-3 rounded-2xl bg-emerald-50 p-4 text-sm font-bold leading-6 text-emerald-800">
+                “ဟုတ်ကဲ့” ကိုရွေးပါက Worker Code / User ID ကို မပြောင်းဘဲ အမည်အသစ်နှင့် အချက်အလက်အသစ်ကိုသာ ပြင်ဆင်မည်ဖြစ်ပြီး ယခင်လုပ်ငန်းမှတ်တမ်းများကို မဖျက်ဘဲ ဆက်လက်ထိန်းသိမ်းထားပါမည်။
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button type="button" onClick={rejectSamePerson} className="min-h-12 rounded-2xl border border-slate-200 bg-white px-4 font-black text-slate-700">
+                  မဟုတ်ပါ
+                </button>
+                <button type="button" onClick={confirmSamePerson} className="min-h-12 rounded-2xl bg-gradient-to-r from-[#d4af37] to-[#f4d66d] px-4 font-black text-slate-950 shadow-lg">
+                  ဟုတ်ကဲ့၊ ပြင်ဆင်မည်
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {identityDialog === "new-account" && (
+        <div className="fixed inset-0 z-[120] grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-[30px] border border-white/20 bg-white shadow-[0_30px_90px_rgba(2,6,23,.35)]">
+            <div className="bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 p-5 text-white">
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-[#f4d66d]">အကောင့်အသစ်</p>
+              <h2 className="mt-2 text-xl font-black">လူအသစ်အတွက် အကောင့်အသစ် ဖန်တီးလိုပါသလား?</h2>
+            </div>
+            <div className="p-5">
+              <p className="text-sm font-bold leading-6 text-slate-700">
+                လူအသစ်ဖြစ်ပါက လက်ရှိအကောင့်၏ အမည်နှင့် အချက်အလက်များကို မပြောင်းပါ။ လက်ရှိအကောင့်နှင့် ယခင်သမိုင်းမှတ်တမ်းများကို မူလအတိုင်း ထိန်းသိမ်းထားပါမည်။
+              </p>
+              <p className="mt-3 rounded-2xl bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
+                အကောင့်အသစ်ကို ဤ Profile စာမျက်နှာမှ မဖန်တီးပါ။ “အကောင့်အသစ်ဖန်တီးရန်” ကိုနှိပ်ပြီး Create Account စာမျက်နှာတွင်သာ ဖန်တီးပါ။
+              </p>
+              <div className="mt-5 grid gap-3">
+                <button type="button" onClick={createSeparateAccount} className="min-h-12 rounded-2xl bg-gradient-to-r from-[#d4af37] to-[#f4d66d] px-4 font-black text-slate-950 shadow-lg">
+                  အကောင့်အသစ်ဖန်တီးရန်
+                </button>
+                <button type="button" onClick={()=>setIdentityDialog(null)} className="min-h-12 rounded-2xl border border-slate-200 bg-white px-4 font-black text-slate-700">
+                  မဖန်တီးတော့ပါ
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
