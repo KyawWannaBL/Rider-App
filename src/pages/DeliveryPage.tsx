@@ -80,7 +80,7 @@ async function currentGps() {
 }
 
 export default function DeliveryPage() {
-  const { language } = useAppState();
+  const { language, activeRole } = useAppState();
   const tx = (en:string,my:string) => language === "my" ? my : en;
   const [pickups, setPickups] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
@@ -117,6 +117,9 @@ export default function DeliveryPage() {
   const status = String(selected?.stop_status || selected?.rider_status || "").toUpperCase();
   const electronicPayment = ["QR", "BANK_TRANSFER", "MOBILE_WALLET"].includes(form.payment_method);
   const canDeliver = ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY","OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER"].includes(status);
+  const helperPreparedForDriver =
+    activeRole === "driver" &&
+    String(selected?.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
 
   function resetProofs() {
     setProofFile(null);
@@ -400,6 +403,49 @@ export default function DeliveryPage() {
       );
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
     }
+
+    // V176 van-team workflow: once the assigned Helper has completed GPS,
+    // proof, signature and COD checks, the assigned Driver confirms with one tap.
+    // The Driver must not repeat the Helper's evidence capture.
+    if (helperPreparedForDriver) {
+      setBusy(true);
+      setDeliveryProgress("confirming");
+      setDeliveryResult(tx(
+        "Helper completed the delivery checks. Confirming final Driver acceptance...",
+        "Helper မှ ပို့ဆောင်မှုစစ်ဆေးချက်များ ပြီးစီးထားပါသည်။ Driver အတည်ပြုမှုကို လုပ်ဆောင်နေပါသည်..."
+      ));
+      try {
+        const { data, error } = await (supabase as any).rpc("be_field_team_confirm_delivery_v146", {
+          p_payload: {
+            wayplan_id: selected.wayplan_id,
+            delivery_way_id: selected.delivery_way_id,
+          },
+        });
+        if (error) throw error;
+        if (data?.ok === false) throw new Error(data?.message || data?.error || "Driver confirmation failed.");
+        if (String(data?.mobile_status || "").toUpperCase() !== "DELIVERED") {
+          throw new Error("Driver confirmation did not return authoritative DELIVERED status.");
+        }
+        const successMessage = tx(
+          `${selected.delivery_way_id}: Helper work accepted. Delivery is now DELIVERED.`,
+          `${selected.delivery_way_id}: Helper လုပ်ဆောင်ချက်ကို Driver အတည်ပြုပြီး DELIVERED ဖြစ်ပါပြီ။`
+        );
+        setDeliveryProgress("success");
+        setDeliveryResult(successMessage);
+        setMsg(successMessage);
+        markActionActive("delivered");
+        await load(selected.delivery_way_id);
+        return true;
+      } catch (error:any) {
+        const message=error?.message || tx("Driver confirmation failed.","Driver အတည်ပြုမှု မအောင်မြင်ပါ။");
+        setDeliveryProgress("error");
+        setDeliveryResult(message);
+        setMsg(message);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    }
     if (!form.receiver_name.trim()) {
       const message = tx("Receiver name is required.","လက်ခံသူအမည် ဖြည့်ရန်လိုအပ်ပါသည်။");
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
@@ -487,7 +533,21 @@ export default function DeliveryPage() {
         const stage = data?.failed_stage ? ` [${data.failed_stage}]` : "";
         throw new Error((data?.message || data?.error || "Delivery confirmation failed.") + stage);
       }
-      if (String(data?.mobile_status || "").toUpperCase() !== "DELIVERED") {
+      const mobileStatus = String(data?.mobile_status || "").toUpperCase();
+      if (activeRole === "helper" && mobileStatus === "PENDING_DRIVER_CONFIRMATION") {
+        const successMessage = tx(
+          `${selected.delivery_way_id}: Delivery checks completed. Waiting for assigned Driver to press Delivered and confirm.`,
+          `${selected.delivery_way_id}: Helper လုပ်ဆောင်ချက်များ ပြီးစီးပါပြီ။ Assigned Driver မှ Delivered ကိုနှိပ်၍ အတည်ပြုရန်သာ ကျန်ပါသည်။`
+        );
+        setDeliveryProgress("success");
+        setDeliveryResult(successMessage);
+        setMsg(successMessage);
+        markActionActive("delivered");
+        resetProofs();
+        await load(selected.delivery_way_id);
+        return true;
+      }
+      if (mobileStatus !== "DELIVERED") {
         throw new Error("Delivery confirmation did not return authoritative DELIVERED status.");
       }
 
@@ -827,7 +887,11 @@ export default function DeliveryPage() {
                     >
                       {busy && ["validating","uploading","gps","confirming"].includes(deliveryProgress)
                         ? tx("Processing...","လုပ်ဆောင်နေသည်...")
-                        : tx("Delivered","ပို့ဆောင်ပြီး")}
+                        : helperPreparedForDriver
+                          ? tx("Accept Helper Done / Delivered","Helper ပြီးစီးမှု အတည်ပြု / ပို့ဆောင်ပြီး")
+                          : activeRole === "helper"
+                            ? tx("Complete & Send to Driver","ပြီးစီးပြီး Driver သို့ အတည်ပြုရန်ပို့မည်")
+                            : tx("Delivered","ပို့ဆောင်ပြီး")}
                     </button>
 
                     <select
