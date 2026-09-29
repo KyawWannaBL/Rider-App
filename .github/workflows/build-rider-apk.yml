@@ -67,58 +67,13 @@ jobs:
       - name: Install Capacitor Android tooling
         run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets
 
-      - name: Prepare shell web directory
+      - name: Build packaged Rider web application
         run: |
-          mkdir -p dist
-          cat > dist/index.html <<'HTML'
-          <!doctype html>
-          <html>
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width,initial-scale=1">
-              <title>Britium Express Rider</title>
-            </head>
-            <body style="font-family:Arial,sans-serif;background:#07111f;color:white;display:grid;place-items:center;min-height:100vh;margin:0">
-              <div style="text-align:center"><h1>BRITIUM RIDER</h1><p>Starting secure Rider workspace...</p></div>
-            </body>
-          </html>
-          HTML
-
-          cat > dist/offline.html <<'HTML'
-          <!doctype html>
-          <html lang="my">
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-              <meta name="theme-color" content="#07111f">
-              <title>Britium Rider Connection</title>
-              <style>
-                *{box-sizing:border-box}
-                body{margin:0;min-height:100vh;background:radial-gradient(circle at 80% 10%,rgba(34,211,238,.14),transparent 32rem),#07111f;color:#f8fafc;font-family:Arial,sans-serif;padding:24px;display:grid;place-items:center}
-                .card{width:min(100%,460px);border:1px solid rgba(255,255,255,.12);border-radius:28px;padding:28px;background:rgba(15,23,42,.92);box-shadow:0 30px 80px rgba(0,0,0,.35)}
-                .brand{font-size:12px;font-weight:900;letter-spacing:.22em;color:#67e8f9}
-                h1{font-size:26px;margin:10px 0 12px}
-                p{color:#cbd5e1;line-height:1.7;font-weight:600}
-                .note{margin-top:14px;padding:14px;border-radius:18px;background:rgba(245,158,11,.10);color:#fde68a;font-size:14px}
-                button,a{display:flex;width:100%;min-height:52px;align-items:center;justify-content:center;border-radius:18px;margin-top:12px;font-weight:900;text-decoration:none;border:0}
-                button{background:linear-gradient(90deg,#d4af37,#f4d66d);color:#0f172a}
-                a{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:white}
-                .small{margin-top:16px;font-size:12px;color:#94a3b8}
-              </style>
-            </head>
-            <body>
-              <main class="card">
-                <div class="brand">BRITIUM EXPRESS</div>
-                <h1>Rider App ကို ဖွင့်၍မရသေးပါ</h1>
-                <p>အင်တာနက်ချိတ်ဆက်မှု သို့မဟုတ် Android System WebView ကို စစ်ဆေးပြီး ပြန်စမ်းပါ။</p>
-                <div class="note">Tablet တွင် အဖြူရောင်မျက်နှာပြင်သာပေါ်ပါက Google Play Store မှ Android System WebView နှင့် Google Chrome ကို Update လုပ်ပါ။</div>
-                <button onclick="location.href='https://www.britiumexpress.app/#/login'">ပြန်လည်ချိတ်ဆက်ရန်</button>
-                <a href="https://www.britiumexpress.app/#/login">Browser ဖြင့် ဖွင့်ရန်</a>
-                <div class="small">Your Rider account and operational data are not changed by this connection error.</div>
-              </main>
-            </body>
-          </html>
-          HTML
+          set -euo pipefail
+          npm run build
+          test -s dist/index.html
+          test -d dist/assets
+          echo "Rider web application packaged locally for Android WebView."
 
       - name: Generate Android project
         run: npx cap add android
