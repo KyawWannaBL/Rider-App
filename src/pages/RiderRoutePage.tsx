@@ -129,6 +129,10 @@ export default function RiderRoutePage() {
         waybill={selected}
         onNavigate={openNavigation}
         onOpenDelivery={openDelivery}
+        onPinSaved={() => {
+          setMessage("Drop-off pin saved. Route coordinates refreshed.");
+          void load();
+        }}
       />
     </>
   );
