@@ -1,6 +1,7 @@
 import { Barcode, ChevronRight, MapPin, MessageCircle, Navigation, Package, Phone, Route, UserRound } from "lucide-react";
 import type { Dispatch, Waybill } from "@/types/rider";
 import { MobileCard, PrimaryButton } from "@/components/rider/MobileUI";
+import { DropoffPinEditor } from "@/components/rider/DropoffPinEditor";
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -11,23 +12,42 @@ export function ActiveRouteScreen({
   waybill,
   onNavigate,
   onOpenDelivery,
+  onPinSaved,
 }: {
   dispatch: Dispatch;
   waybill: Waybill;
   onNavigate: (waybill: Waybill) => void;
   onOpenDelivery: (waybill: Waybill) => void;
+  onPinSaved?: () => void;
 }) {
   const stop = dispatch.stops.find((item) => item.waybillId === waybill.id);
   const arrived = ["ARRIVED", "DELIVERED"].includes(waybill.status);
+  const loc = waybill.customer.location;
+  const mapUrl =
+    loc?.latitude && loc?.longitude
+      ? `https://maps.google.com/maps?q=${encodeURIComponent(`${loc.latitude},${loc.longitude}`)}&z=17&output=embed`
+      : "";
 
   return (
     <div className="be-page min-h-dvh pb-28">
-      <section className="relative h-[40vh] min-h-[300px] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-blue-900">
-        <div className="absolute inset-0 opacity-25">
-          <div className="absolute left-[15%] top-[28%] h-24 w-44 rotate-12 rounded-full border-4 border-cyan-300" />
-          <div className="absolute right-[5%] top-[48%] h-32 w-56 -rotate-12 rounded-full border-4 border-blue-400" />
-          <div className="absolute bottom-[10%] left-[35%] h-20 w-32 rotate-6 rounded-full border-4 border-white/50" />
-        </div>
+      <section className="relative h-[40vh] min-h-[320px] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-blue-900">
+        {mapUrl ? (
+          <iframe
+            title="Active delivery Google Map"
+            src={mapUrl}
+            className="absolute inset-0 h-full w-full border-0"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+        ) : (
+          <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-slate-950 via-slate-800 to-blue-900 text-center text-white">
+            <div className="px-8">
+              <MapPin className="mx-auto h-12 w-12 text-cyan-300" />
+              <p className="mt-3 text-lg font-black">Precise drop-off pin is not set</p>
+              <p className="mt-2 text-sm font-semibold text-slate-300">Use the pin editor below to save the exact entrance or handover point.</p>
+            </div>
+          </div>
+        )}
 
         <div className="absolute left-4 right-4 top-4 flex items-center justify-between">
           <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3 text-white shadow-xl backdrop-blur-xl">
@@ -56,6 +76,7 @@ export function ActiveRouteScreen({
       </section>
 
       <main className="mx-auto max-w-lg space-y-3 p-4">
+        <DropoffPinEditor waybill={waybill} onSaved={() => onPinSaved?.()} />
         <MobileCard className="overflow-hidden border-0 shadow-[0_16px_42px_rgba(15,23,42,.08)]">
           <div className="p-4">
             <div className="flex items-start gap-3">
