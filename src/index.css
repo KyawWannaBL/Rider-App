@@ -35,7 +35,7 @@
   }
 
   body {
-    min-width: 320px;
+    min-width: 0;
     overflow-x: hidden;
     background: #f8fafc;
     color: #0f172a;
@@ -253,5 +253,62 @@
   .be-break-anywhere {
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+}
+
+
+/* Rider V181 — older Android/tablet viewport compatibility */
+@layer base {
+  body, #root {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  @media (max-width: 1024px) {
+    .v142-shell-bg {
+      background:
+        radial-gradient(circle at 85% 8%, rgba(34,211,238,.10), transparent 22rem),
+        linear-gradient(160deg,#020617 0%,#07111f 52%,#082f49 100%);
+      background-attachment: scroll;
+    }
+  }
+
+  @media (max-width: 900px), (max-height: 700px) {
+    .rider-login-desktop-intro {
+      display: none !important;
+    }
+
+    .rider-login-grid {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+
+    .rider-login-card {
+      width: min(100%, 34rem) !important;
+      max-width: 34rem !important;
+    }
+  }
+
+  @media (orientation: landscape) and (max-height: 600px) {
+    .rider-login-grid {
+      align-items: flex-start !important;
+      padding-top: max(3.5rem, env(safe-area-inset-top)) !important;
+      padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+    }
+
+    .rider-login-mobile-brand {
+      margin-bottom: .75rem !important;
+    }
+
+    .rider-login-mobile-brand img {
+      width: 3rem !important;
+      height: 3rem !important;
+    }
+
+    .rider-login-mobile-brand h1 {
+      margin-top: .5rem !important;
+      font-size: 1.25rem !important;
+    }
   }
 }
