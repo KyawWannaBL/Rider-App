@@ -312,3 +312,81 @@
     }
   }
 }
+
+
+/* Rider V182 — legacy Android/tablet high-contrast rendering fallbacks */
+@media (max-width: 1100px) {
+  .v142-portal-bg {
+    background: #f4f7fb !important;
+  }
+
+  .v142-portal-card,
+  .be-premium-card,
+  .be-surface {
+    background: #ffffff !important;
+    opacity: 1 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .v142-panel {
+    background: #0b1424 !important;
+    opacity: 1 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  header {
+    background-color: #ffffff !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .rider-dashboard-hero {
+    background: #07111f !important;
+    color: #ffffff !important;
+    opacity: 1 !important;
+  }
+
+  .rider-dashboard-hero h1,
+  .rider-dashboard-hero p,
+  .rider-dashboard-hero span {
+    opacity: 1 !important;
+  }
+
+  .rider-dashboard-hero .rider-dashboard-subtext {
+    color: #cbd5e1 !important;
+  }
+
+  .rider-dashboard-message {
+    background: #eff6ff !important;
+    color: #1e3a8a !important;
+    opacity: 1 !important;
+  }
+
+  main,
+  main > * {
+    opacity: 1 !important;
+  }
+}
+
+/* Extra fallback for older Android WebView/Chrome engines that struggle with
+   translucent gradients/backdrop-filter on large tablet surfaces. */
+@supports not (backdrop-filter: blur(2px)) {
+  .v142-portal-card,
+  .v142-panel,
+  .be-surface,
+  header {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .v142-portal-card,
+  .be-surface {
+    background: #ffffff !important;
+  }
+
+  .v142-panel {
+    background: #0b1424 !important;
+  }
+}
