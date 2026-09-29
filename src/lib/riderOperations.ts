@@ -317,15 +317,15 @@ export async function saveRiderDropoffPin(input: {
   deliveryWayId: string;
   latitude: number;
   longitude: number;
-  context?: string;
+  accuracy?: number;
 }) {
   if (!supabase) throw new Error("Supabase is not configured.");
 
-  const { data, error } = await (supabase as any).rpc("be_update_delivery_location_pin_v1", {
+  const { data, error } = await (supabase as any).rpc("be_rider_dropoff_pin_v147", {
     p_delivery_way_id: input.deliveryWayId,
     p_latitude: input.latitude,
     p_longitude: input.longitude,
-    p_context: input.context || "RIDER_ACTIVE_ROUTE_PIN_EDITOR",
+    p_accuracy_m: input.accuracy ?? null,
   });
 
   if (error) throw error;
