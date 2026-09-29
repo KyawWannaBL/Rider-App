@@ -169,8 +169,8 @@ export default function Login() {
         {language === "en" ? "MY" : "EN"}
       </button>
 
-      <div className="relative z-10 mx-auto grid min-h-screen min-h-[100dvh] w-full max-w-6xl items-center gap-5 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(4rem,env(safe-area-inset-top))] sm:px-5 sm:py-8 md:px-6 lg:grid-cols-[1.05fr_.95fr] lg:gap-8 lg:px-8 lg:py-10">
-        <motion.section initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .5 }} className="hidden lg:block">
+      <div className="rider-login-grid relative z-10 mx-auto grid min-h-screen min-h-[100dvh] w-full max-w-6xl items-center gap-5 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(4rem,env(safe-area-inset-top))] sm:px-5 sm:py-8 md:px-6 lg:grid-cols-[1.05fr_.95fr] lg:gap-8 lg:px-8 lg:py-10">
+        <motion.section initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .5 }} className="rider-login-desktop-intro hidden lg:block">
           <div className="max-w-xl">
             <div className="mb-7 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md">
               {!logoFailed ? (
@@ -215,8 +215,8 @@ export default function Login() {
           </div>
         </motion.section>
 
-        <motion.section initial={{ opacity: 0, y: 18, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: .42, delay: .06 }} className="mx-auto w-full max-w-md px-0 sm:max-w-lg lg:max-w-md">
-          <div className="mb-4 text-center sm:mb-6 lg:hidden">
+        <motion.section initial={{ opacity: 0, y: 18, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: .42, delay: .06 }} className="rider-login-card mx-auto w-full max-w-md px-0 sm:max-w-lg lg:max-w-md">
+          <div className="rider-login-mobile-brand mb-4 text-center sm:mb-6 lg:hidden">
             {!logoFailed ? (
               <img
                 src="/logo.png"
