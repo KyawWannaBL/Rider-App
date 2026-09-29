@@ -2,6 +2,7 @@ import { Barcode, ChevronRight, MapPin, MessageCircle, Navigation, Package, Phon
 import type { Dispatch, Waybill } from "@/types/rider";
 import { MobileCard, PrimaryButton } from "@/components/rider/MobileUI";
 import { DropoffPinEditor } from "@/components/rider/DropoffPinEditor";
+import { InteractivePinMap } from "@/components/rider/InteractivePinMap";
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -23,21 +24,14 @@ export function ActiveRouteScreen({
   const stop = dispatch.stops.find((item) => item.waybillId === waybill.id);
   const arrived = ["ARRIVED", "DELIVERED"].includes(waybill.status);
   const loc = waybill.customer.location;
-  const mapUrl =
-    loc?.latitude && loc?.longitude
-      ? `https://maps.google.com/maps?q=${encodeURIComponent(`${loc.latitude},${loc.longitude}`)}&z=17&output=embed`
-      : "";
-
   return (
     <div className="be-page min-h-dvh pb-28">
       <section className="relative h-[40vh] min-h-[320px] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-blue-900">
-        {mapUrl ? (
-          <iframe
-            title="Active delivery Google Map"
-            src={mapUrl}
-            className="absolute inset-0 h-full w-full border-0"
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
+        {loc?.latitude && loc?.longitude ? (
+          <InteractivePinMap
+            point={{ latitude: loc.latitude, longitude: loc.longitude }}
+            interactive={false}
+            className="absolute inset-0"
           />
         ) : (
           <div className="absolute inset-0 grid place-items-center bg-gradient-to-br from-slate-950 via-slate-800 to-blue-900 text-center text-white">
