@@ -62,10 +62,12 @@ export function DropoffPinEditor({
   }, [original?.latitude, original?.longitude]);
 
   const mapUrl = useMemo(() => {
-    if (!pin) return "";
-    const q = encodeURIComponent(`${pin.latitude},${pin.longitude}`);
-    return `https://maps.google.com/maps?q=${q}&z=18&output=embed`;
-  }, [pin]);
+    const query = pin
+      ? `${pin.latitude},${pin.longitude}`
+      : [waybill.customer.address, waybill.customer.township, "Myanmar"].filter(Boolean).join(", ");
+    if (!query) return "";
+    return `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=${pin ? 18 : 16}&output=embed`;
+  }, [pin, waybill.customer.address, waybill.customer.township]);
 
   function useCurrentLocation() {
     if (!navigator.geolocation) {
@@ -158,39 +160,43 @@ export function DropoffPinEditor({
       </div>
 
       <div className="relative h-[360px] bg-slate-100">
-        {pin ? (
+        {mapUrl ? (
           <>
             <iframe
               key={mapUrl}
               title="Google Maps drop-off preview"
               src={mapUrl}
-              className="h-full w-full border-0"
+              className="pointer-events-none h-full w-full border-0"
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
             />
-            <div className="pointer-events-none absolute inset-0 grid place-items-center">
-              <div className="relative -translate-y-4">
-                <span className="absolute left-1/2 top-full h-4 w-4 -translate-x-1/2 -translate-y-2 rounded-full bg-rose-500/25 blur-sm" />
-                <MapPin className="h-12 w-12 fill-rose-600 text-white drop-shadow-xl" />
+            {pin ? (
+              <div className="pointer-events-none absolute inset-0 grid place-items-center">
+                <div className="relative -translate-y-4">
+                  <span className="absolute left-1/2 top-full h-4 w-4 -translate-x-1/2 -translate-y-2 rounded-full bg-rose-500/25 blur-sm" />
+                  <MapPin className="h-12 w-12 fill-rose-600 text-white drop-shadow-xl" />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="pointer-events-none absolute inset-x-3 bottom-3 rounded-2xl bg-slate-950/88 p-3 text-center text-xs font-black text-white shadow-xl backdrop-blur">
+                Approximate address preview · use your current GPS to place the exact drop-off pin
+              </div>
+            )}
           </>
         ) : (
           <div className="grid h-full place-items-center px-8 text-center">
-            <div>
-              <Crosshair className="mx-auto h-12 w-12 text-slate-300" />
-              <h3 className="mt-4 text-lg font-black text-slate-800">No precise pin yet</h3>
-              <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-                Stand at the actual gate, building entrance, shop front, or handover point and tap
-                <b> Use My Current Location</b>.
-              </p>
-            </div>
+            <Crosshair className="h-12 w-12 text-slate-300" />
           </div>
         )}
 
         <div className="absolute left-3 top-3 rounded-2xl border border-white/70 bg-white/94 px-3 py-2 text-xs font-black text-slate-700 shadow-lg backdrop-blur">
-          {pin ? `${pin.latitude.toFixed(6)}, ${pin.longitude.toFixed(6)}` : "Pin not set"}
+          {pin ? `${pin.latitude.toFixed(6)}, ${pin.longitude.toFixed(6)}` : "Approximate address"}
         </div>
+        {pin && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-950/88 px-3 py-2 text-[11px] font-black text-white shadow-lg backdrop-blur">
+            Preview only · move pin with the controls below
+          </div>
+        )}
       </div>
 
       <div className="space-y-4 p-4">
