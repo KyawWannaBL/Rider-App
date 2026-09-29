@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-const UI_CACHE_VERSION = 'rider-ui-v181-20260930';
+const UI_CACHE_VERSION = 'rider-ui-v183-20260930';
 
 async function clearLegacyUiCaches() {
   try {
@@ -23,6 +23,26 @@ async function clearLegacyUiCaches() {
     console.warn('Legacy Rider UI cache cleanup skipped:', error);
   }
 }
+
+function applyDeviceCompatibilityClass() {
+  try {
+    const ua = navigator.userAgent || "";
+    const android = /Android/i.test(ua);
+    const tabletLike = Math.min(window.innerWidth, window.screen?.width || window.innerWidth) >= 600;
+    const coarse = window.matchMedia?.("(pointer: coarse)")?.matches ?? true;
+    const isNative = Boolean((window as any).Capacitor?.isNativePlatform?.());
+
+    document.documentElement.classList.toggle("be-android-tablet-compat", android && tabletLike && coarse);
+    document.documentElement.classList.toggle("be-native-rider-app", isNative);
+    document.documentElement.classList.toggle("be-browser-rider-app", !isNative);
+  } catch (error) {
+    console.warn("Device compatibility detection skipped:", error);
+  }
+}
+
+applyDeviceCompatibilityClass();
+window.addEventListener("resize", applyDeviceCompatibilityClass, { passive: true });
+window.addEventListener("orientationchange", applyDeviceCompatibilityClass, { passive: true });
 
 void clearLegacyUiCaches();
 
