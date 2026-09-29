@@ -4,7 +4,14 @@ on:
   push:
     branches: [main]
     paths:
+      - "src/**"
+      - "index.html"
+      - "vite.config.ts"
+      - "package.json"
+      - "package-lock.json"
       - "capacitor.config.ts"
+      - "public/logo.png"
+      - "public/images/**"
       - ".github/workflows/build-rider-apk.yml"
       - "scripts/verify-android-release-signing.mjs"
   workflow_dispatch:
