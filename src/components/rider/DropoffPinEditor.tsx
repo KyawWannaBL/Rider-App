@@ -117,6 +117,7 @@ export function DropoffPinEditor({
         deliveryWayId: waybill.deliveryWayId,
         latitude: pin.latitude,
         longitude: pin.longitude,
+        accuracy: pin.accuracy,
       });
 
       setMessage("Drop-off pin saved successfully. Navigation will use this location.");
