@@ -229,6 +229,7 @@ export default function Login() {
             )}
             <h1 className="mt-3 text-2xl font-black tracking-tight sm:mt-4 sm:text-3xl">BRITIUM</h1>
             <p className="mt-1 text-sm font-semibold text-slate-300">{t("Rider App", "Rider App")}</p>
+            <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-400">UI V181 · Responsive Tablet Build</p>
           </div>
 
           <div className="v142-panel overflow-hidden rounded-[30px] border border-white/10 shadow-2xl backdrop-blur-xl">
@@ -416,7 +417,7 @@ export default function Login() {
                       {t("Create Account", "အကောင့်အသစ်ဖန်တီးရန်")}
                     </button>
                     <a
-                      href="/downloads/Britium-Express-Rider.apk"
+                      href="/downloads/Britium-Express-Rider.apk?v=5458a4a-v181-tablet"
                       download="Britium-Express-Rider.apk"
                       className="v142-jelly flex h-11 items-center justify-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 text-xs font-black text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-400/15 hover:shadow-[0_12px_28px_rgba(34,211,238,.12)]"
                     >
