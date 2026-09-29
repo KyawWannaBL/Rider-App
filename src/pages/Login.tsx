@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   AlertCircle,
@@ -44,8 +44,10 @@ function setRememberMe(value: boolean) {
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { language, setLanguage } = useAppState();
-  const [view, setView] = useState<View>("password");
+  const initialView: View = new URLSearchParams(location.search).get("view") === "request" ? "request" : "password";
+  const [view, setView] = useState<View>(initialView);
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(getRememberMe());
   const [email, setEmail] = useState(getRememberedEmail());
@@ -395,7 +397,7 @@ export default function Login() {
                     className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-4 font-black text-slate-950 hover:bg-[#e3c45f] disabled:opacity-60"
                   >
                     {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UserPlus className="h-5 w-5" />}
-                    {t("Submit Request", "Request တင်မည်")}
+                    {t("Create Account", "အကောင့်ဖန်တီးမည်")}
                   </button>
                   <button type="button" onClick={() => switchView("password")} className="flex h-10 w-full items-center justify-center gap-2 text-xs font-black text-slate-400 hover:text-white">
                     <ArrowLeft className="h-4 w-4" />
@@ -414,7 +416,7 @@ export default function Login() {
                       className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-3 text-xs font-black text-[#f4d66d] hover:bg-[#d4af37]/15"
                     >
                       <UserPlus className="h-4 w-4" />
-                      {t("Request Access", "အကောင့်လုပ်မည်")}
+                      {t("Create Account", "အကောင့်အသစ်ဖန်တီးရန်")}
                     </button>
                     <a
                       href="/downloads/Britium-Express-Rider.apk"
