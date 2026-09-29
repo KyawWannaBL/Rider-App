@@ -72,7 +72,7 @@ async function currentGps() {
   if (!navigator.geolocation) return {};
   return await new Promise<any>((resolve) => {
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ gps_lat: pos.coords.latitude, gps_lng: pos.coords.longitude }),
+      (pos) => resolve({ gps_lat: pos.coords.latitude, gps_lng: pos.coords.longitude, gps_accuracy_m: pos.coords.accuracy }),
       () => resolve({}),
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 15000 },
     );
@@ -95,6 +95,7 @@ export default function DeliveryPage() {
   const [failureMode, setFailureMode] = useState(false);
   const [deliveryProgress, setDeliveryProgress] = useState<"idle"|"validating"|"uploading"|"gps"|"confirming"|"success"|"error">("idle");
   const [deliveryResult, setDeliveryResult] = useState("");
+  const [geofenceRepairAvailable, setGeofenceRepairAvailable] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [activeActions, setActiveActions] = useState<Record<string, boolean>>({});
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -134,6 +135,7 @@ export default function DeliveryPage() {
     setSelected(job);
     setFailureMode(false);
     setSignatureOnBehalf(false);
+    setGeofenceRepairAvailable(false);
     resetProofs();
     setForm((current) => ({
       ...current,
@@ -226,6 +228,7 @@ export default function DeliveryPage() {
       ok=true;
     } else if (action==="return") ok=await failAndReturnToWarehouse();
     else if (action==="gps") ok=await sendGps();
+    else if (action==="fix_dropoff") ok=await correctDropoffToCurrentGps();
 
     if (ok !== false) markActionActive(action);
     return ok;
@@ -563,10 +566,26 @@ export default function DeliveryPage() {
       await load(selected.delivery_way_id);
       return true;
     } catch (error: any) {
-      const message = error?.message || tx("Delivery confirmation failed.","ပို့ဆောင်ပြီး အတည်ပြုမှု မအောင်မြင်ပါ။");
-      setDeliveryProgress("error");
-      setDeliveryResult(message);
-      setMsg(message);
+      const rawMessage = error?.message || tx("Delivery confirmation failed.","ပို့ဆောင်ပြီး အတည်ပြုမှု မအောင်မြင်ပါ။");
+      const isGeofence = String(rawMessage).includes("GEOFENCE_OUTSIDE_RADIUS");
+      if (isGeofence) {
+        setGeofenceRepairAvailable(true);
+        const distanceMatch = String(rawMessage).match(/distance_m=([0-9.]+)/);
+        const radiusMatch = String(rawMessage).match(/radius_m=([0-9.]+)/);
+        const distanceText = distanceMatch?.[1] ? Math.round(Number(distanceMatch[1])).toLocaleString() : "?";
+        const radiusText = radiusMatch?.[1] ? Math.round(Number(radiusMatch[1])).toLocaleString() : "100";
+        const friendly = tx(
+          `The saved drop-off pin is about ${distanceText} m from your current GPS (allowed radius ${radiusText} m). If you are physically at the customer's correct address, press “Correct Drop-off to Current GPS”, then press Delivered again.`,
+          `System ထဲရှိ Drop-off Pin သည် လက်ရှိ GPS မှ ${distanceText} မီတာခန့် ဝေးနေပါသည် (ခွင့်ပြုအကွာအဝေး ${radiusText} မီတာ)။ Customer ၏ မှန်ကန်သောနေရာတွင် အမှန်တကယ်ရောက်နေပါက “လက်ရှိ GPS ကို Drop-off အဖြစ်ပြင်မည်” ကိုနှိပ်ပြီးနောက် Delivered ကို ပြန်နှိပ်ပါ။`
+        );
+        setDeliveryProgress("error");
+        setDeliveryResult(friendly);
+        setMsg(friendly);
+      } else {
+        setDeliveryProgress("error");
+        setDeliveryResult(rawMessage);
+        setMsg(rawMessage);
+      }
       return false;
     } finally {
       setBusy(false);
@@ -578,6 +597,46 @@ export default function DeliveryPage() {
     const gps = await currentGps();
     if (!gps.gps_lat || !gps.gps_lng) { setMsg(tx("GPS permission is required to record arrival.","ရောက်ရှိမှုမှတ်တမ်းတင်ရန် GPS ခွင့်ပြုချက် လိုအပ်ပါသည်။")); return false; }
     return await act("arrived", gps);
+  }
+
+  async function correctDropoffToCurrentGps() {
+    if (!selected) return false;
+    setBusy(true);
+    try {
+      const gps = await currentGps();
+      if (!gps.gps_lat || !gps.gps_lng) {
+        throw new Error(tx(
+          "Current GPS is unavailable. Enable precise location permission and try again.",
+          "လက်ရှိ GPS မရရှိပါ။ Precise Location Permission ကို ဖွင့်ပြီး ပြန်စမ်းပါ။"
+        ));
+      }
+      const { data, error } = await (supabase as any).rpc("be_rider_dropoff_pin_v147", {
+        p_delivery_way_id: selected.delivery_way_id,
+        p_latitude: gps.gps_lat,
+        p_longitude: gps.gps_lng,
+        p_accuracy_m: gps.gps_accuracy_m ?? null,
+      });
+      if (error) throw error;
+      if (data?.ok === false) throw new Error(data?.message || data?.error || "Unable to correct drop-off pin.");
+      setGeofenceRepairAvailable(false);
+      const message = tx(
+        `${selected.delivery_way_id}: Drop-off pin corrected to the current GPS. Press Delivered again to complete the normal evidence and geofence checks.`,
+        `${selected.delivery_way_id}: Drop-off Pin ကို လက်ရှိ GPS နေရာသို့ ပြင်ဆင်ပြီးပါပြီ။ ပုံမှန် Evidence နှင့် Geofence စစ်ဆေးမှုဖြင့် အပြီးသတ်ရန် Delivered ကို ပြန်နှိပ်ပါ။`
+      );
+      setDeliveryProgress("success");
+      setDeliveryResult(message);
+      setMsg(message);
+      await load(selected.delivery_way_id);
+      return true;
+    } catch (error:any) {
+      const message = error?.message || tx("Unable to correct drop-off pin.","Drop-off Pin ပြင်ဆင်၍ မရပါ။");
+      setDeliveryProgress("error");
+      setDeliveryResult(message);
+      setMsg(message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function failDelivery() {
@@ -922,6 +981,28 @@ export default function DeliveryPage() {
                     </div>
                   )}
 
+                  {geofenceRepairAvailable && (
+                    <div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                      <div className="font-black text-amber-900">
+                        {tx("Saved drop-off location appears incorrect","သိမ်းထားသော Drop-off Location မှားယွင်းနိုင်ပါသည်")}
+                      </div>
+                      <p className="mt-1 text-sm font-semibold text-amber-800">
+                        {tx(
+                          "Only use this when you are physically at the customer's correct delivery address. The corrected pin is saved with your authenticated user and GPS evidence.",
+                          "Customer ၏ မှန်ကန်သော ပို့ဆောင်ရမည့်နေရာတွင် အမှန်တကယ်ရောက်နေချိန်တွင်သာ အသုံးပြုပါ။ ပြင်ဆင်ထားသော Pin ကို Login User နှင့် GPS Evidence ဖြင့် မှတ်တမ်းတင်ပါမည်။"
+                        )}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => requestConfirm("fix_dropoff")}
+                        className="be-jelly-action mt-3 w-full rounded-2xl bg-amber-600 p-3 font-black text-white disabled:opacity-50"
+                      >
+                        {tx("Correct Drop-off to Current GPS","လက်ရှိ GPS ကို Drop-off အဖြစ်ပြင်မည်")}
+                      </button>
+                    </div>
+                  )}
+
                   {failureMode && form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
                     <label className="mt-3 block rounded-2xl border bg-white p-3 font-bold">
                       {tx("Dedicated delivery date","သတ်မှတ်ပို့ဆောင်ရက်")}
@@ -960,6 +1041,10 @@ export default function DeliveryPage() {
                         {confirmAction==="failed" && tx("Open failed-delivery mode and enable the failed reason list?","ပို့ဆောင်မှုမအောင်မြင် လုပ်ငန်းစဉ်ကို ဖွင့်ပြီး အကြောင်းပြချက်စာရင်းကို အသုံးပြုမည်လား?")}
                         {confirmAction==="return" && tx("Record the failed delivery and return this parcel to Warehouse?","ပို့ဆောင်မှုမအောင်မြင်ကြောင်း မှတ်တမ်းတင်ပြီး Warehouse သို့ ပြန်ပို့မည်လား?")}
                         {confirmAction==="gps" && tx("Check current GPS now?","လက်ရှိ GPS တည်နေရာကို စစ်ဆေးမည်လား?")}
+                        {confirmAction==="fix_dropoff" && tx(
+                          "You are confirming that you are physically at the customer's correct delivery address. Replace the saved drop-off pin with this device's current GPS?",
+                          "Customer ၏ မှန်ကန်သော ပို့ဆောင်ရမည့်နေရာတွင် အမှန်တကယ်ရောက်နေကြောင်း အတည်ပြုပါသည်။ သိမ်းထားသော Drop-off Pin ကို ယခု Device ၏ လက်ရှိ GPS ဖြင့် အစားထိုးမည်လား?"
+                        )}
                       </p>
                       <div className="mt-4 grid grid-cols-2 gap-3">
                         <button type="button" onClick={() => setConfirmAction(null)} className="be-jelly-action rounded-2xl border p-3 font-black">{tx("No","မဟုတ်ပါ")}</button>
