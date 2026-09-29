@@ -493,3 +493,115 @@ html.be-android-tablet-compat canvas {
   filter: none !important;
   opacity: 1 !important;
 }
+
+
+/* Rider V184 — native Android tablet login must remain simple and fully interactive. */
+html.be-android-tablet-compat .rider-login-desktop-intro {
+  display: none !important;
+}
+
+html.be-android-tablet-compat .rider-login-grid {
+  display: flex !important;
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 4.25rem 1rem 1.5rem !important;
+}
+
+html.be-android-tablet-compat .rider-login-card {
+  width: min(100%, 34rem) !important;
+  max-width: 34rem !important;
+  margin: 0 auto !important;
+}
+
+html.be-android-tablet-compat .rider-login-mobile-brand {
+  display: block !important;
+  margin-bottom: 1rem !important;
+}
+
+html.be-android-tablet-compat .rider-login-mobile-brand img {
+  width: 4rem !important;
+  height: 4rem !important;
+  object-fit: contain !important;
+}
+
+html.be-android-tablet-compat .rider-login-card .v142-panel {
+  background: #0b1424 !important;
+  border: 1px solid #334155 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 16px 36px rgba(2,6,23,.28) !important;
+  overflow: hidden !important;
+}
+
+html.be-android-tablet-compat .rider-login-card input[type="email"],
+html.be-android-tablet-compat .rider-login-card input[type="password"],
+html.be-android-tablet-compat .rider-login-card input[type="text"],
+html.be-android-tablet-compat .rider-login-card input:not([type]) {
+  display: block !important;
+  width: 100% !important;
+  min-height: 52px !important;
+  padding: 0 1rem !important;
+  border: 1px solid #475569 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  opacity: 1 !important;
+  font-size: 16px !important;
+  box-shadow: none !important;
+}
+
+html.be-android-tablet-compat .rider-login-card input[type="email"],
+html.be-android-tablet-compat .rider-login-card input[type="password"] {
+  padding-left: 3rem !important;
+}
+
+html.be-android-tablet-compat .rider-login-card button,
+html.be-android-tablet-compat .rider-login-card a {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+html.be-android-tablet-compat .rider-login-card button[type="submit"] {
+  display: flex !important;
+  width: 100% !important;
+  min-height: 52px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: #f4d66d !important;
+  color: #07111f !important;
+  font-weight: 900 !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+
+html.be-android-tablet-compat .rider-login-card button[type="submit"]:disabled {
+  opacity: .55 !important;
+}
+
+html.be-android-tablet-compat .rider-login-card button[type="button"],
+html.be-android-tablet-compat .rider-login-card a {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+html.be-android-tablet-compat .rider-login-card label,
+html.be-android-tablet-compat .rider-login-card p,
+html.be-android-tablet-compat .rider-login-card span,
+html.be-android-tablet-compat .rider-login-card h1,
+html.be-android-tablet-compat .rider-login-card h2 {
+  opacity: 1 !important;
+}
+
+@media (orientation: landscape) and (max-height: 700px) {
+  html.be-android-tablet-compat .rider-login-grid {
+    align-items: flex-start !important;
+    padding-top: 3.75rem !important;
+  }
+
+  html.be-android-tablet-compat .rider-login-mobile-brand {
+    display: none !important;
+  }
+}
