@@ -155,7 +155,7 @@ export default function Login() {
   }
 
   return (
-    <main className="v142-shell-bg relative min-h-screen overflow-hidden text-slate-100">
+    <main className="v142-shell-bg be-screen-shell relative min-h-[100dvh] overflow-x-hidden overflow-y-auto text-slate-100">
       <div
         className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-20"
         style={{ backgroundImage: "url('/images/rider-login-bg.jpg'), url('/logo.png')" }}
@@ -166,13 +166,13 @@ export default function Login() {
       <button
         type="button"
         onClick={() => setLanguage(language === "en" ? "my" : "en")}
-        className="absolute right-4 top-4 z-20 inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 text-xs font-black uppercase tracking-wider text-slate-100 backdrop-blur-md hover:bg-white/10 sm:right-6 sm:top-6"
+        className="absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 text-xs font-black uppercase tracking-wider text-slate-100 backdrop-blur-md hover:bg-white/10 sm:right-6 sm:top-6 sm:px-4"
       >
         <Globe className="h-4 w-4" />
         {language === "en" ? "MY" : "EN"}
       </button>
 
-      <div className="relative z-10 mx-auto grid min-h-screen w-full max-w-6xl items-center gap-8 px-4 py-16 lg:grid-cols-[1.05fr_.95fr] lg:px-8">
+      <div className="relative z-10 mx-auto grid min-h-[100dvh] w-full max-w-6xl items-center gap-6 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16 sm:px-5 sm:py-12 lg:grid-cols-[1.05fr_.95fr] lg:gap-8 lg:px-8">
         <motion.section initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .5 }} className="hidden lg:block">
           <div className="max-w-xl">
             <div className="mb-7 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md">
@@ -219,24 +219,24 @@ export default function Login() {
         </motion.section>
 
         <motion.section initial={{ opacity: 0, y: 18, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: .42, delay: .06 }} className="mx-auto w-full max-w-md">
-          <div className="mb-6 text-center lg:hidden">
+          <div className="mb-4 text-center sm:mb-6 lg:hidden">
             {!logoFailed ? (
               <img
                 src="/logo.png"
                 alt="Britium"
-                className="mx-auto h-20 w-20 rounded-2xl bg-white object-contain p-2 shadow-2xl"
+                className="mx-auto h-16 w-16 rounded-2xl bg-white object-contain p-2 shadow-2xl sm:h-20 sm:w-20"
                 onError={() => setLogoFailed(true)}
               />
             ) : (
               <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl bg-emerald-500/15 text-3xl font-black text-emerald-300">B</div>
             )}
-            <h1 className="mt-4 text-3xl font-black tracking-tight">BRITIUM</h1>
+            <h1 className="mt-3 text-2xl font-black tracking-tight sm:mt-4 sm:text-3xl">BRITIUM</h1>
             <p className="mt-1 text-sm font-semibold text-slate-300">{t("Rider App", "Rider App")}</p>
           </div>
 
           <div className="v142-panel overflow-hidden rounded-[30px] border border-white/10 shadow-2xl backdrop-blur-xl">
             <div className="h-1.5 bg-gradient-to-r from-[#d4af37] via-[#f4d66d] to-cyan-400" />
-            <div className="p-6 sm:p-8">
+            <div className="p-4 min-[360px]:p-5 sm:p-8">
               <div className="mb-6 flex items-center gap-3">
                 <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-300">
                   <ShieldCheck className="h-5 w-5" />
@@ -301,7 +301,7 @@ export default function Login() {
                     </div>
                   </label>
 
-                  <div className="flex items-center justify-between gap-4 py-1">
+                  <div className="flex flex-wrap items-center justify-between gap-3 py-1">
                     <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-300">
                       <input
                         type="checkbox"
@@ -314,7 +314,7 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => switchView("forgot")}
-                      className="text-xs font-black text-cyan-300 hover:text-cyan-200"
+                      className="min-h-0 text-right text-xs font-black text-cyan-300 hover:text-cyan-200"
                     >
                       {t("Forgot password?", "စကားဝှက် မေ့နေပါသလား")}
                     </button>
