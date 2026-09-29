@@ -119,7 +119,38 @@ export async function loadRiderRoute(): Promise<{ dispatch: Dispatch | null; way
   if (data?.ok === false) throw new Error(data?.error || "Unable to load Rider route.");
 
   const rows = Array.isArray(data?.jobs) ? data.jobs : [];
-  const waybills = rows.map(mapWaybill);
+  let locationByWay = new Map<string, any>();
+
+  if (rows.length) {
+    const deliveryWayIds = rows.map((row: any) => String(row?.delivery_way_id || "")).filter(Boolean);
+    const { data: locations, error: locationError } = await (supabase as any).rpc("be_delivery_location_batch_v10", {
+      p_delivery_way_ids: deliveryWayIds,
+    });
+
+    if (!locationError && Array.isArray(locations)) {
+      locationByWay = new Map(
+        locations.map((location: any) => [String(location?.delivery_way_id || "").toUpperCase(), location]),
+      );
+    }
+  }
+
+  const waybills = rows.map((row: any) => {
+    const location = locationByWay.get(String(row?.delivery_way_id || "").toUpperCase());
+    const enriched = location?.latitude && location?.longitude
+      ? {
+          ...row,
+          metadata: {
+            ...(row?.metadata || {}),
+            latitude: Number(location.latitude),
+            longitude: Number(location.longitude),
+            coordinate_source: location.coordinate_source,
+            location_review_status: location.review_status,
+          },
+        }
+      : row;
+
+    return mapWaybill(enriched);
+  });
 
   if (!rows.length) return { dispatch: null, waybills };
 
@@ -279,4 +310,33 @@ export function openNavigation(waybill: Waybill) {
     ? `${loc.latitude},${loc.longitude}`
     : encodeURIComponent([waybill.customer.address, waybill.customer.township].filter(Boolean).join(", "));
   window.open(`https://www.google.com/maps/dir/?api=1&destination=${query}`, "_blank", "noopener,noreferrer");
+}
+
+
+export async function saveRiderDropoffPin(input: {
+  deliveryWayId: string;
+  latitude: number;
+  longitude: number;
+  context?: string;
+}) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { data, error } = await (supabase as any).rpc("be_update_delivery_location_pin_v1", {
+    p_delivery_way_id: input.deliveryWayId,
+    p_latitude: input.latitude,
+    p_longitude: input.longitude,
+    p_context: input.context || "RIDER_ACTIVE_ROUTE_PIN_EDITOR",
+  });
+
+  if (error) throw error;
+  if (data?.ok === false) throw new Error(data?.error || "Unable to save drop-off pin.");
+  return data;
+}
+
+export function openPinInGoogleMaps(latitude: number, longitude: number) {
+  window.open(
+    `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
+    "_blank",
+    "noopener,noreferrer",
+  );
 }
