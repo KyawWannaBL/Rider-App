@@ -569,14 +569,10 @@ export default function DeliveryPage() {
       const rawMessage = error?.message || tx("Delivery confirmation failed.","ပို့ဆောင်ပြီး အတည်ပြုမှု မအောင်မြင်ပါ။");
       const isGeofence = String(rawMessage).includes("GEOFENCE_OUTSIDE_RADIUS");
       if (isGeofence) {
-        setGeofenceRepairAvailable(true);
-        const distanceMatch = String(rawMessage).match(/distance_m=([0-9.]+)/);
-        const radiusMatch = String(rawMessage).match(/radius_m=([0-9.]+)/);
-        const distanceText = distanceMatch?.[1] ? Math.round(Number(distanceMatch[1])).toLocaleString() : "?";
-        const radiusText = radiusMatch?.[1] ? Math.round(Number(radiusMatch[1])).toLocaleString() : "100";
+        setGeofenceRepairAvailable(false);
         const friendly = tx(
-          `The saved drop-off pin is about ${distanceText} m from your current GPS (allowed radius ${radiusText} m). If you are physically at the customer's correct address, press “Correct Drop-off to Current GPS”, then press Delivered again.`,
-          `System ထဲရှိ Drop-off Pin သည် လက်ရှိ GPS မှ ${distanceText} မီတာခန့် ဝေးနေပါသည် (ခွင့်ပြုအကွာအဝေး ${radiusText} မီတာ)။ Customer ၏ မှန်ကန်သောနေရာတွင် အမှန်တကယ်ရောက်နေပါက “လက်ရှိ GPS ကို Drop-off အဖြစ်ပြင်မည်” ကိုနှိပ်ပြီးနောက် Delivered ကို ပြန်နှိပ်ပါ။`
+          "Location verification could not complete automatically. Wait for a stronger GPS signal and press Delivered again.",
+          "Location စစ်ဆေးမှုကို အလိုအလျောက် မပြီးဆုံးနိုင်ပါ။ GPS Signal ပိုကောင်းလာအောင် ခဏစောင့်ပြီး Delivered ကို ပြန်နှိပ်ပါ။"
         );
         setDeliveryProgress("error");
         setDeliveryResult(friendly);
@@ -981,7 +977,7 @@ export default function DeliveryPage() {
                     </div>
                   )}
 
-                  {geofenceRepairAvailable && (
+                  {false && (
                     <div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
                       <div className="font-black text-amber-900">
                         {tx("Saved drop-off location appears incorrect","သိမ်းထားသော Drop-off Location မှားယွင်းနိုင်ပါသည်")}
