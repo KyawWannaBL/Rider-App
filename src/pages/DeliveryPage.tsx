@@ -93,6 +93,8 @@ export default function DeliveryPage() {
   const [signaturePreview, setSignaturePreview] = useState("");
   const [busy, setBusy] = useState(false);
   const [failureMode, setFailureMode] = useState(false);
+  const [deliveryProgress, setDeliveryProgress] = useState<"idle"|"validating"|"uploading"|"gps"|"confirming"|"success"|"error">("idle");
+  const [deliveryResult, setDeliveryResult] = useState("");
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [activeActions, setActiveActions] = useState<Record<string, boolean>>({});
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -114,7 +116,7 @@ export default function DeliveryPage() {
   const requiredCod = Number(selected?.calculated_cod_amount ?? selected?.cod_amount ?? 0);
   const status = String(selected?.stop_status || selected?.rider_status || "").toUpperCase();
   const electronicPayment = ["QR", "BANK_TRANSFER", "MOBILE_WALLET"].includes(form.payment_method);
-  const canDeliver = status === "ARRIVED_AT_CUSTOMER";
+  const canDeliver = ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY","OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER"].includes(status);
 
   function resetProofs() {
     setProofFile(null);
@@ -387,34 +389,68 @@ export default function DeliveryPage() {
   }
 
   async function deliver() {
-    if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
-    if (!canDeliver) { setMsg(tx("Record Arrived at Customer before confirming delivery.","ပို့ဆောင်ပြီးအတည်ပြုမီ Customer နေရာသို့ ရောက်ရှိကြောင်း အရင်မှတ်တမ်းတင်ပါ။")); return false; }
-    if (!form.receiver_name.trim()) { setMsg(tx("Receiver name is required.","လက်ခံသူအမည် ဖြည့်ရန်လိုအပ်ပါသည်။")); return false; }
-    if (!approvedProofFile) { setMsg(tx("Capture, review and approve the delivery proof photo first.","ပို့ဆောင်မှုဓာတ်ပုံကို ရိုက်ယူ၊ စစ်ဆေးပြီး အတည်ပြုပါ။")); return false; }
+    if (!selected) {
+      const message = tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။");
+      setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
+    }
+    if (!canDeliver) {
+      const message = tx(
+        "Accept the parcel before confirming delivery.",
+        "ပို့ဆောင်ပြီး အတည်ပြုရန် ပါဆယ်ကို အရင်လက်ခံပါ။"
+      );
+      setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
+    }
+    if (!form.receiver_name.trim()) {
+      const message = tx("Receiver name is required.","လက်ခံသူအမည် ဖြည့်ရန်လိုအပ်ပါသည်။");
+      setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
+    }
+    if (!approvedProofFile) {
+      const message = tx("Capture, review and approve the delivery proof photo first.","ပို့ဆောင်မှုဓာတ်ပုံကို ရိုက်ယူ၊ စစ်ဆေးပြီး အတည်ပြုပါ။");
+      setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
+    }
+
+    setDeliveryProgress("validating");
+    setDeliveryResult(tx("Checking proof, signature and payment...","ဓာတ်ပုံ၊ လက်မှတ်နှင့် ငွေပေးချေမှုကို စစ်ဆေးနေပါသည်..."));
+
     const drawnSignature = await signatureCanvasFile();
     if (!signatureFile && !drawnSignature) {
-      setMsg(tx(
+      const message = tx(
         "Capture or upload the customer signature before confirming delivery.",
         "ပို့ဆောင်ပြီးအတည်ပြုမီ Customer လက်မှတ်ကို ရေးထိုး သို့မဟုတ် ဓာတ်ပုံတင်ပါ။"
-      ));
-      return false;
+      );
+      setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
     }
+
     if (Number(form.cod_collected || requiredCod || 0) !== requiredCod) {
       setForm((current) => ({ ...current, cod_collected: String(requiredCod) }));
     }
     if (electronicPayment && !form.transaction_reference.trim()) {
-      setMsg(tx("Transaction reference is required for electronic payment.","အီလက်ထရွန်နစ်ငွေပေးချေမှုအတွက် ငွေလွှဲအမှတ် လိုအပ်ပါသည်။")); return false;
+      const message = tx("Transaction reference is required for electronic payment.","အီလက်ထရွန်နစ်ငွေပေးချေမှုအတွက် ငွေလွှဲအမှတ် လိုအပ်ပါသည်။");
+      setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
     }
 
     setBusy(true);
     try {
+      setDeliveryProgress("uploading");
+      setDeliveryResult(tx("Uploading proof and signature...","သက်သေဓာတ်ပုံနှင့် လက်မှတ်ကို Upload တင်နေပါသည်..."));
+
       const prefix = `${selected.wayplan_id}/${selected.delivery_way_id}`;
       const proof_url = await upload("rider-proofs", approvedProofFile, prefix);
       const finalSignatureFile = signatureFile || drawnSignature;
       const signature_path = finalSignatureFile
         ? await upload("ops-signatures", finalSignatureFile, prefix)
         : null;
+
+      setDeliveryProgress("gps");
+      setDeliveryResult(tx("Checking current GPS and arrival state...","လက်ရှိ GPS နှင့် ရောက်ရှိမှုအခြေအနေကို စစ်ဆေးနေပါသည်..."));
       const gps = await currentGps();
+      if (!gps.gps_lat || !gps.gps_lng) {
+        throw new Error(tx(
+          "Current GPS is required to complete delivery. Allow location permission and try again.",
+          "ပို့ဆောင်ပြီး အတည်ပြုရန် လက်ရှိ GPS လိုအပ်ပါသည်။ Location Permission ကို ခွင့်ပြုပြီး ပြန်စမ်းပါ။"
+        ));
+      }
+
       const signature_payload = form.signature_name.trim()
         ? {
             method: "CUSTOMER_TYPED_ACKNOWLEDGEMENT",
@@ -423,11 +459,16 @@ export default function DeliveryPage() {
           }
         : {};
 
-      const { data, error } = await (supabase as any).rpc("be_field_team_delivery_action_v77", {
+      setDeliveryProgress("confirming");
+      setDeliveryResult(tx(
+        "Confirming delivery and synchronizing Warehouse, Finance and Operations...",
+        "ပို့ဆောင်ပြီး အတည်ပြုပြီး Warehouse, Finance နှင့် Operations သို့ ချိတ်ဆက်နေပါသည်..."
+      ));
+
+      const { data, error } = await (supabase as any).rpc("be_field_team_confirm_delivery_v146", {
         p_payload: {
           wayplan_id: selected.wayplan_id,
           delivery_way_id: selected.delivery_way_id,
-          action: "deliver",
           recipient_name: form.receiver_name.trim(),
           recipient_phone: form.receiver_phone.trim() || null,
           proof_url,
@@ -440,15 +481,32 @@ export default function DeliveryPage() {
           ...gps,
         },
       });
-      if (error) throw error;
-      if (data?.ok === false) throw new Error(data?.error || "Delivery confirmation failed.");
 
-      setMsg(`${selected.delivery_way_id}: delivery confirmed with proof, payment and signature.`);
+      if (error) throw error;
+      if (data?.ok === false) {
+        const stage = data?.failed_stage ? ` [${data.failed_stage}]` : "";
+        throw new Error((data?.message || data?.error || "Delivery confirmation failed.") + stage);
+      }
+      if (String(data?.mobile_status || "").toUpperCase() !== "DELIVERED") {
+        throw new Error("Delivery confirmation did not return authoritative DELIVERED status.");
+      }
+
+      const successMessage = tx(
+        `${selected.delivery_way_id}: Delivered successfully. Backend status is DELIVERED and synchronized.`,
+        `${selected.delivery_way_id}: ပို့ဆောင်မှု အောင်မြင်ပါသည်။ Backend Status သည် DELIVERED ဖြစ်ပြီး ချိတ်ဆက်ပြီးပါပြီ။`
+      );
+      setDeliveryProgress("success");
+      setDeliveryResult(successMessage);
+      setMsg(successMessage);
+      markActionActive("delivered");
       resetProofs();
       await load(selected.delivery_way_id);
       return true;
     } catch (error: any) {
-      setMsg(error?.message || "Delivery confirmation failed.");
+      const message = error?.message || tx("Delivery confirmation failed.","ပို့ဆောင်ပြီး အတည်ပြုမှု မအောင်မြင်ပါ။");
+      setDeliveryProgress("error");
+      setDeliveryResult(message);
+      setMsg(message);
       return false;
     } finally {
       setBusy(false);
@@ -764,9 +822,12 @@ export default function DeliveryPage() {
                     <button
                       type="button"
                       onClick={() => requestConfirm("delivered")}
-                      className={actionClass("delivered","bg-emerald-600")}
+                      disabled={busy}
+                      className={`${actionClass("delivered","bg-emerald-600")} disabled:cursor-wait disabled:opacity-60`}
                     >
-                      {tx("Delivered","ပို့ဆောင်ပြီး")}
+                      {busy && ["validating","uploading","gps","confirming"].includes(deliveryProgress)
+                        ? tx("Processing...","လုပ်ဆောင်နေသည်...")
+                        : tx("Delivered","ပို့ဆောင်ပြီး")}
                     </button>
 
                     <select
@@ -779,6 +840,23 @@ export default function DeliveryPage() {
                       {failureReasons.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
                     </select>
                   </div>
+
+                  {deliveryProgress !== "idle" && (
+                    <div className={`mt-3 rounded-2xl border p-4 text-sm font-black ${
+                      deliveryProgress === "success"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        : deliveryProgress === "error"
+                          ? "border-rose-200 bg-rose-50 text-rose-800"
+                          : "border-blue-200 bg-blue-50 text-blue-800"
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        {["validating","uploading","gps","confirming"].includes(deliveryProgress) && (
+                          <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-r-transparent" />
+                        )}
+                        <span>{deliveryResult}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {failureMode && form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
                     <label className="mt-3 block rounded-2xl border bg-white p-3 font-bold">
