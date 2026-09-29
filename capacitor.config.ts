@@ -6,13 +6,14 @@ const config: CapacitorConfig = {
   appName: 'Britium Express Rider',
   webDir: 'dist',
   server: {
-    url: 'https://britiumexpress.app',
+    url: 'https://www.britiumexpress.app',
     cleartext: false,
     allowNavigation: [
       'britiumexpress.app',
       'www.britiumexpress.app',
       '*.supabase.co'
-    ]
+    ],
+    errorPath: 'offline.html'
   },
   android: {
     allowMixedContent: false
