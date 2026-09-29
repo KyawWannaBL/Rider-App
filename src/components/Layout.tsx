@@ -42,7 +42,7 @@ function desktopNavClass({ isActive }: { isActive: boolean }) {
 
 function mobileNavClass({ isActive }: { isActive: boolean }) {
   return [
-    "relative flex min-w-[68px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-black transition-all duration-200",
+    "be-mobile-nav-item relative flex min-w-[64px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-black transition-all duration-200 sm:min-w-[72px] sm:flex-1",
     isActive ? "text-blue-700" : "text-slate-500 active:bg-slate-100",
   ].join(" ");
 }
@@ -109,19 +109,19 @@ export function Layout() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[var(--be-bg)] text-slate-950">
-      <header className="sticky top-0 z-40 border-b border-white/60 bg-white/80 px-3 py-3 shadow-[0_8px_30px_rgba(15,23,42,.06)] backdrop-blur-2xl sm:px-4">
+    <div className="be-screen-shell min-h-[100dvh] bg-[var(--be-bg)] text-slate-950">
+      <header className="sticky top-0 z-40 border-b border-white/60 bg-white/90 px-3 py-2.5 shadow-[0_8px_30px_rgba(15,23,42,.06)] backdrop-blur-2xl sm:px-4 sm:py-3">
         <div className="mx-auto max-w-7xl">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[18px] bg-slate-950 text-white shadow-[0_12px_30px_rgba(15,23,42,.22)] v142-glow">
+              <div className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[15px] bg-slate-950 text-white shadow-[0_12px_30px_rgba(15,23,42,.22)] v142-glow sm:h-12 sm:w-12 sm:rounded-[18px]">
                 <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-amber-300" />
-                <span className="text-xl font-black tracking-tight">B</span>
+                <span className="text-lg font-black tracking-tight sm:text-xl">B</span>
               </div>
               <div className="min-w-0">
-                <p className="truncate text-[10px] font-black uppercase tracking-[0.30em] text-blue-700">BRITIUM EXPRESS</p>
+                <p className="truncate text-[9px] font-black uppercase tracking-[0.20em] text-blue-700 sm:text-[10px] sm:tracking-[0.30em]">BRITIUM EXPRESS</p>
                 <div className="mt-0.5 flex items-center gap-2">
-                  <h1 className="truncate text-lg font-black tracking-tight text-slate-950 sm:text-xl">{tx("Rider App", "Rider အက်ပ်")}</h1>
+                  <h1 className="truncate text-base font-black tracking-tight text-slate-950 sm:text-xl">{tx("Rider App", "Rider အက်ပ်")}</h1>
                   <span className="hidden rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-700 sm:inline-flex">
                     Live
                   </span>
@@ -129,7 +129,7 @@ export function Layout() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={toggleLanguage}
@@ -257,12 +257,12 @@ export function Layout() {
         </section>
       )}
 
-      <main className="pb-[92px] lg:pb-0">
+      <main className="pb-[calc(88px+env(safe-area-inset-bottom))] lg:pb-0">
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-40 rounded-[26px] border border-white/70 bg-white/92 p-1.5 shadow-[0_22px_60px_rgba(15,23,42,.20)] backdrop-blur-2xl lg:hidden">
-        <div className="flex items-stretch gap-0.5 overflow-x-auto">
+      <nav className="be-mobile-bottom-nav fixed z-40 rounded-[24px] border border-white/70 bg-white/95 p-1.5 shadow-[0_22px_60px_rgba(15,23,42,.20)] backdrop-blur-2xl lg:hidden">
+        <div className="be-mobile-nav-scroll flex items-stretch gap-0.5 overflow-x-auto px-0.5">
           {navItems.map(({ to, en, my, icon: Icon }) => (
             <NavLink key={to} to={to} className={mobileNavClass}>
               {({ isActive }) => (
