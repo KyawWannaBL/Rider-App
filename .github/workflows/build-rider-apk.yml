@@ -65,7 +65,7 @@ jobs:
         run: npm ci
 
       - name: Install Capacitor Android tooling
-        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets
 
       - name: Prepare shell web directory
         run: |
@@ -122,6 +122,21 @@ jobs:
 
       - name: Generate Android project
         run: npx cap add android
+
+      - name: Generate Android launcher icon from public logo
+        run: |
+          set -euo pipefail
+          test -s public/logo.png
+          rm -rf assets
+          mkdir -p assets
+          cp public/logo.png assets/logo.png
+          npx @capacitor/assets generate --android \
+            --assetPath assets \
+            --iconBackgroundColor '#07111f' \
+            --iconBackgroundColorDark '#07111f' \
+            --splashBackgroundColor '#07111f' \
+            --splashBackgroundColorDark '#07111f'
+          test -s android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
       - name: Configure Android permissions and monotonic version
         env:
