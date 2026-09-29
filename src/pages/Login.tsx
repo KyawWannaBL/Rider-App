@@ -155,11 +155,8 @@ export default function Login() {
   }
 
   return (
-    <main className="v142-shell-bg be-screen-shell relative min-h-[100dvh] overflow-x-hidden overflow-y-auto text-slate-100">
-      <div
-        className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-20"
-        style={{ backgroundImage: "url('/images/rider-login-bg.jpg'), url('/logo.png')" }}
-      />
+    <main className="v142-shell-bg be-screen-shell relative min-h-screen min-h-[100dvh] overflow-x-hidden overflow-y-auto text-slate-100">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(145deg,#020617_0%,#07111f_42%,#082f49_100%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(2,6,23,.96),rgba(7,17,31,.88)_45%,rgba(8,47,73,.78))]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_20%,rgba(34,211,238,.16),transparent_35%)]" />
 
@@ -172,7 +169,7 @@ export default function Login() {
         {language === "en" ? "MY" : "EN"}
       </button>
 
-      <div className="relative z-10 mx-auto grid min-h-[100dvh] w-full max-w-6xl items-center gap-6 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16 sm:px-5 sm:py-12 lg:grid-cols-[1.05fr_.95fr] lg:gap-8 lg:px-8">
+      <div className="relative z-10 mx-auto grid min-h-screen min-h-[100dvh] w-full max-w-6xl items-center gap-5 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(4rem,env(safe-area-inset-top))] sm:px-5 sm:py-8 md:px-6 lg:grid-cols-[1.05fr_.95fr] lg:gap-8 lg:px-8 lg:py-10">
         <motion.section initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .5 }} className="hidden lg:block">
           <div className="max-w-xl">
             <div className="mb-7 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md">
@@ -218,7 +215,7 @@ export default function Login() {
           </div>
         </motion.section>
 
-        <motion.section initial={{ opacity: 0, y: 18, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: .42, delay: .06 }} className="mx-auto w-full max-w-md">
+        <motion.section initial={{ opacity: 0, y: 18, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: .42, delay: .06 }} className="mx-auto w-full max-w-md px-0 sm:max-w-lg lg:max-w-md">
           <div className="mb-4 text-center sm:mb-6 lg:hidden">
             {!logoFailed ? (
               <img
