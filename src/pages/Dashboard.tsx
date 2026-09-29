@@ -120,12 +120,12 @@ export default function Dashboard() {
   return (
     <div className="v142-portal-bg min-h-screen p-4 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-5">
-        <section className="relative overflow-hidden rounded-[32px] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,.22)]">
+        <section className="rider-dashboard-hero relative overflow-hidden rounded-[32px] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,.22)]">
           <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" /><div className="pointer-events-none absolute -bottom-16 left-10 h-44 w-44 rounded-full bg-[#d4af37]/10 blur-3xl" /><div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black tracking-[0.35em] text-[#f4d66d]">BRITIUM EXPRESS</p>
               <h1 className="mt-2 text-3xl font-black text-white">{tx("Field Team Daily Dashboard","Rider / Driver / Helper နေ့စဉ် Dashboard")}</h1>
-              <p className="mt-2 font-semibold text-slate-300">
+              <p className="rider-dashboard-subtext mt-2 font-semibold text-slate-300">
                 {tx(
                   "Completed and failed delivery stops leave the active work screen and are summarized here for the day, including Finance reconciliation.",
                   "ပို့ဆောင်အောင်မြင်ပြီးသော Way နှင့် မအောင်မြင်သော Way များကို Active လုပ်ငန်းစာရင်းမှ ဖယ်ရှားပြီး ယနေ့ Dashboard တွင် Finance စာရင်းညှိနှိုင်းမှုနှင့်အတူ စုစည်းပြသပါသည်။"
@@ -140,7 +140,7 @@ export default function Dashboard() {
               <RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`} /> {tx("Sync Enterprise","Enterprise နှင့် Sync")}
             </button>
           </div>
-          <div className="mt-4 rounded-2xl bg-blue-50 p-3 text-sm font-bold text-blue-900">{message}</div>
+          <div className="rider-dashboard-message mt-4 rounded-2xl bg-blue-50 p-3 text-sm font-bold text-blue-900">{message}</div>
         </section>
 
         <section>
