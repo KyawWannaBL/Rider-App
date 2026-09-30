@@ -80,9 +80,13 @@ jobs:
         run: |
           set -euo pipefail
           npm run build
+          # Never package the previous downloadable APK/AAB inside the new APK.
+          # Vite copies public/** into dist/**; keeping dist/downloads would recursively
+          # embed the prior APK and can push the signed release over GitHub's 100 MB limit.
+          rm -rf dist/downloads
           test -s dist/index.html
           test -d dist/assets
-          echo "Rider web application packaged locally for Android WebView."
+          echo "Rider web application packaged locally for Android WebView without nested release binaries."
 
       - name: Generate Android project
         run: npx cap add android
