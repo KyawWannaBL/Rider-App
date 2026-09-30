@@ -74,7 +74,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Capacitor Android tooling
-        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets
+        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/camera@7 @capacitor/assets
 
       - name: Build packaged Rider web application
         run: |
@@ -118,17 +118,20 @@ jobs:
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
           permissions = [
-              "android.permission.INTERNET",
-              "android.permission.CAMERA",
-              "android.permission.ACCESS_FINE_LOCATION",
-              "android.permission.ACCESS_COARSE_LOCATION",
+              ("android.permission.INTERNET", None),
+              ("android.permission.CAMERA", None),
+              ("android.permission.ACCESS_FINE_LOCATION", None),
+              ("android.permission.ACCESS_COARSE_LOCATION", None),
+              ("android.permission.READ_MEDIA_IMAGES", None),
+              ("android.permission.READ_EXTERNAL_STORAGE", 'android:maxSdkVersion="32"'),
           ]
           marker = "<application"
           additions = ""
-          for permission in permissions:
+          for permission, extra in permissions:
               token = f'android:name="{permission}"'
               if token not in text:
-                  additions += f'    <uses-permission android:name="{permission}" />\n'
+                  suffix = f" {extra}" if extra else ""
+                  additions += f'    <uses-permission android:name="{permission}"{suffix} />\n'
           text = text.replace(marker, additions + marker, 1)
           manifest.write_text(text)
 
