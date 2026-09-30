@@ -9,6 +9,8 @@ on:
       - "vite.config.ts"
       - "package.json"
       - "package-lock.json"
+      - "tailwind.config.cjs"
+      - "postcss.config.cjs"
       - "capacitor.config.ts"
       - "public/logo.png"
       - "public/images/**"
@@ -69,7 +71,7 @@ jobs:
           done
 
       - name: Install project dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Install Capacitor Android tooling
         run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets
