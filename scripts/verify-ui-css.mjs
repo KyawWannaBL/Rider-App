@@ -49,12 +49,12 @@ for (const directive of ["@tailwind base;", "@tailwind components;", "@tailwind 
 }
 
 const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
-const tailwindVersion = packageJson.devDependencies?.tailwindcss || "";
+const tailwindVersion = packageJson.dependencies?.tailwindcss || packageJson.devDependencies?.tailwindcss || "";
 if (!tailwindVersion.startsWith("^3.4")) {
   console.error("Rider UI verification failed: Android 8 compatibility requires Tailwind 3.4.x.");
   process.exit(1);
 }
-if (!packageJson.devDependencies?.autoprefixer) {
+if (!(packageJson.dependencies?.autoprefixer || packageJson.devDependencies?.autoprefixer)) {
   console.error("Rider UI verification failed: Autoprefixer is required for legacy Android CSS.");
   process.exit(1);
 }
