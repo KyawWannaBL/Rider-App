@@ -15,15 +15,13 @@ import {
   ShieldCheck,
   UserPlus,
 } from "lucide-react";
-import { supabase } from "../integrations/supabase/client";
+import { supabase, isSupabaseConfigured } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
 import { riderFeedback } from "../lib/riderFeedback";
 
 type View = "password" | "forgot" | "request";
 
-const SUPABASE_CONFIGURED = Boolean(
-  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+const SUPABASE_CONFIGURED = isSupabaseConfigured;
 
 function getRememberedEmail() {
   return localStorage.getItem("britium.rider.remember.email") || "";
@@ -155,285 +153,279 @@ export default function Login() {
   }
 
   return (
-    <main className="v142-shell-bg be-screen-shell relative min-h-screen min-h-[100dvh] overflow-x-hidden overflow-y-auto text-slate-100">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(145deg,#020617_0%,#07111f_42%,#082f49_100%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(2,6,23,.96),rgba(7,17,31,.88)_45%,rgba(8,47,73,.78))]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_20%,rgba(34,211,238,.16),transparent_35%)]" />
-
+    <main
+      style={{
+        minHeight: "100vh",
+        minHeight: "100dvh",
+        width: "100%",
+        boxSizing: "border-box",
+        overflowX: "hidden",
+        overflowY: "auto",
+        margin: 0,
+        padding: "64px 16px 24px",
+        background: "#07111f",
+        color: "#f8fafc",
+        fontFamily: "Arial, Helvetica, sans-serif",
+        position: "relative",
+      }}
+    >
       <button
         type="button"
         onClick={() => setLanguage(language === "en" ? "my" : "en")}
-        className="absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 text-xs font-black uppercase tracking-wider text-slate-100 backdrop-blur-md hover:bg-white/10 sm:right-6 sm:top-6 sm:px-4"
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          minWidth: 72,
+          minHeight: 44,
+          borderRadius: 14,
+          border: "1px solid #334155",
+          background: "#0f172a",
+          color: "#ffffff",
+          fontWeight: 800,
+          fontSize: 13,
+          padding: "8px 12px",
+          zIndex: 10,
+        }}
       >
-        <Globe className="h-4 w-4" />
         {language === "en" ? "MY" : "EN"}
       </button>
 
-      <div className="rider-login-grid relative z-10 mx-auto grid min-h-screen min-h-[100dvh] w-full max-w-6xl items-center gap-5 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(4rem,env(safe-area-inset-top))] sm:px-5 sm:py-8 md:px-6 lg:grid-cols-[1.05fr_.95fr] lg:gap-8 lg:px-8 lg:py-10">
-        <motion.section initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .5 }} className="rider-login-desktop-intro hidden lg:block">
-          <div className="max-w-xl">
-            <div className="mb-7 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md">
-              {!logoFailed ? (
-                <img
-                  src="/logo.png"
-                  alt="Britium"
-                  className="h-12 w-12 rounded-xl bg-white object-contain p-1"
-                  onError={() => setLogoFailed(true)}
-                />
-              ) : (
-                <div className="grid h-12 w-12 place-items-center rounded-xl bg-emerald-500/15 text-xl font-black text-emerald-300">B</div>
-              )}
-              <div>
-                <div className="text-xl font-black tracking-wide">BRITIUM</div>
-                <div className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">Rider Operations</div>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 520,
+          margin: "0 auto",
+          boxSizing: "border-box",
+        }}
+      >
+        <div style={{ textAlign: "center", marginBottom: 18 }}>
+          {!logoFailed ? (
+            <img
+              src="/logo.png"
+              alt="Britium"
+              onError={() => setLogoFailed(true)}
+              style={{
+                display: "block",
+                width: 72,
+                height: 72,
+                objectFit: "contain",
+                margin: "0 auto",
+                borderRadius: 16,
+                background: "#ffffff",
+                padding: 6,
+                boxSizing: "border-box",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                margin: "0 auto",
+                borderRadius: 16,
+                background: "#0f766e",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 30,
+                fontWeight: 900,
+              }}
+            >
+              B
+            </div>
+          )}
+          <h1 style={{ margin: "12px 0 2px", fontSize: 28, lineHeight: 1.15, color: "#ffffff" }}>BRITIUM</h1>
+          <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, fontWeight: 700 }}>{t("Rider App", "Rider App")}</p>
+          <p style={{ margin: "6px 0 0", color: "#22d3ee", fontSize: 10, fontWeight: 900, letterSpacing: "1.5px" }}>
+            UI V185 · LEGACY-SAFE TABLET BUILD
+          </p>
+        </div>
+
+        <section
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            background: "#0b1424",
+            border: "1px solid #334155",
+            borderRadius: 22,
+            boxShadow: "0 16px 38px rgba(0,0,0,.28)",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ height: 6, background: "#f4d66d" }} />
+          <div style={{ padding: 22, boxSizing: "border-box" }}>
+            <div style={{ marginBottom: 20 }}>
+              <h2 style={{ margin: 0, color: "#ffffff", fontSize: 22, lineHeight: 1.25 }}>{pageTitle}</h2>
+              <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 13, fontWeight: 700 }}>
+                {t("Approved Britium accounts only", "Approved Britium account များသာ")}
+              </p>
+            </div>
+
+            {errorMsg && (
+              <div style={{ marginBottom: 14, border: "1px solid #be123c", borderRadius: 12, background: "#4c0519", color: "#fecdd3", padding: 12, fontSize: 13, fontWeight: 700 }}>
+                {errorMsg}
               </div>
-            </div>
-
-            <h1 className="text-5xl font-black leading-tight text-white">
-              {t("Fast, secure field operations.", "မြန်ဆန် လုံခြုံသော Rider လုပ်ငန်းစနစ်")}
-            </h1>
-            <p className="mt-5 max-w-lg text-base leading-7 text-slate-300">
-              {t(
-                "Sign in with your approved Britium Rider account to access pickup verification, delivery workflow, route controls and COD handover.",
-                "Approved Britium Rider account ဖြင့် ဝင်ရောက်ပြီး pickup verification, delivery workflow, route controls နှင့် COD handover ကို အသုံးပြုနိုင်ပါသည်။"
-              )}
-            </p>
-
-            <div className="mt-8 grid max-w-lg grid-cols-2 gap-3 text-sm">
-              {[
-                t("Pickup verification", "Pickup စစ်ဆေးခြင်း"),
-                t("Strict delivery proof", "Delivery proof"),
-                t("GPS arrival control", "GPS arrival control"),
-                t("COD settlement", "COD settlement"),
-              ].map((item) => (
-                <div key={item} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-slate-200 backdrop-blur-sm">
-                  <CheckCircle2 className="mr-2 inline h-4 w-4 text-emerald-400" />
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-        </motion.section>
-
-        <motion.section initial={{ opacity: 0, y: 18, scale: .985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: .42, delay: .06 }} className="rider-login-card mx-auto w-full max-w-md px-0 sm:max-w-lg lg:max-w-md">
-          <div className="rider-login-mobile-brand mb-4 text-center sm:mb-6 lg:hidden">
-            {!logoFailed ? (
-              <img
-                src="/logo.png"
-                alt="Britium"
-                className="mx-auto h-16 w-16 rounded-2xl bg-white object-contain p-2 shadow-2xl sm:h-20 sm:w-20"
-                onError={() => setLogoFailed(true)}
-              />
-            ) : (
-              <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl bg-emerald-500/15 text-3xl font-black text-emerald-300">B</div>
             )}
-            <h1 className="mt-3 text-2xl font-black tracking-tight sm:mt-4 sm:text-3xl">BRITIUM</h1>
-            <p className="mt-1 text-sm font-semibold text-slate-300">{t("Rider App", "Rider App")}</p>
-            <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-400">UI V181 · Responsive Tablet Build</p>
-          </div>
-
-          <div className="v142-panel overflow-hidden rounded-[30px] border border-white/10 shadow-2xl backdrop-blur-xl">
-            <div className="h-1.5 bg-gradient-to-r from-[#d4af37] via-[#f4d66d] to-cyan-400" />
-            <div className="p-4 min-[360px]:p-5 sm:p-8">
-              <div className="mb-6 flex items-center gap-3">
-                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-300">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-white">{pageTitle}</h2>
-                  <p className="mt-1 text-xs font-semibold text-slate-400">
-                    {t("Approved Britium accounts only", "Approved Britium account များသာ")}
-                  </p>
-                </div>
+            {successMsg && (
+              <div style={{ marginBottom: 14, border: "1px solid #047857", borderRadius: 12, background: "#052e16", color: "#bbf7d0", padding: 12, fontSize: 13, fontWeight: 700 }}>
+                {successMsg}
               </div>
+            )}
 
-              {errorMsg && (
-                <div className="mb-4 flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm font-bold text-rose-200">
-                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-                  <span>{errorMsg}</span>
-                </div>
-              )}
-
-              {successMsg && (
-                <div className="mb-4 flex items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm font-bold text-emerald-200">
-                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-                  <span>{successMsg}</span>
-                </div>
-              )}
-
-              {view === "password" && (
-                <form onSubmit={loginWithPassword} className="space-y-4">
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">
-                      {t("Rider Email", "Rider အီးမေးလ်")}
-                    </span>
-                    <div className="relative">
-                      <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-                      <input
-                        type="email"
-                        required
-                        autoComplete="username"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 pl-12 pr-4 text-sm text-white outline-none transition focus:border-cyan-400/60 focus:ring-4 focus:ring-cyan-400/10"
-                        placeholder="rider@britiumventures.com"
-                      />
-                    </div>
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">
-                      {t("Password", "စကားဝှက်")}
-                    </span>
-                    <div className="relative">
-                      <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-                      <input
-                        type="password"
-                        required
-                        autoComplete="current-password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 pl-12 pr-4 text-sm text-white outline-none transition focus:border-cyan-400/60 focus:ring-4 focus:ring-cyan-400/10"
-                        placeholder="••••••••"
-                      />
-                    </div>
-                  </label>
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 py-1">
-                    <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={remember}
-                        onChange={(e) => setRemember(e.target.checked)}
-                        className="h-4 w-4 accent-emerald-500"
-                      />
-                      {t("Remember me", "မှတ်ထားမည်")}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => switchView("forgot")}
-                      className="min-h-0 text-right text-xs font-black text-cyan-300 hover:text-cyan-200"
-                    >
-                      {t("Forgot password?", "စကားဝှက် မေ့နေပါသလား")}
-                    </button>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="v142-button-sheen v142-jelly flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#d4af37] via-[#f4d66d] to-[#d4af37] px-4 font-black uppercase tracking-wider text-slate-950 shadow-[0_16px_38px_rgba(212,175,55,.18)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
-                    {loading ? t("Authenticating…", "စစ်ဆေးနေသည်…") : t("Login", "အကောင့်ဝင်မည်")}
-                  </button>
-                </form>
-              )}
-
-              {view === "forgot" && (
-                <form onSubmit={sendRecovery} className="space-y-4">
-                  <p className="text-sm leading-6 text-slate-300">
-                    {t("Enter your approved Rider email to receive a secure password recovery link.", "Password recovery link ရယူရန် approved Rider အီးမေးလ် ထည့်ပါ။")}
-                  </p>
+            {view === "password" && (
+              <form onSubmit={loginWithPassword}>
+                <label style={{ display: "block", marginBottom: 16 }}>
+                  <span style={{ display: "block", marginBottom: 7, color: "#cbd5e1", fontSize: 12, fontWeight: 800 }}>
+                    {t("Rider Email", "Rider အီးမေးလ်")}
+                  </span>
                   <input
                     type="email"
                     required
+                    autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none focus:border-cyan-400/60"
                     placeholder="rider@britiumventures.com"
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      minHeight: 52,
+                      boxSizing: "border-box",
+                      border: "1px solid #64748b",
+                      borderRadius: 12,
+                      background: "#ffffff",
+                      color: "#0f172a",
+                      padding: "0 14px",
+                      fontSize: 16,
+                    }}
                   />
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-slate-700 px-4 font-black text-white hover:bg-slate-600 disabled:opacity-60"
-                  >
-                    {loading && <Loader2 className="h-5 w-5 animate-spin" />}
-                    {t("Send Recovery Link", "Recovery Link ပို့မည်")}
-                  </button>
-                  <button type="button" onClick={() => switchView("password")} className="flex h-10 w-full items-center justify-center gap-2 text-xs font-black text-slate-400 hover:text-white">
-                    <ArrowLeft className="h-4 w-4" />
-                    {t("Back to Login", "Login သို့ ပြန်မည်")}
-                  </button>
-                </form>
-              )}
+                </label>
 
-              {view === "request" && (
-                <form onSubmit={requestAccess} className="space-y-4">
-                  <p className="text-sm leading-6 text-slate-300">
-                    {t("Submit a Rider account request for admin approval.", "Admin approval အတွက် Rider account request တင်ပါ။")}
-                  </p>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none focus:border-cyan-400/60"
-                    placeholder={t("Work Email", "အလုပ်အီးမေးလ်")}
-                  />
-                  <div className="relative">
-                    <Phone className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-                    <input
-                      required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 pl-12 pr-4 text-sm text-white outline-none focus:border-cyan-400/60"
-                      placeholder="+959..."
-                    />
-                  </div>
+                <label style={{ display: "block", marginBottom: 14 }}>
+                  <span style={{ display: "block", marginBottom: 7, color: "#cbd5e1", fontSize: 12, fontWeight: 800 }}>
+                    {t("Password", "စကားဝှက်")}
+                  </span>
                   <input
                     type="password"
                     required
-                    minLength={8}
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none focus:border-cyan-400/60"
-                    placeholder={t("New Password (min 8 characters)", "စကားဝှက်အသစ် (အနည်းဆုံး ၈ လုံး)")}
+                    placeholder="••••••••"
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      minHeight: 52,
+                      boxSizing: "border-box",
+                      border: "1px solid #64748b",
+                      borderRadius: 12,
+                      background: "#ffffff",
+                      color: "#0f172a",
+                      padding: "0 14px",
+                      fontSize: 16,
+                    }}
                   />
+                </label>
+
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#cbd5e1", fontSize: 12, fontWeight: 700 }}>
+                    <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} style={{ width: 18, height: 18 }} />
+                    {t("Remember me", "မှတ်ထားမည်")}
+                  </label>
                   <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-4 font-black text-slate-950 hover:bg-[#e3c45f] disabled:opacity-60"
+                    type="button"
+                    onClick={() => switchView("forgot")}
+                    style={{ minHeight: 40, border: 0, background: "transparent", color: "#67e8f9", fontSize: 12, fontWeight: 800, padding: "6px 0" }}
                   >
-                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UserPlus className="h-5 w-5" />}
-                    {t("Create Account", "အကောင့်ဖန်တီးမည်")}
+                    {t("Forgot password?", "စကားဝှက် မေ့နေပါသလား")}
                   </button>
-                  <button type="button" onClick={() => switchView("password")} className="flex h-10 w-full items-center justify-center gap-2 text-xs font-black text-slate-400 hover:text-white">
-                    <ArrowLeft className="h-4 w-4" />
-                    {t("Back to Login", "Login သို့ ပြန်မည်")}
-                  </button>
-                </form>
-              )}
+                </div>
 
-              {view === "password" && (
-                <>
-                  <div className="my-6 h-px bg-white/10" />
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={() => switchView("request")}
-                      className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-3 text-xs font-black text-[#f4d66d] hover:bg-[#d4af37]/15"
-                    >
-                      <UserPlus className="h-4 w-4" />
-                      {t("Create Account", "အကောင့်အသစ်ဖန်တီးရန်")}
-                    </button>
-                    <a
-                      href="/downloads/Britium-Express-Rider.apk?v=5458a4a-v181-tablet"
-                      download="Britium-Express-Rider.apk"
-                      className="v142-jelly flex h-11 items-center justify-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 text-xs font-black text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-400/15 hover:shadow-[0_12px_28px_rgba(34,211,238,.12)]"
-                    >
-                      <Download className="h-4 w-4 text-cyan-300" />
-                      {t("Download Rider APK", "Rider APK ဒေါင်းလုဒ်")}
-                    </a>
-                  </div>
-                </>
-              )}
-            </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    minHeight: 54,
+                    border: 0,
+                    borderRadius: 12,
+                    background: loading ? "#a78b3f" : "#f4d66d",
+                    color: "#07111f",
+                    fontWeight: 900,
+                    fontSize: 15,
+                    padding: "10px 14px",
+                    opacity: loading ? 0.7 : 1,
+                  }}
+                >
+                  {loading ? t("Authenticating…", "စစ်ဆေးနေသည်…") : t("Login", "အကောင့်ဝင်မည်")}
+                </button>
+              </form>
+            )}
+
+            {view === "forgot" && (
+              <form onSubmit={sendRecovery}>
+                <p style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.6 }}>
+                  {t("Enter your approved Rider email to receive a secure password recovery link.", "Password recovery link ရယူရန် approved Rider အီးမေးလ် ထည့်ပါ။")}
+                </p>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="rider@britiumventures.com"
+                  style={{ display: "block", width: "100%", minHeight: 52, boxSizing: "border-box", border: "1px solid #64748b", borderRadius: 12, background: "#ffffff", color: "#0f172a", padding: "0 14px", fontSize: 16, marginBottom: 14 }}
+                />
+                <button type="submit" disabled={loading} style={{ width: "100%", minHeight: 52, border: 0, borderRadius: 12, background: "#334155", color: "#ffffff", fontWeight: 900 }}>
+                  {t("Send Recovery Link", "Recovery Link ပို့မည်")}
+                </button>
+                <button type="button" onClick={() => switchView("password")} style={{ width: "100%", minHeight: 44, marginTop: 8, border: 0, background: "transparent", color: "#cbd5e1", fontWeight: 800 }}>
+                  {t("Back to Login", "Login သို့ ပြန်မည်")}
+                </button>
+              </form>
+            )}
+
+            {view === "request" && (
+              <form onSubmit={requestAccess}>
+                <p style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.6 }}>
+                  {t("Submit a Rider account request for admin approval.", "Admin approval အတွက် Rider account request တင်ပါ။")}
+                </p>
+                <input type="email" required value={email} onChange={(e)=>setEmail(e.target.value)} placeholder={t("Work Email","အလုပ်အီးမေးလ်")} style={{display:"block",width:"100%",minHeight:52,boxSizing:"border-box",border:"1px solid #64748b",borderRadius:12,background:"#fff",color:"#0f172a",padding:"0 14px",fontSize:16,marginBottom:12}}/>
+                <input required value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="+959..." style={{display:"block",width:"100%",minHeight:52,boxSizing:"border-box",border:"1px solid #64748b",borderRadius:12,background:"#fff",color:"#0f172a",padding:"0 14px",fontSize:16,marginBottom:12}}/>
+                <input type="password" required minLength={8} value={password} onChange={(e)=>setPassword(e.target.value)} placeholder={t("New Password (min 8 characters)","စကားဝှက်အသစ် (အနည်းဆုံး ၈ လုံး)")} style={{display:"block",width:"100%",minHeight:52,boxSizing:"border-box",border:"1px solid #64748b",borderRadius:12,background:"#fff",color:"#0f172a",padding:"0 14px",fontSize:16,marginBottom:14}}/>
+                <button type="submit" disabled={loading} style={{width:"100%",minHeight:52,border:0,borderRadius:12,background:"#f4d66d",color:"#07111f",fontWeight:900}}>
+                  {t("Create Account","အကောင့်ဖန်တီးမည်")}
+                </button>
+                <button type="button" onClick={()=>switchView("password")} style={{width:"100%",minHeight:44,marginTop:8,border:0,background:"transparent",color:"#cbd5e1",fontWeight:800}}>
+                  {t("Back to Login","Login သို့ ပြန်မည်")}
+                </button>
+              </form>
+            )}
+
+            {view === "password" && (
+              <div style={{ borderTop: "1px solid #334155", marginTop: 20, paddingTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => switchView("request")}
+                  style={{ width: "100%", minHeight: 46, borderRadius: 12, border: "1px solid #a78b3f", background: "#1f2937", color: "#f4d66d", fontWeight: 800, marginBottom: 10 }}
+                >
+                  {t("Create Account", "အကောင့်အသစ်ဖန်တီးရန်")}
+                </button>
+                <a
+                  href="/downloads/Britium-Express-Rider.apk?v=v185-legacy-safe"
+                  download="Britium-Express-Rider.apk"
+                  style={{ display: "flex", width: "100%", minHeight: 46, boxSizing: "border-box", alignItems: "center", justifyContent: "center", borderRadius: 12, border: "1px solid #0891b2", background: "#083344", color: "#cffafe", fontWeight: 800, textDecoration: "none" }}
+                >
+                  {t("Download Rider APK", "Rider APK ဒေါင်းလုဒ်")}
+                </a>
+              </div>
+            )}
           </div>
+        </section>
 
-          <p className="mt-5 text-center text-[11px] font-semibold text-slate-500">
-            © {new Date().getFullYear()} Britium Express · {t("Field Operations Platform", "Field Operations Platform")}
-          </p>
-        </motion.section>
+        <p style={{ margin: "16px 0 0", textAlign: "center", color: "#64748b", fontSize: 11, fontWeight: 700 }}>
+          © {new Date().getFullYear()} Britium Express · Field Operations Platform
+        </p>
       </div>
     </main>
   );
