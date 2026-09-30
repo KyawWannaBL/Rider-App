@@ -238,7 +238,7 @@ export default function Login() {
           <h1 style={{ margin: "12px 0 2px", fontSize: 28, lineHeight: 1.15, color: "#ffffff" }}>BRITIUM</h1>
           <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, fontWeight: 700 }}>{t("Rider App", "Rider App")}</p>
           <p style={{ margin: "6px 0 0", color: "#22d3ee", fontSize: 10, fontWeight: 900, letterSpacing: "1.5px" }}>
-            UI V185 · LEGACY-SAFE TABLET BUILD
+            RIDER V186 · ANDROID 8+ COMPATIBLE
           </p>
         </div>
 
@@ -412,7 +412,7 @@ export default function Login() {
                   {t("Create Account", "အကောင့်အသစ်ဖန်တီးရန်")}
                 </button>
                 <a
-                  href="/downloads/Britium-Express-Rider.apk?v=v185-legacy-safe"
+                  href="/downloads/Britium-Express-Rider.apk?v=v186-android8"
                   download="Britium-Express-Rider.apk"
                   style={{ display: "flex", width: "100%", minHeight: 46, boxSizing: "border-box", alignItems: "center", justifyContent: "center", borderRadius: 12, border: "1px solid #0891b2", background: "#083344", color: "#cffafe", fontWeight: 800, textDecoration: "none" }}
                 >
