@@ -227,7 +227,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      target: ["chrome101", "android8", "es2019"],
+      target: ["chrome101", "es2019"],
       cssTarget: "chrome101",
     },
     define: {
