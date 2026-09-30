@@ -1,7 +1,6 @@
 // vite.config.ts
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react-swc';
-import tailwindcss from '@tailwindcss/vite';
 import fs from 'node:fs/promises';
 import nodePath from 'node:path';
 import { componentTagger } from 'lovable-tagger';
@@ -213,7 +212,6 @@ export default defineConfig(({ mode }) => {
       port: 8080,
     },
     plugins: [
-      tailwindcss(),
       react(),
       mode === 'development' &&
       componentTagger(),
@@ -227,6 +225,10 @@ export default defineConfig(({ mode }) => {
         // Original react-router-dom under a different name
         "react-router-dom-original": "react-router-dom",
       },
+    },
+    build: {
+      target: ["chrome101", "android8", "es2019"],
+      cssTarget: "chrome101",
     },
     define: {
       // Define environment variables for build-time configuration
