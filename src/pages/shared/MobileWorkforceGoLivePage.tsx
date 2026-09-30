@@ -4,6 +4,7 @@ import {
   MapPinned, PackageCheck, RefreshCw, Route, Send, ShieldCheck, Truck, WalletCards
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { chooseNativeGalleryDataUrl, hasNativePhotoBridge, takeNativePhotoDataUrl } from "@/lib/nativePhoto";
 import { EarningsPanel as EnterpriseEarningsPanel } from "@/components/shared/EarningsPanel";
 import { ProfileDrawer } from "@/components/ProfileDrawer";
 import {
@@ -527,11 +528,45 @@ function JobCard({ job, children }: { job: GoLiveJob; children?: React.ReactNode
 }
 
 function FileCapture({ label, onDataUrl, ok }: { label: string; onDataUrl: (value: string) => void; ok: boolean }) {
+  const cameraInput = React.useRef<HTMLInputElement | null>(null);
+  const galleryInput = React.useRef<HTMLInputElement | null>(null);
+  const [error, setError] = React.useState("");
+
+  async function openCamera() {
+    setError("");
+    if (hasNativePhotoBridge()) {
+      try { onDataUrl(await takeNativePhotoDataUrl()); }
+      catch (err: any) { setError(err?.message || "Unable to take photo."); }
+      return;
+    }
+    cameraInput.current?.click();
+  }
+
+  async function openGallery() {
+    setError("");
+    if (hasNativePhotoBridge()) {
+      try { onDataUrl(await chooseNativeGalleryDataUrl()); }
+      catch (err: any) { setError(err?.message || "Unable to choose photo."); }
+      return;
+    }
+    galleryInput.current?.click();
+  }
+
   return (
-    <label className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 text-xs font-black uppercase text-slate-600">
-      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={async (event) => onDataUrl(await readFileAsDataUrl(event.target.files?.[0]))} />
-      <Camera className={`h-4 w-4 ${ok ? "text-green-600" : "text-slate-500"}`} />{label}
-    </label>
+    <div className="space-y-2">
+      <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={async (event) => onDataUrl(await readFileAsDataUrl(event.target.files?.[0]))} />
+      <input ref={galleryInput} type="file" accept="image/*" className="hidden" onChange={async (event) => onDataUrl(await readFileAsDataUrl(event.target.files?.[0]))} />
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => void openCamera()} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 text-xs font-black uppercase text-slate-600">
+          <Camera className={`h-4 w-4 ${ok ? "text-green-600" : "text-slate-500"}`} />Take Photo
+        </button>
+        <button type="button" onClick={() => void openGallery()} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 text-xs font-black uppercase text-slate-600">
+          Gallery
+        </button>
+      </div>
+      <div className="text-[11px] font-bold text-slate-500">{ok ? label : "Camera or Gallery"}</div>
+      {error && <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{error}</div>}
+    </div>
   );
 }
 
