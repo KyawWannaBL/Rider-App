@@ -4,6 +4,7 @@ import {
   MapPinned, PackageCheck, RefreshCw, Route, Send, ShieldCheck, Truck, WalletCards
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { EarningsPanel as EnterpriseEarningsPanel } from "@/components/shared/EarningsPanel";
 import { ProfileDrawer } from "@/components/ProfileDrawer";
 import {
   formatMMK, handoverGoLiveCod, loadGoLiveSnapshot, sendGoLiveSupportRequest, statusLabel,
@@ -144,7 +145,7 @@ export default function MobileWorkforceGoLivePage({ role, mode }: { role: Workfo
               setNotice={setNotice}
             />
           )}
-          {mode === "earnings" && <EarningsPanel snapshot={snapshot} role={role} />}
+          {mode === "earnings" && <EnterpriseEarningsPanel role={role} />}
           {mode === "sync" && <SyncPanel snapshot={snapshot} loading={loading} refresh={() => void refresh()} />}
           {mode === "support" && (
             <SupportPanel
@@ -406,21 +407,6 @@ function CodPanel({
         {codRecords.length === 0 && <EmptyState text="No COD records from Data Entry yet." />}
       </div>
     </section>
-  );
-}
-
-function EarningsPanel({ snapshot, role }: { snapshot: GoLiveSnapshot; role: WorkforceRole }) {
-  const delivered = Number(snapshot.summary.delivered_count || 0);
-  const estimated = delivered * (role === "driver" ? 1000 : 500);
-  return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <StatCard icon={PackageCheck} label="Delivered jobs" value={String(delivered)} />
-      <StatCard icon={WalletCards} label="Estimated allowance" value={formatMMK(estimated)} />
-      <StatCard icon={Truck} label="Assigned pickups" value={String(snapshot.pickups.length)} />
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-3">
-        <div className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />Earnings shown here are operational estimates. Final payroll/settlement should be approved in Enterprise Portal Finance.</div>
-      </section>
-    </div>
   );
 }
 
