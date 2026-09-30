@@ -16,6 +16,7 @@ on:
       - "public/images/**"
       - ".github/workflows/build-rider-apk.yml"
       - "scripts/verify-android-release-signing.mjs"
+      - "scripts/verify-ui-css.mjs"
   workflow_dispatch:
 
 permissions:
@@ -40,7 +41,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "20"
-          cache: npm
 
       - name: Setup Java
         uses: actions/setup-java@v5
