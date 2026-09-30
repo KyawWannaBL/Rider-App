@@ -41,8 +41,21 @@ if (missing.length) {
 }
 
 const indexCss = fs.readFileSync("src/index.css", "utf8");
-if (!indexCss.includes('@import "tailwindcss";')) {
-  console.error("Rider UI verification failed: Tailwind v4 import is missing from src/index.css.");
+for (const directive of ["@tailwind base;", "@tailwind components;", "@tailwind utilities;"]) {
+  if (!indexCss.includes(directive)) {
+    console.error("Rider UI verification failed: Tailwind 3 directive is missing:", directive);
+    process.exit(1);
+  }
+}
+
+const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+const tailwindVersion = packageJson.devDependencies?.tailwindcss || "";
+if (!tailwindVersion.startsWith("^3.4")) {
+  console.error("Rider UI verification failed: Android 8 compatibility requires Tailwind 3.4.x.");
+  process.exit(1);
+}
+if (!packageJson.devDependencies?.autoprefixer) {
+  console.error("Rider UI verification failed: Autoprefixer is required for legacy Android CSS.");
   process.exit(1);
 }
 
