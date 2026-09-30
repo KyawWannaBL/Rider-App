@@ -17,7 +17,7 @@
         },
         {
           "key": "X-Britium-Rider-APK",
-          "value": "v181-responsive-tablet"
+          "value": "v186-android8-compatible"
         }
       ]
     },
@@ -60,9 +60,11 @@
       "headers": [
         {
           "key": "X-Britium-Rider-UI-Version",
-          "value": "v54-20260925"
+          "value": "v186-android8-compatible"
         }
       ]
     }
-  ]
+  ],
+  "installCommand": "npm install --no-audit --no-fund",
+  "buildCommand": "npm run build"
 }
