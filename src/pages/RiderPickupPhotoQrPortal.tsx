@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
+import { chooseNativeGalleryFile, hasNativePhotoBridge, takeNativePhotoFile } from "@/lib/nativePhoto";
 
 type PickupRow = Record<string, any>;
 
@@ -319,6 +320,32 @@ export default function RiderPickupPhotoQrPortal() {
     const url = data?.publicUrl;
     if (!url) throw new Error("Unable to create Rider proof URL.");
     return url;
+  }
+
+  async function openCameraForParcel(lineNo: number) {
+    if (hasNativePhotoBridge()) {
+      try {
+        const file = await takeNativePhotoFile(`pickup-${lineNo}`);
+        await onPhotoSelected(lineNo, file);
+      } catch (error: any) {
+        setMessage(error?.message || "Unable to take photo.");
+      }
+      return;
+    }
+    fileRefs.current[lineNo]?.click();
+  }
+
+  async function openGalleryForParcel(lineNo: number) {
+    if (hasNativePhotoBridge()) {
+      try {
+        const file = await chooseNativeGalleryFile(`pickup-${lineNo}`);
+        await onPhotoSelected(lineNo, file);
+      } catch (error: any) {
+        setMessage(error?.message || "Unable to choose photo.");
+      }
+      return;
+    }
+    galleryRefs.current[lineNo]?.click();
   }
 
   async function onPhotoSelected(lineNo: number, file?: File) {
@@ -990,7 +1017,7 @@ export default function RiderPickupPhotoQrPortal() {
                           <button
                             type="button"
                             disabled={!selectedPickup?.can_open_workspace || uploadingLine === parcel.line_no}
-                            onClick={() => fileRefs.current[parcel.line_no]?.click()}
+                            onClick={() => void openCameraForParcel(parcel.line_no)}
                             className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             {uploadingLine === parcel.line_no ? tx("Uploading...","Upload တင်နေသည်...") : tx("Take Photo","ဓာတ်ပုံရိုက်ရန်")}
@@ -998,7 +1025,7 @@ export default function RiderPickupPhotoQrPortal() {
                           <button
                             type="button"
                             disabled={!selectedPickup?.can_open_workspace || uploadingLine === parcel.line_no}
-                            onClick={() => galleryRefs.current[parcel.line_no]?.click()}
+                            onClick={() => void openGalleryForParcel(parcel.line_no)}
                             className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             {tx("Choose from Gallery","Gallery မှရွေးရန်")}
