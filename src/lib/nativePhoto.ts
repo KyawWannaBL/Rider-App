@@ -1,46 +1,29 @@
-type NativePhotoSource = "CAMERA" | "PHOTOS";
-
-type NativePhotoResult = {
-  dataUrl?: string;
-  base64String?: string;
-  format?: string;
-  webPath?: string;
-  path?: string;
-};
-
-function capacitorGlobal(): any {
-  if (typeof window === "undefined") return null;
-  return (window as any).Capacitor || null;
-}
+import { Capacitor } from "@capacitor/core";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 
 export function isNativeAndroidApp(): boolean {
-  const cap = capacitorGlobal();
-  if (!cap) return false;
-  try {
-    return Boolean(cap.isNativePlatform?.()) && String(cap.getPlatform?.() || "").toLowerCase() === "android";
-  } catch {
-    return false;
-  }
-}
-
-function nativeCameraPlugin(): any {
-  const cap = capacitorGlobal();
-  return cap?.Plugins?.Camera || null;
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
 }
 
 export function hasNativePhotoBridge(): boolean {
-  return isNativeAndroidApp() && Boolean(nativeCameraPlugin()?.getPhoto);
+  return isNativeAndroidApp() && Capacitor.isPluginAvailable("Camera");
 }
 
-async function nativePhotoDataUrl(source: NativePhotoSource): Promise<string> {
-  const camera = nativeCameraPlugin();
-  if (!camera?.getPhoto) throw new Error("Native photo bridge is unavailable in this APK.");
+async function nativePhotoDataUrl(source: CameraSource): Promise<string> {
+  if (!hasNativePhotoBridge()) throw new Error("Native photo bridge is unavailable in this APK.");
 
   try {
-    const result = await camera.getPhoto({
+    if (source === CameraSource.Camera) {
+      const permissions = await Camera.requestPermissions({ permissions: ["camera"] });
+      if (permissions.camera !== "granted") {
+        throw new Error("Camera permission was denied. Open Android Settings > Apps > Britium Express Rider > Permissions and allow Camera.");
+      }
+    }
+
+    const result = await Camera.getPhoto({
       quality: 88,
       allowEditing: false,
-      resultType: "dataUrl",
+      resultType: CameraResultType.DataUrl,
       source,
       correctOrientation: true,
       width: 1800,
@@ -49,10 +32,10 @@ async function nativePhotoDataUrl(source: NativePhotoSource): Promise<string> {
       promptLabelHeader: "Britium Express",
       promptLabelPhoto: "Choose from Gallery",
       promptLabelPicture: "Take Photo",
-    }) as NativePhotoResult;
+    });
 
-    if (result?.dataUrl) return String(result.dataUrl);
-    if (result?.base64String) {
+    if (result.dataUrl) return String(result.dataUrl);
+    if (result.base64String) {
       const format = String(result.format || "jpeg").toLowerCase();
       const mime = format === "png" ? "image/png" : format === "webp" ? "image/webp" : "image/jpeg";
       return `data:${mime};base64,${result.base64String}`;
@@ -82,11 +65,11 @@ function dataUrlToFile(dataUrl: string, prefix: string): File {
 }
 
 export async function takeNativePhotoDataUrl(): Promise<string> {
-  return nativePhotoDataUrl("CAMERA");
+  return nativePhotoDataUrl(CameraSource.Camera);
 }
 
 export async function chooseNativeGalleryDataUrl(): Promise<string> {
-  return nativePhotoDataUrl("PHOTOS");
+  return nativePhotoDataUrl(CameraSource.Photos);
 }
 
 export async function takeNativePhotoFile(prefix = "britium-photo"): Promise<File> {
