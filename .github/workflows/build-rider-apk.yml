@@ -24,7 +24,7 @@ permissions:
 
 concurrency:
   group: rider-android-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-release:
