@@ -74,7 +74,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Capacitor Android tooling
-        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/camera@7 @capacitor/assets
+        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/camera@7 @capacitor/app@7 @capacitor/assets
 
       - name: Build packaged Rider web application
         run: |
