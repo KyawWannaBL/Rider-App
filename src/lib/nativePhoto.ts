@@ -80,6 +80,36 @@ function dataUrlToFile(dataUrl: string, prefix: string): File {
   return new File([bytes], `${prefix}-${Date.now()}.${extension}`, { type: mime });
 }
 
+async function cameraResultToFile(result: any, prefix: string): Promise<File> {
+  if (result?.dataUrl || result?.base64String) {
+    return dataUrlToFile(dataUrlFromCameraResult(result), prefix);
+  }
+
+  const sourceUrl = result?.webPath
+    ? String(result.webPath)
+    : result?.path
+      ? Capacitor.convertFileSrc(String(result.path))
+      : "";
+
+  if (!sourceUrl) throw new Error("Android returned no readable photo file.");
+
+  const response = await fetch(sourceUrl);
+  if (!response.ok) throw new Error(`Unable to read captured photo (${response.status}).`);
+  const blob = await response.blob();
+  const mime = blob.type || (String(result?.format || "").toLowerCase() === "png" ? "image/png" : "image/jpeg");
+  const extension = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+  return new File([blob], `${prefix}-${Date.now()}.${extension}`, { type: mime });
+}
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Unable to read captured photo."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function installNativePhotoRestoreHandler() {
   if (restoreHandlerInstalled || !isNativeAndroidApp()) return;
   if (!Capacitor.isPluginAvailable("App")) return;
@@ -88,11 +118,11 @@ export function installNativePhotoRestoreHandler() {
   const NativeApp = registerPlugin<{
     addListener: (
       eventName: "appRestoredResult",
-      listener: (event: RestoredPluginResult) => void
+      listener: (event: RestoredPluginResult) => void | Promise<void>
     ) => Promise<{ remove: () => Promise<void> }>;
   }>("App");
 
-  void NativeApp.addListener("appRestoredResult", (event) => {
+  void NativeApp.addListener("appRestoredResult", async (event) => {
     if (event?.pluginId !== "Camera" || event?.methodName !== "getPhoto") return;
 
     const context = readPendingContext();
@@ -106,7 +136,7 @@ export function installNativePhotoRestoreHandler() {
       const prefix = context.prefix || "britium-restored-photo";
       restoredNativePhoto = {
         context,
-        file: dataUrlToFile(dataUrlFromCameraResult(event.data), prefix),
+        file: await cameraResultToFile(event.data, prefix),
       };
     } catch (error: any) {
       restoredNativePhoto = {
@@ -139,7 +169,7 @@ export function consumeRestoredNativePhoto(): RestoredNativePhoto | null {
   return result;
 }
 
-async function nativePhotoDataUrl(source: CameraSource): Promise<string> {
+async function nativePhotoFile(source: CameraSource, prefix: string): Promise<File> {
   if (!hasNativePhotoBridge()) throw new Error("Native photo bridge is unavailable in this APK.");
 
   try {
@@ -150,21 +180,24 @@ async function nativePhotoDataUrl(source: CameraSource): Promise<string> {
       }
     }
 
+    // URI avoids returning a multi-megabyte base64 string through the Android
+    // bridge. This is materially safer on Android 8/tablets where opening the
+    // system Camera Activity can recreate the WebView under memory pressure.
     const result = await Camera.getPhoto({
-      quality: 88,
+      quality: 84,
       allowEditing: false,
-      resultType: CameraResultType.DataUrl,
+      resultType: CameraResultType.Uri,
       source,
       correctOrientation: true,
-      width: 1800,
-      height: 1800,
+      width: 1600,
+      height: 1600,
       presentationStyle: "fullscreen",
       promptLabelHeader: "Britium Express",
       promptLabelPhoto: "Choose from Gallery",
       promptLabelPicture: "Take Photo",
     });
 
-    return dataUrlFromCameraResult(result);
+    return await cameraResultToFile(result, prefix);
   } catch (error: any) {
     const message = String(error?.message || error || "");
     if (/cancel|canceled|cancelled|user cancelled/i.test(message)) {
@@ -180,7 +213,7 @@ async function nativePhotoDataUrl(source: CameraSource): Promise<string> {
 export async function takeNativePhotoDataUrl(context?: NativePhotoRestoreContext): Promise<string> {
   writePendingContext(context);
   try {
-    return await nativePhotoDataUrl(CameraSource.Camera);
+    return await fileToDataUrl(await nativePhotoFile(CameraSource.Camera, context?.prefix || "britium-photo"));
   } finally {
     // If Android kills this WebView while the Camera Activity is open, this
     // finally block never runs. The persisted context is then consumed by
@@ -192,7 +225,7 @@ export async function takeNativePhotoDataUrl(context?: NativePhotoRestoreContext
 export async function chooseNativeGalleryDataUrl(context?: NativePhotoRestoreContext): Promise<string> {
   writePendingContext(context);
   try {
-    return await nativePhotoDataUrl(CameraSource.Photos);
+    return await fileToDataUrl(await nativePhotoFile(CameraSource.Photos, context?.prefix || "britium-gallery"));
   } finally {
     writePendingContext(undefined);
   }
@@ -202,12 +235,24 @@ export async function takeNativePhotoFile(
   prefix = "britium-photo",
   context?: NativePhotoRestoreContext
 ): Promise<File> {
-  return dataUrlToFile(await takeNativePhotoDataUrl(context ? { ...context, prefix } : undefined), prefix);
+  const persisted = context ? { ...context, prefix } : { kind: "native-camera", prefix };
+  writePendingContext(persisted);
+  try {
+    return await nativePhotoFile(CameraSource.Camera, prefix);
+  } finally {
+    writePendingContext(undefined);
+  }
 }
 
 export async function chooseNativeGalleryFile(
   prefix = "britium-gallery",
   context?: NativePhotoRestoreContext
 ): Promise<File> {
-  return dataUrlToFile(await chooseNativeGalleryDataUrl(context ? { ...context, prefix } : undefined), prefix);
+  const persisted = context ? { ...context, prefix } : { kind: "native-gallery", prefix };
+  writePendingContext(persisted);
+  try {
+    return await nativePhotoFile(CameraSource.Photos, prefix);
+  } finally {
+    writePendingContext(undefined);
+  }
 }
