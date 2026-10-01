@@ -3,7 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
-import { chooseNativeGalleryFile, hasNativePhotoBridge, takeNativePhotoFile } from "@/lib/nativePhoto";
+import {
+  chooseNativeGalleryFile,
+  consumeRestoredNativePhoto,
+  hasNativePhotoBridge,
+  NATIVE_PHOTO_RESTORED_EVENT,
+  takeNativePhotoFile,
+} from "@/lib/nativePhoto";
 
 type PickupRow = Record<string, any>;
 
@@ -325,7 +331,14 @@ export default function RiderPickupPhotoQrPortal() {
   async function openCameraForParcel(lineNo: number) {
     if (hasNativePhotoBridge()) {
       try {
-        const file = await takeNativePhotoFile(`pickup-${lineNo}`);
+        const pickupId = safeText(selectedPickup?.pickup_id || selectedPickup?.pickup_way_id, "");
+        const route = window.location.hash.replace(/^#/, "") || "/pickup-verification";
+        const file = await takeNativePhotoFile(`pickup-${lineNo}`, {
+          kind: "pickup-parcel",
+          route,
+          lineNo,
+          pickupId,
+        });
         await onPhotoSelected(lineNo, file);
       } catch (error: any) {
         setMessage(error?.message || "Unable to take photo.");
@@ -348,9 +361,10 @@ export default function RiderPickupPhotoQrPortal() {
     galleryRefs.current[lineNo]?.click();
   }
 
-  async function onPhotoSelected(lineNo: number, file?: File) {
-    if (!file || !selectedPickup) return;
-    if (!selectedPickup.can_open_workspace) {
+  async function onPhotoSelected(lineNo: number, file?: File, pickupOverride?: PickupRow) {
+    const activePickup = pickupOverride || selectedPickup;
+    if (!file || !activePickup) return;
+    if (!activePickup.can_open_workspace) {
       setMessage(tx(
         "This pickup is not assigned to your field-team account.",
         "ဤ Pickup ကို သင့် field-team account သို့ တာဝန်ပေးထားခြင်း မရှိသေးပါ။"
@@ -358,7 +372,7 @@ export default function RiderPickupPhotoQrPortal() {
       return;
     }
 
-    const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
+    const pickupId = safeText(activePickup.pickup_id || activePickup.pickup_way_id, "");
     const currentParcel = parcels.find((parcel) => parcel.line_no === lineNo);
     const deliveryWayId = currentParcel?.delivery_way_id || lineCode("D", pickupId, lineNo);
     let prepared = file;
@@ -665,7 +679,45 @@ export default function RiderPickupPhotoQrPortal() {
   }, [pickups, search]);
 
   useEffect(() => {
-    loadAssignedPickups();
+    let cancelled = false;
+
+    async function recoverRestoredPhoto() {
+      const restored = consumeRestoredNativePhoto();
+      if (!restored || restored.context.kind !== "pickup-parcel") return;
+      if (restored.error) {
+        setMessage(restored.error);
+        return;
+      }
+      if (!restored.file || !restored.context.lineNo || !restored.context.pickupId) return;
+
+      try {
+        setMessage(tx("Recovering the photo just taken...","ယခုရိုက်ထားသော ဓာတ်ပုံကို ပြန်ယူနေသည်..."));
+        const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v95", { p_limit: 300 });
+        if (error) throw error;
+        const rows = Array.isArray(data?.requests) ? data.requests : [];
+        const pickup = rows.find((row: PickupRow) =>
+          String(row.pickup_id || row.pickup_way_id) === String(restored.context.pickupId)
+        );
+        if (!pickup) throw new Error(`${restored.context.pickupId}: pickup could not be restored after camera capture.`);
+        if (cancelled) return;
+        setPickups(rows);
+        setSearch(String(restored.context.pickupId));
+        await selectPickup(pickup);
+        if (cancelled) return;
+        await onPhotoSelected(Number(restored.context.lineNo), restored.file, pickup);
+      } catch (error: any) {
+        if (!cancelled) setMessage(error?.message || "Unable to restore the captured photo.");
+      }
+    }
+
+    void loadAssignedPickups().then(recoverRestoredPhoto);
+    const onRestored = () => { void recoverRestoredPhoto(); };
+    window.addEventListener(NATIVE_PHOTO_RESTORED_EVENT, onRestored);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NATIVE_PHOTO_RESTORED_EVENT, onRestored);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
