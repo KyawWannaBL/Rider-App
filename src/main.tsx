@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
-import { installNativePhotoRestoreHandler } from './lib/nativePhoto'
+import { installNativePhotoRestoreHandler, restorePendingNativePhotoRoute } from './lib/nativePhoto'
 
 const UI_CACHE_VERSION = 'rider-ui-v186-20260930';
 
@@ -41,6 +41,8 @@ function applyDeviceCompatibilityClass() {
   }
 }
 
+// Restore the exact Pickup Verification route before React Router mounts.
+restorePendingNativePhotoRoute();
 installNativePhotoRestoreHandler();
 applyDeviceCompatibilityClass();
 window.addEventListener("resize", applyDeviceCompatibilityClass, { passive: true });
