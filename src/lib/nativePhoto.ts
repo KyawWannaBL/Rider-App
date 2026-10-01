@@ -25,6 +25,7 @@ type RestoredNativePhoto = {
 };
 
 const PENDING_PHOTO_KEY = "britium.rider.native-photo.pending.v1";
+const PENDING_PHOTO_MAX_AGE_MS = 15 * 60 * 1000;
 export const NATIVE_PHOTO_RESTORED_EVENT = "britium:native-photo-restored";
 
 let restoreHandlerInstalled = false;
@@ -41,10 +42,28 @@ export function hasNativePhotoBridge(): boolean {
 function readPendingContext(): NativePhotoRestoreContext | null {
   try {
     const raw = localStorage.getItem(PENDING_PHOTO_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as NativePhotoRestoreContext;
+    const createdAt = Number(parsed?.createdAt || 0);
+    if (createdAt > 0 && Date.now() - createdAt > PENDING_PHOTO_MAX_AGE_MS) {
+      localStorage.removeItem(PENDING_PHOTO_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
+}
+
+export function restorePendingNativePhotoRoute(): boolean {
+  if (!isNativeAndroidApp() || typeof window === "undefined") return false;
+  const context = readPendingContext();
+  if (!context?.route) return false;
+  const targetHash = context.route.startsWith("#") ? context.route : `#${context.route}`;
+  if (window.location.hash !== targetHash) {
+    window.location.hash = targetHash;
+  }
+  return true;
 }
 
 function writePendingContext(context?: NativePhotoRestoreContext) {
@@ -126,7 +145,6 @@ export function installNativePhotoRestoreHandler() {
     if (event?.pluginId !== "Camera" || event?.methodName !== "getPhoto") return;
 
     const context = readPendingContext();
-    writePendingContext(undefined);
     if (!context) return;
 
     try {
@@ -138,6 +156,7 @@ export function installNativePhotoRestoreHandler() {
         context,
         file: await cameraResultToFile(event.data, prefix),
       };
+      writePendingContext(undefined);
     } catch (error: any) {
       restoredNativePhoto = {
         context,
@@ -167,6 +186,11 @@ export function consumeRestoredNativePhoto(): RestoredNativePhoto | null {
   const result = restoredNativePhoto;
   restoredNativePhoto = null;
   return result;
+}
+
+function shouldClearPendingAfterError(error: unknown): boolean {
+  const message = String((error as any)?.message || error || "");
+  return /cancel|canceled|cancelled|user cancelled|permission|denied/i.test(message);
 }
 
 async function nativePhotoFile(source: CameraSource, prefix: string): Promise<File> {
@@ -238,9 +262,16 @@ export async function takeNativePhotoFile(
   const persisted = context ? { ...context, prefix } : { kind: "native-camera", prefix };
   writePendingContext(persisted);
   try {
-    return await nativePhotoFile(CameraSource.Camera, prefix);
-  } finally {
+    const file = await nativePhotoFile(CameraSource.Camera, prefix);
     writePendingContext(undefined);
+    return file;
+  } catch (error) {
+    // On Android 8/tablets the Camera Activity can recreate the WebView. In that
+    // case Capacitor may reject the original promise before appRestoredResult
+    // arrives. Keep the persisted route/context so startup can return to the
+    // exact Pickup Verification record and recover the captured photo.
+    if (shouldClearPendingAfterError(error)) writePendingContext(undefined);
+    throw error;
   }
 }
 
@@ -251,8 +282,11 @@ export async function chooseNativeGalleryFile(
   const persisted = context ? { ...context, prefix } : { kind: "native-gallery", prefix };
   writePendingContext(persisted);
   try {
-    return await nativePhotoFile(CameraSource.Photos, prefix);
-  } finally {
+    const file = await nativePhotoFile(CameraSource.Photos, prefix);
     writePendingContext(undefined);
+    return file;
+  } catch (error) {
+    if (shouldClearPendingAfterError(error)) writePendingContext(undefined);
+    throw error;
   }
 }
