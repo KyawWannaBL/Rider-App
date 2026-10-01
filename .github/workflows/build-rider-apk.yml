@@ -260,8 +260,6 @@ jobs:
             echo "Signed APK unchanged; no repository commit needed."
           else
             git commit -m "build: publish signed Rider Android release"
-            git fetch origin main
-            git rebase origin/main
             git push origin HEAD:main
           fi
 
