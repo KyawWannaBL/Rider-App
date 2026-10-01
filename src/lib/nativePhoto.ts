@@ -1,5 +1,34 @@
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+
+export type NativePhotoRestoreContext = {
+  kind: string;
+  route?: string;
+  prefix?: string;
+  lineNo?: number;
+  pickupId?: string;
+  createdAt?: number;
+};
+
+type RestoredPluginResult = {
+  pluginId?: string;
+  methodName?: string;
+  data?: any;
+  success?: boolean;
+  error?: { message?: string };
+};
+
+type RestoredNativePhoto = {
+  context: NativePhotoRestoreContext;
+  file?: File;
+  error?: string;
+};
+
+const PENDING_PHOTO_KEY = "britium.rider.native-photo.pending.v1";
+export const NATIVE_PHOTO_RESTORED_EVENT = "britium:native-photo-restored";
+
+let restoreHandlerInstalled = false;
+let restoredNativePhoto: RestoredNativePhoto | null = null;
 
 export function isNativeAndroidApp(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
@@ -7,6 +36,107 @@ export function isNativeAndroidApp(): boolean {
 
 export function hasNativePhotoBridge(): boolean {
   return isNativeAndroidApp() && Capacitor.isPluginAvailable("Camera");
+}
+
+function readPendingContext(): NativePhotoRestoreContext | null {
+  try {
+    const raw = localStorage.getItem(PENDING_PHOTO_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingContext(context?: NativePhotoRestoreContext) {
+  try {
+    if (!context) {
+      localStorage.removeItem(PENDING_PHOTO_KEY);
+      return;
+    }
+    localStorage.setItem(PENDING_PHOTO_KEY, JSON.stringify({ ...context, createdAt: Date.now() }));
+  } catch {
+    // Camera capture can still continue even when localStorage is unavailable.
+  }
+}
+
+function dataUrlFromCameraResult(result: any): string {
+  if (result?.dataUrl) return String(result.dataUrl);
+  if (result?.base64String) {
+    const format = String(result.format || "jpeg").toLowerCase();
+    const mime = format === "png" ? "image/png" : format === "webp" ? "image/webp" : "image/jpeg";
+    return `data:${mime};base64,${result.base64String}`;
+  }
+  throw new Error("Android returned no photo data.");
+}
+
+function dataUrlToFile(dataUrl: string, prefix: string): File {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) throw new Error("Invalid image returned by Android.");
+  const mime = match[1] || "image/jpeg";
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  const extension = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+  return new File([bytes], `${prefix}-${Date.now()}.${extension}`, { type: mime });
+}
+
+export function installNativePhotoRestoreHandler() {
+  if (restoreHandlerInstalled || !isNativeAndroidApp()) return;
+  if (!Capacitor.isPluginAvailable("App")) return;
+
+  restoreHandlerInstalled = true;
+  const NativeApp = registerPlugin<{
+    addListener: (
+      eventName: "appRestoredResult",
+      listener: (event: RestoredPluginResult) => void
+    ) => Promise<{ remove: () => Promise<void> }>;
+  }>("App");
+
+  void NativeApp.addListener("appRestoredResult", (event) => {
+    if (event?.pluginId !== "Camera" || event?.methodName !== "getPhoto") return;
+
+    const context = readPendingContext();
+    writePendingContext(undefined);
+    if (!context) return;
+
+    try {
+      if (event.success === false) {
+        throw new Error(event.error?.message || "Android could not restore the camera result.");
+      }
+      const prefix = context.prefix || "britium-restored-photo";
+      restoredNativePhoto = {
+        context,
+        file: dataUrlToFile(dataUrlFromCameraResult(event.data), prefix),
+      };
+    } catch (error: any) {
+      restoredNativePhoto = {
+        context,
+        error: String(error?.message || error || "Unable to restore camera photo."),
+      };
+    }
+
+    if (context.route && typeof window !== "undefined") {
+      const targetHash = context.route.startsWith("#") ? context.route : `#${context.route}`;
+      if (window.location.hash !== targetHash) window.location.hash = targetHash;
+    }
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(NATIVE_PHOTO_RESTORED_EVENT));
+    }
+  }).catch((error) => {
+    restoreHandlerInstalled = false;
+    console.warn("Native camera restore handler unavailable:", error);
+  });
+}
+
+export function peekRestoredNativePhoto(): RestoredNativePhoto | null {
+  return restoredNativePhoto;
+}
+
+export function consumeRestoredNativePhoto(): RestoredNativePhoto | null {
+  const result = restoredNativePhoto;
+  restoredNativePhoto = null;
+  return result;
 }
 
 async function nativePhotoDataUrl(source: CameraSource): Promise<string> {
@@ -34,13 +164,7 @@ async function nativePhotoDataUrl(source: CameraSource): Promise<string> {
       promptLabelPicture: "Take Photo",
     });
 
-    if (result.dataUrl) return String(result.dataUrl);
-    if (result.base64String) {
-      const format = String(result.format || "jpeg").toLowerCase();
-      const mime = format === "png" ? "image/png" : format === "webp" ? "image/webp" : "image/jpeg";
-      return `data:${mime};base64,${result.base64String}`;
-    }
-    throw new Error("Android returned no photo data.");
+    return dataUrlFromCameraResult(result);
   } catch (error: any) {
     const message = String(error?.message || error || "");
     if (/cancel|canceled|cancelled|user cancelled/i.test(message)) {
@@ -53,29 +177,37 @@ async function nativePhotoDataUrl(source: CameraSource): Promise<string> {
   }
 }
 
-function dataUrlToFile(dataUrl: string, prefix: string): File {
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) throw new Error("Invalid image returned by Android.");
-  const mime = match[1] || "image/jpeg";
-  const binary = atob(match[2]);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  const extension = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
-  return new File([bytes], `${prefix}-${Date.now()}.${extension}`, { type: mime });
+export async function takeNativePhotoDataUrl(context?: NativePhotoRestoreContext): Promise<string> {
+  writePendingContext(context);
+  try {
+    return await nativePhotoDataUrl(CameraSource.Camera);
+  } finally {
+    // If Android kills this WebView while the Camera Activity is open, this
+    // finally block never runs. The persisted context is then consumed by
+    // appRestoredResult on the newly created WebView.
+    writePendingContext(undefined);
+  }
 }
 
-export async function takeNativePhotoDataUrl(): Promise<string> {
-  return nativePhotoDataUrl(CameraSource.Camera);
+export async function chooseNativeGalleryDataUrl(context?: NativePhotoRestoreContext): Promise<string> {
+  writePendingContext(context);
+  try {
+    return await nativePhotoDataUrl(CameraSource.Photos);
+  } finally {
+    writePendingContext(undefined);
+  }
 }
 
-export async function chooseNativeGalleryDataUrl(): Promise<string> {
-  return nativePhotoDataUrl(CameraSource.Photos);
+export async function takeNativePhotoFile(
+  prefix = "britium-photo",
+  context?: NativePhotoRestoreContext
+): Promise<File> {
+  return dataUrlToFile(await takeNativePhotoDataUrl(context ? { ...context, prefix } : undefined), prefix);
 }
 
-export async function takeNativePhotoFile(prefix = "britium-photo"): Promise<File> {
-  return dataUrlToFile(await takeNativePhotoDataUrl(), prefix);
-}
-
-export async function chooseNativeGalleryFile(prefix = "britium-gallery"): Promise<File> {
-  return dataUrlToFile(await chooseNativeGalleryDataUrl(), prefix);
+export async function chooseNativeGalleryFile(
+  prefix = "britium-gallery",
+  context?: NativePhotoRestoreContext
+): Promise<File> {
+  return dataUrlToFile(await chooseNativeGalleryDataUrl(context ? { ...context, prefix } : undefined), prefix);
 }
