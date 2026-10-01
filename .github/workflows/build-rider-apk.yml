@@ -75,7 +75,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Capacitor Android tooling
-        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/camera@7 @capacitor/app@7 @capacitor/assets
+        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/camera@7 @capacitor/app@7 @capacitor/assets sharp
 
       - name: Build packaged Rider web application
         run: |
@@ -106,6 +106,27 @@ jobs:
             --splashBackgroundColor '#07111f' \
             --splashBackgroundColorDark '#07111f'
           test -s android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+      - name: Normalize generated launcher PNGs for Android AAPT
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const sharp = require('sharp');
+          (async () => {
+            const root = 'android/app/src/main/res';
+            for (const dir of fs.readdirSync(root).filter((name) => name.startsWith('mipmap-'))) {
+              const full = path.join(root, dir);
+              if (!fs.statSync(full).isDirectory()) continue;
+              for (const file of fs.readdirSync(full).filter((name) => /^ic_launcher.*\\.png$/.test(name))) {
+                const src = path.join(full, file);
+                const tmp = src + '.truecolor.png';
+                await sharp(src).toColourspace('srgb').png({ palette: false, compressionLevel: 9 }).toFile(tmp);
+                fs.renameSync(tmp, src);
+              }
+            }
+          })().catch((error) => { console.error(error); process.exit(1); });
+          NODE
 
       - name: Configure Android permissions and monotonic version
         env:
