@@ -12,6 +12,7 @@ on:
       - "tailwind.config.cjs"
       - "postcss.config.cjs"
       - "capacitor.config.ts"
+      - "android-assets/rider-app-icon.png"
       - "public/logo.png"
       - "public/images/**"
       - ".github/workflows/build-rider-apk.yml"
@@ -94,10 +95,10 @@ jobs:
       - name: Generate Android launcher icon from public logo
         run: |
           set -euo pipefail
-          test -s public/logo.png
+          test -s android-assets/rider-app-icon.png
           rm -rf assets
           mkdir -p assets
-          cp public/logo.png assets/logo.png
+          cp android-assets/rider-app-icon.png assets/logo.png
           npx @capacitor/assets generate --android \
             --assetPath assets \
             --iconBackgroundColor '#00C853' \
