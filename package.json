@@ -78,6 +78,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
     "@capacitor/core": "^7.4.3",
+    "@capacitor/app": "^7.1.0",
     "@capacitor/camera": "^7.0.2"
   },
   "devDependencies": {
