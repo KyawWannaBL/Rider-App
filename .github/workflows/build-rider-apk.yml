@@ -128,6 +128,14 @@ jobs:
           })().catch((error) => { console.error(error); process.exit(1); });
           NODE
 
+      - name: Use Android 8 compatible full launcher icon
+        run: |
+          set -euo pipefail
+          find android/app/src/main/res -type f -name 'ic_launcher_foreground.png' -delete
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26
+          test -s android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          echo "Using full legacy launcher PNGs; Android 8 will render the supplied artwork without adaptive foreground corruption."
+
       - name: Configure Android permissions and monotonic version
         env:
           RIDER_VERSION_CODE: ${{ github.run_number }}
