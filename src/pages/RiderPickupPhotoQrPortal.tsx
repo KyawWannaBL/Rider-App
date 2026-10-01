@@ -269,7 +269,7 @@ export default function RiderPickupPhotoQrPortal() {
 
   async function performPickupAction(action: string) {
     if (!selectedPickup) return;
-    const pickupId = safeText(activePickup.pickup_id || activePickup.pickup_way_id, "");
+    const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
     setActionBusy(action);
     try {
       const { data, error } = await (supabase as any).rpc("be_field_team_pickup_action", {
@@ -372,7 +372,7 @@ export default function RiderPickupPhotoQrPortal() {
       return;
     }
 
-    const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
+    const pickupId = safeText(activePickup.pickup_id || activePickup.pickup_way_id, "");
     const currentParcel = parcels.find((parcel) => parcel.line_no === lineNo);
     const deliveryWayId = currentParcel?.delivery_way_id || lineCode("D", pickupId, lineNo);
     let prepared = file;
