@@ -92,20 +92,92 @@ jobs:
       - name: Generate Android project
         run: npx cap add android
 
-      - name: Generate Android launcher icon from public logo
+      - name: Generate branded green Rider launcher icon
         run: |
           set -euo pipefail
-          test -s android-assets/rider-app-icon.png
+          test -s public/logo.png
           rm -rf assets
           mkdir -p assets
-          cp android-assets/rider-app-icon.png assets/logo.png
+
+          # Build one full launcher artwork with the green background baked into
+          # the bitmap itself. This prevents Android 8/legacy launchers from
+          # falling back to the old/default icon when adaptive resources are
+          # removed later in this workflow.
+          node - <<'NODE'
+          const sharp = require('sharp');
+
+          (async () => {
+            const source = 'public/logo.png';
+            const output = 'assets/logo.png';
+            const size = 1024;
+            const markSize = 720;
+
+            const mark = await sharp(source)
+              .trim({ background: '#ffffff', threshold: 18 })
+              .resize(markSize, markSize, {
+                fit: 'contain',
+                background: { r: 0, g: 0, b: 0, alpha: 0 },
+              })
+              .png({ palette: false })
+              .toBuffer();
+
+            await sharp({
+              create: {
+                width: size,
+                height: size,
+                channels: 4,
+                background: '#00C853',
+              },
+            })
+              .composite([{ input: mark, gravity: 'center' }])
+              .png({ palette: false, compressionLevel: 9 })
+              .toFile(output);
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
           npx @capacitor/assets generate --android \
             --assetPath assets \
             --iconBackgroundColor '#00C853' \
             --iconBackgroundColorDark '#00A844' \
             --splashBackgroundColor '#07111f' \
             --splashBackgroundColorDark '#07111f'
+
+          # Force every legacy launcher density to use the same green-backed
+          # Rider artwork, including round icons. This is the path Android 8
+          # launchers use after adaptive icon resources are removed.
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const sharp = require('sharp');
+
+          (async () => {
+            const root = 'android/app/src/main/res';
+            const src = 'assets/logo.png';
+            for (const dir of fs.readdirSync(root).filter((name) => /^mipmap-(mdpi|hdpi|xhdpi|xxhdpi|xxxhdpi)$/.test(name))) {
+              const full = path.join(root, dir);
+              const target = path.join(full, 'ic_launcher.png');
+              if (!fs.existsSync(target)) continue;
+              const meta = await sharp(target).metadata();
+              const width = meta.width || 192;
+              const height = meta.height || width;
+              const buffer = await sharp(src)
+                .resize(width, height, { fit: 'cover' })
+                .png({ palette: false, compressionLevel: 9 })
+                .toBuffer();
+              fs.writeFileSync(target, buffer);
+              fs.writeFileSync(path.join(full, 'ic_launcher_round.png'), buffer);
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
           test -s android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          test -s android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
 
       - name: Normalize generated launcher PNGs for Android AAPT
         run: |
