@@ -3,7 +3,7 @@ import fs from "node:fs";
 const contracts = {
   "src/pages/Dashboard.tsx": ["be_rider_dashboard_snapshot"],
   "src/pages/RiderPickupPhotoQrPortal.tsx": [
-    "be_field_pickup_request_options_v95",
+    "be_field_pickup_request_options_v187",
     "be_pickup_parcel_capture_snapshot",
     "be_pickup_parcel_capture_save",
     "WAITING_ASSIGNMENT",
@@ -14,13 +14,13 @@ const contracts = {
     'storage.from("rider-proofs")'
   ],
   "src/pages/DeliveryPage.tsx": [
-    "be_rider_delivery_wayplan_jobs",
+    "be_rider_delivery_wayplan_jobs_v187",
     "be_rider_wayplan_action",
     "be_set_delivery_reschedule_v71",
     "be_field_delivery_failure_reasons_v92"
   ],
   "src/pages/CodSettlementPageForVercel.tsx": [
-    "be_rider_delivery_wayplan_jobs",
+    "be_rider_delivery_wayplan_jobs_v187",
     "be_current_field_team_identity",
     "be_rider_submit_cod_settlement"
   ],
@@ -32,7 +32,7 @@ const contracts = {
   "src/pages/Profile.tsx": ["be_field_profile_snapshot_v91","Username","Email"],
   "src/pages/BranchOfficeSyncPage.tsx": ["loadRiderBranchSnapshot"],
   "src/lib/branchOfficeSyncApi.ts": ["be_rider_branch_snapshot"],
-  "src/components/Layout.tsx": ["be_field_team_mobile_snapshot_v77","be_mark_app_notification_read"],
+  "src/components/Layout.tsx": ["be_field_team_mobile_snapshot_v187","be_mark_app_notification_read"],
   "src/components/ProfileDrawer.tsx": ["be_field_profile_snapshot_v91","Username","Email"],
   "src/components/shared/EarningsPanel.tsx": ["be_field_financial_snapshot_v91","Commission & Earnings"],
   "src/components/shared/SupportPanel.tsx": ["be_rider_support_snapshot","be_rider_support_ticket_save"],
