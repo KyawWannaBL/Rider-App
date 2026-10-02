@@ -36,7 +36,7 @@ export function isNativeAndroidApp(): boolean {
 }
 
 export function hasNativePhotoBridge(): boolean {
-  return isNativeAndroidApp() && Capacitor.isPluginAvailable("Camera");
+  return isNativeAndroidApp();
 }
 
 export function shouldUseHtmlCameraCapture(): boolean {
@@ -212,7 +212,12 @@ function shouldClearPendingAfterError(error: unknown): boolean {
 }
 
 async function nativePhotoFile(source: CameraSource, prefix: string): Promise<File> {
-  if (!hasNativePhotoBridge()) throw new Error("Native photo bridge is unavailable in this APK.");
+  if (!isNativeAndroidApp()) throw new Error("Direct camera is available only inside the installed Rider Android app.");
+
+  // Do not gate native capture on Capacitor.isPluginAvailable("Camera").
+  // On some Android 8 WebViews the availability probe can report false during
+  // bridge startup even though @capacitor/camera is packaged and registered.
+  // Calling the plugin directly gives us the real native result/error.
 
   try {
     if (source === CameraSource.Camera) {
