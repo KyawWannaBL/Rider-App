@@ -18,6 +18,7 @@ on:
       - ".github/workflows/build-rider-apk.yml"
       - "scripts/verify-android-release-signing.mjs"
       - "scripts/verify-ui-css.mjs"
+      - "scripts/verify-enterprise-integration.mjs"
   workflow_dispatch:
 
 permissions:
