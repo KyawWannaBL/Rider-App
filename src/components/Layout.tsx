@@ -60,7 +60,7 @@ export function Layout() {
   async function loadNotifications() {
     setLoadingNotifications(true);
     try {
-      const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
+      const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v187", {
         p_payload: { notification_limit: 50 },
       });
       if (error) throw error;
