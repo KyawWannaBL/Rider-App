@@ -111,7 +111,7 @@ function mapWaybill(row: any): Waybill {
 export async function loadRiderRoute(): Promise<{ dispatch: Dispatch | null; waybills: Waybill[] }> {
   if (!supabase) return { dispatch: null, waybills: [] };
 
-  const { data, error } = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs", {
+  const { data, error } = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {
     p_rider_code: null,
     p_limit: 300,
   });
