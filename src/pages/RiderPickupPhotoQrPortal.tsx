@@ -8,6 +8,7 @@ import {
   consumeRestoredNativePhoto,
   hasNativePhotoBridge,
   NATIVE_PHOTO_RESTORED_EVENT,
+  shouldUseHtmlCameraCapture,
   takeNativePhotoFile,
 } from "@/lib/nativePhoto";
 
@@ -161,7 +162,7 @@ export default function RiderPickupPhotoQrPortal() {
     setLoading(true);
     setMessage(tx("Loading Enterprise Pickup Requests...","Enterprise Pickup Request များကို ဖွင့်နေသည်..."));
 
-    const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v95", {
+    const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v187", {
       p_limit: 300,
     });
 
@@ -172,7 +173,9 @@ export default function RiderPickupPhotoQrPortal() {
       return;
     }
 
-    const rows = Array.isArray(data?.requests) ? data.requests : [];
+    const rows = (Array.isArray(data?.requests) ? data.requests : []).filter(
+      (row: PickupRow) => row?.assigned_to_me === true && row?.can_open_workspace === true
+    );
     setPickups(rows);
 
     const requested = selectedPickup?.pickup_id || params.pickupId || search;
@@ -254,7 +257,7 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function refreshPickupAfterAction(pickupId: string) {
-    const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v95", {
+    const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v187", {
       p_limit: 300,
     });
     if (error) throw error;
@@ -329,7 +332,7 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function openCameraForParcel(lineNo: number) {
-    if (hasNativePhotoBridge()) {
+    if (hasNativePhotoBridge() && !shouldUseHtmlCameraCapture()) {
       try {
         const pickupId = safeText(selectedPickup?.pickup_id || selectedPickup?.pickup_way_id, "");
         const route = window.location.hash.replace(/^#/, "") || "/pickup-verification";
@@ -345,7 +348,12 @@ export default function RiderPickupPhotoQrPortal() {
       }
       return;
     }
-    fileRefs.current[lineNo]?.click();
+    const input = fileRefs.current[lineNo];
+    if (!input) {
+      setMessage(tx("Camera input is not ready. Refresh this pickup and try again.","Camera input မပြင်ဆင်ရသေးပါ။ Pickup ကို Refresh ပြန်လုပ်ပြီး ထပ်စမ်းပါ။"));
+      return;
+    }
+    input.click();
   }
 
   async function openGalleryForParcel(lineNo: number) {
@@ -692,7 +700,7 @@ export default function RiderPickupPhotoQrPortal() {
 
       try {
         setMessage(tx("Recovering the photo just taken...","ယခုရိုက်ထားသော ဓာတ်ပုံကို ပြန်ယူနေသည်..."));
-        const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v95", { p_limit: 300 });
+        const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v187", { p_limit: 300 });
         if (error) throw error;
         const rows = Array.isArray(data?.requests) ? data.requests : [];
         const pickup = rows.find((row: PickupRow) =>
