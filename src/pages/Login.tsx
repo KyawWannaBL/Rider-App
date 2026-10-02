@@ -238,7 +238,7 @@ export default function Login() {
           <h1 style={{ margin: "12px 0 2px", fontSize: 28, lineHeight: 1.15, color: "#ffffff" }}>BRITIUM</h1>
           <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, fontWeight: 700 }}>{t("Rider App", "Rider App")}</p>
           <p style={{ margin: "6px 0 0", color: "#22d3ee", fontSize: 10, fontWeight: 900, letterSpacing: "1.5px" }}>
-            RIDER BUILD 59 · ANDROID 8+ COMPATIBLE
+            RIDER BUILD 71 · ANDROID 8+ COMPATIBLE
           </p>
         </div>
 
@@ -412,8 +412,8 @@ export default function Login() {
                   {t("Create Account", "အကောင့်အသစ်ဖန်တီးရန်")}
                 </button>
                 <a
-                  href="/downloads/Britium-Express-Rider.apk?v=build59-413673b"
-                  download="Britium-Express-Rider-Build59.apk"
+                  href="/downloads/Britium-Express-Rider.apk?v=build71-314fca20"
+                  download="Britium-Express-Rider-Build71.apk"
                   style={{ display: "flex", width: "100%", minHeight: 46, boxSizing: "border-box", alignItems: "center", justifyContent: "center", borderRadius: 12, border: "1px solid #0891b2", background: "#083344", color: "#cffafe", fontWeight: 800, textDecoration: "none" }}
                 >
                   {t("Download Rider APK", "Rider APK ဒေါင်းလုဒ်")}
