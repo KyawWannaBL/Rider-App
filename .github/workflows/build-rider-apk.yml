@@ -92,51 +92,28 @@ jobs:
       - name: Generate Android project
         run: npx cap add android
 
-      - name: Generate branded green Rider launcher icon
+      - name: Generate exact user-supplied green Rider launcher icon
         run: |
           set -euo pipefail
-          test -s public/logo.png
           rm -rf assets
           mkdir -p assets
 
-          # Build one full launcher artwork with the green background baked into
-          # the bitmap itself. This prevents Android 8/legacy launchers from
-          # falling back to the old/default icon when adaptive resources are
-          # removed later in this workflow.
-          node - <<'NODE'
-          const sharp = require('sharp');
+          # Use the exact green Rider artwork supplied by Phoe Chan in ChatGPT.
+          # Do not recolor, redraw, crop, trim, or substitute another logo.
+          curl -fsSL --retry 3 \
+            "https://cdn.creativeclaw.co/u/1e27c35b/images/5a80e573-717f-4824-852c-11e2f7daa23e.png" \
+            -o assets/logo.png
+          test -s assets/logo.png
 
-          (async () => {
-            const source = 'public/logo.png';
-            const output = 'assets/logo.png';
-            const size = 1024;
-            const markSize = 720;
-
-            const mark = await sharp(source)
-              .trim({ background: '#ffffff', threshold: 18 })
-              .resize(markSize, markSize, {
-                fit: 'contain',
-                background: { r: 0, g: 0, b: 0, alpha: 0 },
-              })
-              .png({ palette: false })
-              .toBuffer();
-
-            await sharp({
-              create: {
-                width: size,
-                height: size,
-                channels: 4,
-                background: '#00C853',
-              },
-            })
-              .composite([{ input: mark, gravity: 'center' }])
-              .png({ palette: false, compressionLevel: 9 })
-              .toFile(output);
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE
+          EXPECTED_ICON_SHA256="6cbdb4e5a12f2beaa7f657e09cb494f6af8e0e10e1cda043fb371c014ed12dbb"
+          ACTUAL_ICON_SHA256="$(sha256sum assets/logo.png | awk '{print $1}')"
+          if [ "$ACTUAL_ICON_SHA256" != "$EXPECTED_ICON_SHA256" ]; then
+            echo "::error::Rider launcher source does not match the exact attached green image."
+            echo "Expected: $EXPECTED_ICON_SHA256"
+            echo "Actual:   $ACTUAL_ICON_SHA256"
+            exit 1
+          fi
+          echo "Exact Rider icon source verified: $ACTUAL_ICON_SHA256"
 
           npx @capacitor/assets generate --android \
             --assetPath assets \
