@@ -332,10 +332,11 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function openCameraForParcel(lineNo: number) {
-    if (hasNativePhotoBridge() && !shouldUseHtmlCameraCapture()) {
+    if (hasNativePhotoBridge()) {
       try {
         const pickupId = safeText(selectedPickup?.pickup_id || selectedPickup?.pickup_way_id, "");
         const route = window.location.hash.replace(/^#/, "") || "/pickup-verification";
+        setMessage(tx("Opening device camera... Return here after taking the photo.","Device camera ဖွင့်နေသည်... ဓာတ်ပုံရိုက်ပြီးနောက် ဤနေရာသို့ ပြန်လာပါ။"));
         const file = await takeNativePhotoFile(`pickup-${lineNo}`, {
           kind: "pickup-parcel",
           route,
