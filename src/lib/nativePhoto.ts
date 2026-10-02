@@ -40,11 +40,11 @@ export function hasNativePhotoBridge(): boolean {
 }
 
 export function shouldUseHtmlCameraCapture(): boolean {
-  if (!isNativeAndroidApp() || typeof navigator === "undefined") return false;
-  const match = String(navigator.userAgent || "").match(/Android\s+(\d+)(?:\.(\d+))?/i);
-  if (!match) return false;
-  const major = Number(match[1] || 0);
-  return major > 0 && major <= 8;
+  // Native APK camera capture must always use Capacitor Camera.
+  // Android 8 WebView file-input capture can recreate the activity without
+  // returning a usable File object, which caused Pickup Verification to fall
+  // back to the previous screen after a photo was taken.
+  return false;
 }
 
 function readPendingContext(): NativePhotoRestoreContext | null {
@@ -144,10 +144,20 @@ export function installNativePhotoRestoreHandler() {
   restoreHandlerInstalled = true;
   const NativeApp = registerPlugin<{
     addListener: (
-      eventName: "appRestoredResult",
-      listener: (event: RestoredPluginResult) => void | Promise<void>
+      eventName: "appRestoredResult" | "appStateChange",
+      listener: (event: any) => void | Promise<void>
     ) => Promise<{ remove: () => Promise<void> }>;
   }>("App");
+
+  void NativeApp.addListener("appStateChange", async (state: any) => {
+    if (!state?.isActive || typeof window === "undefined") return;
+    const context = readPendingContext();
+    if (!context?.route) return;
+    const targetHash = context.route.startsWith("#") ? context.route : `#${context.route}`;
+    if (window.location.hash !== targetHash) window.location.hash = targetHash;
+  }).catch((error) => {
+    console.warn("Native app resume handler unavailable:", error);
+  });
 
   void NativeApp.addListener("appRestoredResult", async (event) => {
     if (event?.pluginId !== "Camera" || event?.methodName !== "getPhoto") return;
