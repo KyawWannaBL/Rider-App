@@ -1,4 +1,4 @@
-// Compatibility contract: be_rider_delivery_wayplan_jobs · be_current_field_team_identity · be_rider_submit_cod_settlement.
+// Compatibility contract: be_rider_delivery_wayplan_jobs_v187 · be_current_field_team_identity · be_rider_submit_cod_settlement.
 // Runtime settlement uses the stricter be_field_team_cod_handover_queue_v1 / be_field_team_cod_handover_submit_v1 service layer.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, RefreshCw, UploadCloud } from "lucide-react";
