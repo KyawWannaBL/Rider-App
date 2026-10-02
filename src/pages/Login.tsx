@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -54,8 +54,35 @@ export default function Login() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [logoFailed, setLogoFailed] = useState(false);
+  const [riderRelease, setRiderRelease] = useState({
+    build: 73,
+    version: "1.0.73",
+    apk: "/downloads/Britium-Express-Rider-Build73.apk",
+  });
 
   const t = (en: string, my: string) => (language === "en" ? en : my);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/rider-release.json?ts=${Date.now()}`, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`release metadata ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        if (!active) return;
+        const build = Number(data?.build || 0);
+        const apk = String(data?.apk || "");
+        const version = String(data?.version || "");
+        if (build > 0 && apk) {
+          setRiderRelease({ build, apk, version: version || `1.0.${build}` });
+        }
+      })
+      .catch((error) => console.warn("Unable to load Rider release metadata", error));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const pageTitle = useMemo(() => {
     if (view === "forgot") return t("Secure Password Recovery", "စကားဝှက် ပြန်လည်ရယူခြင်း");
@@ -238,7 +265,7 @@ export default function Login() {
           <h1 style={{ margin: "12px 0 2px", fontSize: 28, lineHeight: 1.15, color: "#ffffff" }}>BRITIUM</h1>
           <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, fontWeight: 700 }}>{t("Rider App", "Rider App")}</p>
           <p style={{ margin: "6px 0 0", color: "#22d3ee", fontSize: 10, fontWeight: 900, letterSpacing: "1.5px" }}>
-            RIDER BUILD 73 · ANDROID 8+ COMPATIBLE
+            RIDER BUILD {riderRelease.build} · ANDROID 8+ COMPATIBLE
           </p>
         </div>
 
@@ -412,8 +439,8 @@ export default function Login() {
                   {t("Create Account", "အကောင့်အသစ်ဖန်တီးရန်")}
                 </button>
                 <a
-                  href="/downloads/Britium-Express-Rider-Build73.apk"
-                  download="Britium-Express-Rider-Build73.apk"
+                  href={riderRelease.apk}
+                  download={`Britium-Express-Rider-Build${riderRelease.build}.apk`}
                   style={{ display: "flex", width: "100%", minHeight: 46, boxSizing: "border-box", alignItems: "center", justifyContent: "center", borderRadius: 12, border: "1px solid #0891b2", background: "#083344", color: "#cffafe", fontWeight: 800, textDecoration: "none" }}
                 >
                   {t("Download Rider APK", "Rider APK ဒေါင်းလုဒ်")}

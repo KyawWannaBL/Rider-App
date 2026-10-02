@@ -301,12 +301,21 @@ jobs:
           mkdir -p public/downloads
           cp Britium-Express-Rider.apk public/downloads/Britium-Express-Rider.apk
           cp Britium-Express-Rider.apk "public/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk"
+          cat > public/rider-release.json <<EOF
+          {
+            "build": ${GITHUB_RUN_NUMBER},
+            "version": "1.0.${GITHUB_RUN_NUMBER}",
+            "versionCode": ${{ 100000 + github.run_number }},
+            "apk": "/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk",
+            "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
 
       - name: Commit signed public APK
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f public/downloads/Britium-Express-Rider.apk "public/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk"
+          git add -f public/downloads/Britium-Express-Rider.apk "public/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk" public/rider-release.json
           if git diff --cached --quiet; then
             echo "Signed APK unchanged; no repository commit needed."
           else
