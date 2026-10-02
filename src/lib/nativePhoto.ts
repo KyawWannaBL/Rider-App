@@ -39,6 +39,14 @@ export function hasNativePhotoBridge(): boolean {
   return isNativeAndroidApp() && Capacitor.isPluginAvailable("Camera");
 }
 
+export function shouldUseHtmlCameraCapture(): boolean {
+  if (!isNativeAndroidApp() || typeof navigator === "undefined") return false;
+  const match = String(navigator.userAgent || "").match(/Android\s+(\d+)(?:\.(\d+))?/i);
+  if (!match) return false;
+  const major = Number(match[1] || 0);
+  return major > 0 && major <= 8;
+}
+
 function readPendingContext(): NativePhotoRestoreContext | null {
   try {
     const raw = localStorage.getItem(PENDING_PHOTO_KEY);
