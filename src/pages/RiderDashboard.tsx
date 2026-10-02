@@ -153,7 +153,7 @@ function statusClass(status?: string) {
 }
 
 async function rpcSnapshot(): Promise<Snapshot> {
-  const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v77", {
+  const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v187", {
     p_payload: { limit: 200 },
   });
 
