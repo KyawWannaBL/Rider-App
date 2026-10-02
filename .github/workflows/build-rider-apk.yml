@@ -305,7 +305,7 @@ jobs:
           {
             "build": ${GITHUB_RUN_NUMBER},
             "version": "1.0.${GITHUB_RUN_NUMBER}",
-            "versionCode": ${{ 100000 + github.run_number }},
+            "versionCode": $((100000 + GITHUB_RUN_NUMBER)),
             "apk": "/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk",
             "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
