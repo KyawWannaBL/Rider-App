@@ -7,6 +7,7 @@ import {
   chooseNativeGalleryFile,
   consumeRestoredNativePhoto,
   hasNativePhotoBridge,
+  isNativeAndroidApp,
   NATIVE_PHOTO_RESTORED_EVENT,
   shouldUseHtmlCameraCapture,
   takeNativePhotoFile,
@@ -332,7 +333,7 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function openCameraForParcel(lineNo: number) {
-    if (hasNativePhotoBridge()) {
+    if (isNativeAndroidApp()) {
       try {
         const pickupId = safeText(selectedPickup?.pickup_id || selectedPickup?.pickup_way_id, "");
         const route = window.location.hash.replace(/^#/, "") || "/pickup-verification";
@@ -358,7 +359,7 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function openGalleryForParcel(lineNo: number) {
-    if (hasNativePhotoBridge()) {
+    if (isNativeAndroidApp()) {
       try {
         const file = await chooseNativeGalleryFile(`pickup-${lineNo}`);
         await onPhotoSelected(lineNo, file);
