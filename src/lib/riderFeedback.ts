@@ -8,14 +8,36 @@ const toneMap: Record<RiderFeedbackTone, { frequency: number; endFrequency: numb
   cash: { frequency: 880, endFrequency: 1320, duration: 0.2, type: "sine" },
 };
 
+let sharedAudioContext: AudioContext | null = null;
+
+function getAudioContext() {
+  if (typeof window === "undefined") return null;
+  const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+    sharedAudioContext = new AudioContextCtor();
+  }
+  return sharedAudioContext;
+}
+
+export async function unlockRiderNotificationAudio() {
+  const context = getAudioContext();
+  if (!context) return;
+  try {
+    if (context.state === "suspended") await context.resume();
+  } catch {
+    // Best-effort only.
+  }
+}
+
 export function playRiderFeedback(type: RiderFeedbackTone) {
   if (typeof window === "undefined") return;
 
   try {
-    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextCtor) return;
+    const context = getAudioContext();
+    if (!context) return;
+    if (context.state === "suspended") void context.resume();
 
-    const context = new AudioContextCtor();
     const gain = context.createGain();
     const oscillator = context.createOscillator();
     const config = toneMap[type];
@@ -36,7 +58,6 @@ export function playRiderFeedback(type: RiderFeedbackTone) {
     oscillator.start();
     oscillator.stop(context.currentTime + config.duration);
 
-    window.setTimeout(() => void context.close(), Math.ceil((config.duration + 0.08) * 1000));
   } catch {
     // Sound feedback is best-effort and must never block field operations.
   }
@@ -117,6 +138,11 @@ function announceFeedbackNode(node: Element) {
 export function installGlobalRiderNotificationFeedback() {
   if (globalFeedbackInstalled || typeof window === "undefined" || typeof document === "undefined") return;
   globalFeedbackInstalled = true;
+
+  const unlock = () => { void unlockRiderNotificationAudio(); };
+  window.addEventListener("pointerdown", unlock, { passive: true, once: true });
+  window.addEventListener("touchstart", unlock, { passive: true, once: true });
+  window.addEventListener("keydown", unlock, { once: true });
 
   const scan = (root: ParentNode) => {
     if (root instanceof Element) announceFeedbackNode(root);
