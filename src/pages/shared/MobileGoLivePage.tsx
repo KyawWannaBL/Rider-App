@@ -22,6 +22,7 @@ import { AppShell } from "@/components/AppShell";
 import { ProfileDrawer } from "@/components/ProfileDrawer";
 import { EarningsPanel } from "@/components/shared/EarningsPanel";
 import { SupportPanel } from "@/components/shared/SupportPanel";
+import { FinishAssignmentsButton } from "@/components/shared/FinishAssignmentsButton";
 import {
   asMoney,
   codHandover,
@@ -264,17 +265,25 @@ export default function MobileGoLivePage({ role, mode }: { role: MobileRole; mod
               />
               <PickupList pickups={pickups} />
               <NotificationList notifications={notifications} />
+              <div className="mt-5">
+                <FinishAssignmentsButton onFinished={sync} />
+              </div>
             </>
           )}
 
           {mode === "jobs" && (
-            <JobList
+            <>
+              <JobList
               jobs={jobs}
               emptyText="No delivery waybills found. Data Entry must prepare parcel rows first, then Supervisor must assign this workforce account."
               actions={(job) => (
                 <ActionButton label="Open Strict Delivery Verification" onClick={() => openDelivery(job)} />
               )}
-            />
+              />
+              <div className="mt-5">
+                <FinishAssignmentsButton onFinished={sync} />
+              </div>
+            </>
           )}
 
           {mode === "route" && (
