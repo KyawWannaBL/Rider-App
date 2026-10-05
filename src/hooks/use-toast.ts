@@ -1,4 +1,5 @@
 import * as React from "react"
+import { riderFeedback } from "@/lib/riderFeedback"
 
 import type {
   ToastActionElement,
@@ -141,6 +142,14 @@ type Toast = Omit<ToasterToast, "id">
 
 function toast({ ...props }: Toast) {
   const id = genId()
+  const text = [props.title, props.description].filter(Boolean).map(String).join(" ").toLowerCase()
+  const tone =
+    /error|failed|fail|denied|invalid|unable|expired|အမှား|မရပါ/.test(text) ? "error" :
+    /warning|pending|required|missing|attention|သတိ|လိုအပ်/.test(text) ? "warning" :
+    /cod|cash|mmk|ငွေ/.test(text) ? "cash" :
+    /success|completed|saved|uploaded|verified|delivered|confirmed|approved|ပြီး|အောင်မြင်/.test(text) ? "success" :
+    "dispatch"
+  riderFeedback(tone)
 
   const update = (props: ToasterToast) =>
     dispatch({
