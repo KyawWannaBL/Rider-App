@@ -21,22 +21,23 @@ function getAudioContext() {
 }
 
 export async function unlockRiderNotificationAudio() {
-  const context = getAudioContext();
-  if (!context) return;
   try {
+    const context = getAudioContext();
+    if (!context) return;
     if (context.state === "suspended") await context.resume();
   } catch {
     // Best-effort only.
   }
 }
 
-export function playRiderFeedback(type: RiderFeedbackTone) {
+export async function playRiderFeedback(type: RiderFeedbackTone) {
   if (typeof window === "undefined") return;
 
   try {
     const context = getAudioContext();
     if (!context) return;
-    if (context.state === "suspended") void context.resume();
+    if (context.state === "suspended") await context.resume();
+    if (context.state !== "running") return;
 
     const gain = context.createGain();
     const oscillator = context.createOscillator();
@@ -55,6 +56,10 @@ export function playRiderFeedback(type: RiderFeedbackTone) {
 
     oscillator.connect(gain);
     gain.connect(context.destination);
+    oscillator.onended = () => {
+      oscillator.disconnect();
+      gain.disconnect();
+    };
     oscillator.start();
     oscillator.stop(context.currentTime + config.duration);
 
@@ -78,7 +83,8 @@ export function riderFeedback(type: RiderFeedbackTone) {
 }
 
 
-const GLOBAL_FEEDBACK_ATTR = "data-britium-feedback-observed";
+const observedFeedbackText = new WeakMap<Element, string>();
+const FEEDBACK_SELECTOR = '[role="alert"],[role="status"],[aria-live="assertive"],[aria-live="polite"],[data-sonner-toast],.toast,.notification,.alert,.message,.notice';
 let globalFeedbackInstalled = false;
 let lastGlobalFeedbackKey = "";
 let lastGlobalFeedbackAt = 0;
@@ -86,9 +92,9 @@ let lastGlobalFeedbackAt = 0;
 function inferFeedbackTone(text: string): RiderFeedbackTone {
   const value = String(text || "").toLowerCase();
 
-  if (/cod|cash|mmk|ငွေ|ကောက်ခံ|လွှဲငွေ/.test(value)) return "cash";
   if (/error|failed|fail|denied|invalid|unable|expired|မအောင်မြင်|အမှား|မရပါ|ငြင်းပယ်/.test(value)) return "error";
   if (/warning|pending|wait|required|missing|attention|သတိ|စောင့်|လိုအပ်/.test(value)) return "warning";
+  if (/cod|cash|mmk|ငွေ|ကောက်ခံ|လွှဲငွေ/.test(value)) return "cash";
   if (/success|completed|saved|uploaded|verified|delivered|confirmed|approved|အောင်မြင်|ပြီးပါပြီ|သိမ်းဆည်း|အတည်ပြု/.test(value)) return "success";
   return "dispatch";
 }
@@ -102,7 +108,6 @@ function visibleFeedbackText(node: Element): string {
 
 function shouldAnnounceNode(node: Element): boolean {
   if (!(node instanceof HTMLElement)) return false;
-  if (node.hasAttribute(GLOBAL_FEEDBACK_ATTR)) return false;
 
   const role = String(node.getAttribute("role") || "").toLowerCase();
   const live = String(node.getAttribute("aria-live") || "").toLowerCase();
@@ -121,10 +126,14 @@ function shouldAnnounceNode(node: Element): boolean {
 
 function announceFeedbackNode(node: Element) {
   if (!shouldAnnounceNode(node)) return;
-  node.setAttribute(GLOBAL_FEEDBACK_ATTR, "true");
 
   const text = visibleFeedbackText(node);
-  if (!text || text.length < 2) return;
+  if (!text || text.length < 2) {
+    observedFeedbackText.delete(node);
+    return;
+  }
+  if (observedFeedbackText.get(node) === text) return;
+  observedFeedbackText.set(node, text);
 
   const key = text.slice(0, 180).toLowerCase();
   const now = Date.now();
@@ -140,15 +149,14 @@ export function installGlobalRiderNotificationFeedback() {
   globalFeedbackInstalled = true;
 
   const unlock = () => { void unlockRiderNotificationAudio(); };
-  window.addEventListener("pointerdown", unlock, { passive: true, once: true });
-  window.addEventListener("touchstart", unlock, { passive: true, once: true });
-  window.addEventListener("keydown", unlock, { once: true });
+  // Retry on later gestures if Android suspended audio while the app was away.
+  window.addEventListener("pointerdown", unlock, { passive: true });
+  window.addEventListener("touchstart", unlock, { passive: true });
+  window.addEventListener("keydown", unlock);
 
   const scan = (root: ParentNode) => {
     if (root instanceof Element) announceFeedbackNode(root);
-    root.querySelectorAll?.(
-      '[role="alert"],[role="status"],[aria-live="assertive"],[aria-live="polite"],[data-sonner-toast],.toast,.notification,.alert,.message,.notice'
-    ).forEach((node) => announceFeedbackNode(node));
+    root.querySelectorAll?.(FEEDBACK_SELECTOR).forEach((node) => announceFeedbackNode(node));
   };
 
   const observer = new MutationObserver((mutations) => {
@@ -157,9 +165,12 @@ export function installGlobalRiderNotificationFeedback() {
         if (node instanceof Element) scan(node);
       });
 
-      if (mutation.type === "characterData" && mutation.target.parentElement) {
-        announceFeedbackNode(mutation.target.parentElement);
-      }
+      // React often changes text inside an existing live region rather than
+      // inserting another alert element. Follow the mutation to that region.
+      const target = mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
+      const feedbackNode = target?.closest(FEEDBACK_SELECTOR);
+      if (feedbackNode) announceFeedbackNode(feedbackNode);
+      if (mutation.type === "attributes" && target) scan(target);
     }
   });
 
@@ -169,6 +180,8 @@ export function installGlobalRiderNotificationFeedback() {
       childList: true,
       subtree: true,
       characterData: true,
+      attributes: true,
+      attributeFilter: ["hidden", "class", "style", "role", "aria-live", "aria-hidden", "data-state"],
     });
   };
 

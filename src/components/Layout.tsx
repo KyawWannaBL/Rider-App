@@ -17,6 +17,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
 import { riderFeedback } from "../lib/riderFeedback";
+import { useAuth } from "../contexts/AuthContext";
 
 type NotificationRow = Record<string, any>;
 
@@ -49,31 +50,42 @@ function mobileNavClass({ isActive }: { isActive: boolean }) {
 
 export function Layout() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { language, toggleLanguage } = useAppState();
   const tx = (en: string, my: string) => (language === "my" ? my : en);
   const [openNotifications, setOpenNotifications] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const unreadCount = notifications.filter((n) => !(n.is_read || n.read_at)).length;
-  const previousUnread = useRef(0);
+  const previousNotifications = useRef<Set<string> | null>(null);
+  const notificationSession = useRef(0);
+  const notificationRequest = useRef<number | null>(null);
 
   async function loadNotifications() {
+    const session = notificationSession.current;
+    if (notificationRequest.current === session) return;
+    notificationRequest.current = session;
     setLoadingNotifications(true);
     try {
       const { data, error } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v187", {
         p_payload: { notification_limit: 50 },
       });
+      if (session !== notificationSession.current) return;
       if (error) throw error;
       const next = Array.isArray(data?.notifications) ? data.notifications : [];
-      const nextUnread = next.filter((n: any) => !(n.is_read || n.read_at)).length;
-      if (previousUnread.current > 0 && nextUnread > previousUnread.current) riderFeedback("dispatch");
-      previousUnread.current = nextUnread;
+      const previous = previousNotifications.current;
+      const newUnread = previous !== null && next.some((n: NotificationRow) =>
+        n.id && !(n.is_read || n.read_at) && !previous.has(String(n.id))
+      );
+      if (newUnread) riderFeedback("dispatch");
+      previousNotifications.current = new Set(next.filter((n: NotificationRow) => n.id).map((n: NotificationRow) => String(n.id)));
       setNotifications(next);
     } catch (error) {
+      if (session !== notificationSession.current) return;
       console.error("Unable to load Rider notifications", error);
-      setNotifications([]);
     } finally {
-      setLoadingNotifications(false);
+      if (notificationRequest.current === session) notificationRequest.current = null;
+      if (session === notificationSession.current) setLoadingNotifications(false);
     }
   }
 
@@ -105,8 +117,25 @@ export function Layout() {
   }
 
   useEffect(() => {
+    notificationSession.current++;
+    previousNotifications.current = null;
+    setNotifications([]);
+    if (!user?.id) return;
     void loadNotifications();
-  }, []);
+    // Check incoming notifications while the app is open, even with the bell closed.
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadNotifications();
+    };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      notificationSession.current++;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [user?.id]);
 
   return (
     <div className="be-screen-shell min-h-[100dvh] bg-[var(--be-bg)] text-slate-950">
