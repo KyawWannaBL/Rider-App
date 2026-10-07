@@ -53,7 +53,7 @@ export function FinishAssignmentsButton({ onFinished }: { onFinished?: () => voi
           Finish Assignments
         </button>
       </div>
-      {message && <div className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700">{message}</div>}
+      {message && <div role="status" aria-live="polite" className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700">{message}</div>}
     </section>
   );
 }

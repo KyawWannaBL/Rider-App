@@ -93,9 +93,9 @@ function inferFeedbackTone(text: string): RiderFeedbackTone {
   const value = String(text || "").toLowerCase();
 
   if (/error|failed|fail|denied|invalid|unable|expired|မအောင်မြင်|အမှား|မရပါ|ငြင်းပယ်/.test(value)) return "error";
-  if (/warning|pending|wait|required|missing|attention|သတိ|စောင့်|လိုအပ်/.test(value)) return "warning";
+  if (/warning|pending|wait|required|missing|attention|unfinished|သတိ|စောင့်|လိုအပ်/.test(value)) return "warning";
   if (/cod|cash|mmk|ငွေ|ကောက်ခံ|လွှဲငွေ/.test(value)) return "cash";
-  if (/success|completed|saved|uploaded|verified|delivered|confirmed|approved|အောင်မြင်|ပြီးပါပြီ|သိမ်းဆည်း|အတည်ပြု/.test(value)) return "success";
+  if (/success|completed|\bfinished\b|saved|uploaded|verified|delivered|confirmed|approved|အောင်မြင်|ပြီးပါပြီ|သိမ်းဆည်း|အတည်ပြု/.test(value)) return "success";
   return "dispatch";
 }
 

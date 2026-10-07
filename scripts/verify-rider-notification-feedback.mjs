@@ -19,6 +19,7 @@ async function loadFeedback(options = {}) {
   let resolveResume;
   let starts = 0;
   let contexts = 0;
+  const frequencies = [];
   const listeners = new Map();
   const nodes = [];
   class Element {
@@ -38,7 +39,7 @@ async function loadFeedback(options = {}) {
       return new Promise(resolve => { resolveResume = () => { context.state = 'running'; resolve(); }; });
     },
     createGain() { return { gain: param, connect() {}, disconnect() {} }; },
-    createOscillator() { return { frequency: param, connect() {}, disconnect() {}, start() { starts++; }, stop() {} }; },
+    createOscillator() { return { frequency: { ...param, setValueAtTime(value) { frequencies.push(value); } }, connect() {}, disconnect() {}, start() { starts++; }, stop() {} }; },
   };
   const window = {
     AudioContext: class { constructor() { contexts++; return context; } },
@@ -54,10 +55,21 @@ async function loadFeedback(options = {}) {
   vm.runInNewContext(code, sandbox);
   return { api: sandbox.exports, Element, context, window, nodes, listeners,
     mutate(mutation) { onMutation([mutation]); }, advance() { now += 2000; },
-    resume() { resolveResume(); }, starts: () => starts, contexts: () => contexts };
+    resume() { resolveResume(); }, starts: () => starts, contexts: () => contexts, frequencies };
 }
 
 const cases = [
+  ['assignment results distinguish finished from unfinished work', async () => {
+    const h = await loadFeedback(); const node = new h.Element('Assignments finished. Your status is now AVAILABLE for new jobs.');
+    h.nodes.push(node); h.api.installGlobalRiderNotificationFeedback();
+    assert.equal(h.frequencies[0], 660, 'completed assignments use the success tone');
+    h.advance(); node.textContent = 'Some assignments are still unfinished.';
+    h.mutate({ type: 'characterData', target: { parentElement: node }, addedNodes: [] });
+    assert.equal(h.frequencies[1], 520, 'unfinished assignments use the warning tone');
+    h.advance(); node.textContent = 'Unable to finish assignments.';
+    h.mutate({ type: 'characterData', target: { parentElement: node }, addedNodes: [] });
+    assert.equal(h.frequencies[2], 330, 'failed assignments use the error tone');
+  }],
   ['waits for suspended audio before scheduling a notification', async () => {
     const h = await loadFeedback({ suspended: true });
     h.api.playRiderFeedback('success');
