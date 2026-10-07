@@ -18,6 +18,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
 import { riderFeedback } from "../lib/riderFeedback";
+import { FinishAssignmentsButton } from "../components/shared/FinishAssignmentsButton";
 
 function money(value:any){ return Number(value||0).toLocaleString()+" MMK"; }
 
@@ -142,6 +143,8 @@ export default function Dashboard() {
           </div>
           <div className="rider-dashboard-message mt-4 rounded-2xl bg-blue-50 p-3 text-sm font-bold text-blue-900">{message}</div>
         </section>
+
+        <FinishAssignmentsButton onFinished={load} />
 
         <section>
           <div className="mb-3 flex items-center justify-between">
