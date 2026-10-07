@@ -101,8 +101,10 @@ function inferFeedbackTone(text: string): RiderFeedbackTone {
 
 function visibleFeedbackText(node: Element): string {
   if (!(node instanceof HTMLElement)) return "";
-  const style = window.getComputedStyle(node);
-  if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) return "";
+  for (let current: HTMLElement | null = node; current instanceof HTMLElement; current = current.parentElement) {
+    const style = window.getComputedStyle(current);
+    if (current.hidden || current.getAttribute("aria-hidden") === "true" || style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) return "";
+  }
   return String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim();
 }
 
@@ -126,6 +128,9 @@ function shouldAnnounceNode(node: Element): boolean {
 
 function announceFeedbackNode(node: Element) {
   if (!shouldAnnounceNode(node)) return;
+  // Toast stacks expose a live region as well as individual toast alerts.
+  // Announce the individual messages, not the aggregate container text.
+  if (Array.from(node.querySelectorAll(FEEDBACK_SELECTOR)).some(shouldAnnounceNode)) return;
 
   const text = visibleFeedbackText(node);
   if (!text || text.length < 2) {

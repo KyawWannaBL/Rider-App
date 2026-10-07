@@ -88,6 +88,25 @@ const cases = [
     node.hidden = false; h.mutate({ type: 'attributes', target: node, addedNodes: [] });
     assert.equal(h.starts(), 1);
   }],
+  ['hidden containers do not consume the sound before their status becomes visible', async () => {
+    const h = await loadFeedback(); const parent = new h.Element('', ''); parent.hidden = true;
+    const node = new h.Element('Parcel approved'); node.parentElement = parent; parent.children.push(node); h.nodes.push(node);
+    h.api.installGlobalRiderNotificationFeedback(); assert.equal(h.starts(), 0, 'a hidden ancestor makes the status hidden');
+    parent.hidden = false; h.mutate({ type: 'attributes', target: parent, addedNodes: [] });
+    assert.equal(h.starts(), 1, 'revealing the container sounds its status');
+  }],
+  ['nested toast containers announce each new toast once and stay silent on removal', async () => {
+    const h = await loadFeedback(); const parent = new h.Element('Existing toast');
+    const existing = new h.Element('Existing toast'); existing.parentElement = parent; parent.children.push(existing);
+    h.nodes.push(parent, existing); h.api.installGlobalRiderNotificationFeedback(); assert.equal(h.starts(), 1);
+    h.advance(); const added = new h.Element('New toast'); added.parentElement = parent; parent.children.push(added);
+    parent.textContent = 'Existing toast New toast';
+    h.mutate({ type: 'childList', target: parent, addedNodes: [added] });
+    assert.equal(h.starts(), 2, 'one new toast produces one sound');
+    h.advance(); parent.children = [existing]; parent.textContent = 'Existing toast';
+    h.mutate({ type: 'childList', target: parent, addedNodes: [] });
+    assert.equal(h.starts(), 2, 'removing a toast must not replay an older one');
+  }],
   ['blocked audio does not reject into delivery operations', async () => {
     const h = await loadFeedback({ suspended: true, rejectResume: true });
     await h.api.playRiderFeedback('error');
@@ -102,7 +121,7 @@ const cases = [
     let code;
     try {
       const ts = (await import('typescript')).default;
-      code = ts.transpileModule(source.slice(start, end)).outputText;
+      code = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
     } catch (error) {
       if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
       code = stripTypeScriptTypes(source.slice(start, end));
