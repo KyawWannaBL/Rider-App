@@ -1,5 +1,13 @@
-// @ts-nocheck
-self.onmessage = async (event) => {
+type CompressionInput = {
+  buffer: ArrayBuffer; type?: string; name: string;
+  maxBytes?: number; maxWidth?: number; maxHeight?: number;
+};
+// This module runs in a worker; the main application's DOM lib types self as Window.
+const worker = self as unknown as {
+  onmessage: ((event: MessageEvent<CompressionInput>) => Promise<void>) | null;
+  postMessage(message: unknown, transfer?: Transferable[]): void;
+};
+worker.onmessage = async (event) => {
   try {
     const { buffer, type, name, maxBytes = 950 * 1024, maxWidth = 1280, maxHeight = 720 } = event.data;
     const input = new Blob([buffer], { type: type || "image/jpeg" });
@@ -9,6 +17,7 @@ self.onmessage = async (event) => {
     const height = Math.max(1, Math.round(bitmap.height * scale));
     const canvas = new OffscreenCanvas(width, height);
     const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Image compression canvas is unavailable.");
     ctx.drawImage(bitmap, 0, 0, width, height);
     bitmap.close();
 
@@ -20,8 +29,8 @@ self.onmessage = async (event) => {
     }
 
     const output = await blob.arrayBuffer();
-    self.postMessage({ ok: true, buffer: output, type: blob.type, name: name.replace(/\.[^.]+$/, "") + ".jpg", size: blob.size }, [output]);
+    worker.postMessage({ ok: true, buffer: output, type: blob.type, name: name.replace(/\.[^.]+$/, "") + ".jpg", size: blob.size }, [output]);
   } catch (error) {
-    self.postMessage({ ok: false, error: error?.message || "Proof compression failed." });
+    worker.postMessage({ ok: false, error: error instanceof Error ? error.message : "Proof compression failed." });
   }
 };

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { FileCheck2, RefreshCw, UploadCloud } from "lucide-react";
 import { supabase } from "../integrations/supabase/client";
@@ -85,7 +84,7 @@ export default function DocumentsPage(){
               const status=String(d.verification_status||"PENDING").toUpperCase();
               const cls=status==="APPROVED"||status==="VERIFIED"?"bg-emerald-100 text-emerald-800":status==="REJECTED"?"bg-rose-100 text-rose-800":"bg-amber-100 text-amber-800";
               return <div key={d.id} className="rounded-2xl border border-slate-200 p-4">
-                <div className="flex items-start justify-between gap-3"><div><p className="font-black">{String(d.document_type||"document").replaceAll("_"," ")}</p><p className="mt-1 text-sm font-semibold text-slate-500">{d.file_name||"-"}</p></div><span className={`rounded-full px-3 py-1 text-xs font-black ${cls}`}>{status}</span></div>
+                <div className="flex items-start justify-between gap-3"><div><p className="font-black">{String(d.document_type||"document").replace(/_/g," ")}</p><p className="mt-1 text-sm font-semibold text-slate-500">{d.file_name||"-"}</p></div><span className={`rounded-full px-3 py-1 text-xs font-black ${cls}`}>{status}</span></div>
                 <p className="mt-2 text-xs font-bold text-slate-500">{d.created_at?new Date(d.created_at).toLocaleString():"-"}</p>
                 {d.verified_at&&<p className="mt-1 text-xs font-bold text-emerald-700">{tx("Verified","စစ်ဆေးပြီး")}: {new Date(d.verified_at).toLocaleString()}</p>}
               </div>

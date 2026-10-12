@@ -205,13 +205,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthError(normalizeNetworkMessage(error));
         setLoading(false);
       } finally {
-        if (!mountedRef.current) return;
         window.clearTimeout(watchdog);
-
-        const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
-          handleAuthEvent(event, nextSession);
-        });
-        authSubscription = data?.subscription || null;
+        if (mountedRef.current) {
+          const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+            handleAuthEvent(event, nextSession);
+          });
+          authSubscription = data?.subscription || null;
+        }
       }
     })();
 

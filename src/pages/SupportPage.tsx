@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { LifeBuoy, RefreshCw, Send } from "lucide-react";
 import { supabase } from "../integrations/supabase/client";

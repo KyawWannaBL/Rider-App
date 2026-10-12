@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React from 'react';
 import { RefreshCw, LogOut, WifiOff } from "lucide-react";
 import { useAppState } from "@/hooks/useAppState";
@@ -83,7 +82,7 @@ function ConnectionIssue() {
   );
 }
 
-function Guard({ children }) {
+function Guard({ children }: { children: React.ReactNode }) {
   const { user, profile, profileState, loading } = useAuth();
   if (loading) return <Splash />;
   if (!user) return <Navigate to="/login" replace />;

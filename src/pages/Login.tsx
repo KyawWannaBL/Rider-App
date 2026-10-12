@@ -182,7 +182,6 @@ export default function Login() {
   return (
     <main
       style={{
-        minHeight: "100vh",
         minHeight: "100dvh",
         width: "100%",
         boxSizing: "border-box",

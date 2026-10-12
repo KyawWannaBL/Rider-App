@@ -123,7 +123,7 @@ export function ActiveRouteScreen({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-black uppercase tracking-wider text-slate-500">Delivery State</p>
-              <p className="mt-1 text-lg font-black text-slate-950">{waybill.status.replaceAll("_", " ")}</p>
+              <p className="mt-1 text-lg font-black text-slate-950">{waybill.status.replace(/_/g, " ")}</p>
             </div>
             <div className="rounded-full bg-blue-50 px-3 py-2 text-xs font-black text-blue-800">
               Attempt {waybill.deliveryAttemptCount}/{waybill.maximumDeliveryAttempts || 3}
