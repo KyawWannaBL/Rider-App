@@ -76,7 +76,7 @@ function statusBadge(status?: string) {
             : "bg-blue-100 text-blue-700"
       }`}
     >
-      {value.replaceAll("_", " ")}
+      {value.replace(/_/g, " ")}
     </span>
   );
 }

@@ -85,7 +85,7 @@ export default function PendingApprovalPage() {
           <p className="mt-3 text-sm font-semibold leading-6 text-slate-300">{message}</p>
           <div className="mt-5 rounded-2xl bg-black/20 p-4">
             <p className="text-xs font-black uppercase tracking-wider text-slate-400">{tx("Enterprise Status","Enterprise အခြေအနေ")}</p>
-            <p className="mt-2 text-lg font-black text-white">{status.replaceAll("_"," ")}</p>
+            <p className="mt-2 text-lg font-black text-white">{status.replace(/_/g," ")}</p>
           </div>
           <div className="mt-6 grid gap-3">
             <button onClick={syncRequest} disabled={loading} className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 font-black text-white disabled:opacity-50">

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
@@ -362,7 +361,7 @@ export default function DeliveryPage() {
     const result = await withTimeout(supabase.storage.from(bucket).upload(path, file, {
       upsert: false,
       contentType: file.type || "image/jpeg",
-    }) as any, UPLOAD_TIMEOUT_MS);
+    }), UPLOAD_TIMEOUT_MS);
     if (result.error) throw result.error;
     if (bucket === "rider-proofs") {
       return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
@@ -795,7 +794,7 @@ export default function DeliveryPage() {
                   <p className="font-black">{p.recipient_name || p.receiver_name || "-"}</p>
                   <p className="text-sm text-slate-500">{p.address || p.township || "-"}</p>
                   <div className="mt-2 flex items-center justify-between text-xs font-bold">
-                    <span>{String(p.stop_status || p.rider_status || "PENDING").replaceAll("_", " ")}</span>
+                    <span>{String(p.stop_status || p.rider_status || "PENDING").replace(/_/g, " ")}</span>
                     <span>{Number(p.cod_amount || 0).toLocaleString()} Ks</span>
                   </div>
                 </button>
@@ -905,7 +904,7 @@ export default function DeliveryPage() {
                   <label className="font-bold">
                     {tx("Payment method","ငွေပေးချေမှုနည်းလမ်း")}
                     <select className="mt-1 w-full rounded-2xl border p-3" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
-                      {PAYMENT_METHODS.map((method) => <option key={method} value={method}>{method.replaceAll("_", " ")}</option>)}
+                      {PAYMENT_METHODS.map((method) => <option key={method} value={method}>{method.replace(/_/g, " ")}</option>)}
                     </select>
                   </label>
                   <label className="font-bold">
@@ -977,27 +976,7 @@ export default function DeliveryPage() {
                     </div>
                   )}
 
-                  {false && (
-                    <div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
-                      <div className="font-black text-amber-900">
-                        {tx("Saved drop-off location appears incorrect","သိမ်းထားသော Drop-off Location မှားယွင်းနိုင်ပါသည်")}
-                      </div>
-                      <p className="mt-1 text-sm font-semibold text-amber-800">
-                        {tx(
-                          "Only use this when you are physically at the customer's correct delivery address. The corrected pin is saved with your authenticated user and GPS evidence.",
-                          "Customer ၏ မှန်ကန်သော ပို့ဆောင်ရမည့်နေရာတွင် အမှန်တကယ်ရောက်နေချိန်တွင်သာ အသုံးပြုပါ။ ပြင်ဆင်ထားသော Pin ကို Login User နှင့် GPS Evidence ဖြင့် မှတ်တမ်းတင်ပါမည်။"
-                        )}
-                      </p>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => requestConfirm("fix_dropoff")}
-                        className="be-jelly-action mt-3 w-full rounded-2xl bg-amber-600 p-3 font-black text-white disabled:opacity-50"
-                      >
-                        {tx("Correct Drop-off to Current GPS","လက်ရှိ GPS ကို Drop-off အဖြစ်ပြင်မည်")}
-                      </button>
-                    </div>
-                  )}
+
 
                   {failureMode && form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
                     <label className="mt-3 block rounded-2xl border bg-white p-3 font-bold">

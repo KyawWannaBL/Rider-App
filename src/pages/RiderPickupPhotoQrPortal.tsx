@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
@@ -174,7 +173,7 @@ export default function RiderPickupPhotoQrPortal() {
       return;
     }
 
-    const rows = (Array.isArray(data?.requests) ? data.requests : []).filter(
+    const rows: PickupRow[] = (Array.isArray(data?.requests) ? data.requests : []).filter(
       (row: PickupRow) => row?.assigned_to_me === true && row?.can_open_workspace === true
     );
     setPickups(rows);
@@ -284,8 +283,8 @@ export default function RiderPickupPhotoQrPortal() {
 
       const current = await refreshPickupAfterAction(pickupId);
       setMessage(tx(
-        `${pickupId}: ${String(action).replaceAll("_", " ")} completed. Next: ${String(current.next_action || "REFRESH").replaceAll("_", " ")}.`,
-        `${pickupId}: ${String(action).replaceAll("_", " ")} အောင်မြင်ပါသည်။ နောက်လုပ်ဆောင်ရန်: ${String(current.next_action || "REFRESH").replaceAll("_", " ")}။`
+        `${pickupId}: ${String(action).replace(/_/g, " ")} completed. Next: ${String(current.next_action || "REFRESH").replace(/_/g, " ")}.`,
+        `${pickupId}: ${String(action).replace(/_/g, " ")} အောင်မြင်ပါသည်။ နောက်လုပ်ဆောင်ရန်: ${String(current.next_action || "REFRESH").replace(/_/g, " ")}။`
       ));
     } catch (error:any) {
       console.error(error);
@@ -505,7 +504,7 @@ export default function RiderPickupPhotoQrPortal() {
       parcel_weight: parcel.parcel_weight || 0,
       remarks: parcel.remarks || "",
       cargo_photo_url: durablePhotoUrl,
-      cargo_photo_data_url: null,
+      cargo_photo_data_url: null as string | null,
       cargo_photo_name: parcel.cargo_photo_name || null,
       temp_qr_code: parcel.temp_qr_code,
     };
@@ -551,7 +550,7 @@ export default function RiderPickupPhotoQrPortal() {
       if (error) throw error;
       if (data?.ok === false) throw new Error(data?.error || "Verification submit failed.");
       const current = await refreshPickupAfterAction(pickupId);
-      setMessage(`${pickupId}: ${data?.message || tx("Pickup verification submitted.", "Pickup verification တင်သွင်းပြီးပါပြီ။")} ${tx("Next:", "နောက်လုပ်ဆောင်ရန်:")} ${String(current.next_action || "REFRESH").replaceAll("_", " ")}.`);
+      setMessage(`${pickupId}: ${data?.message || tx("Pickup verification submitted.", "Pickup verification တင်သွင်းပြီးပါပြီ။")} ${tx("Next:", "နောက်လုပ်ဆောင်ရန်:")} ${String(current.next_action || "REFRESH").replace(/_/g, " ")}.`);
     } catch (error:any) {
       setMessage(error?.message || tx("Verification submit failed.","Verification တင်သွင်းမှု မအောင်မြင်ပါ။"));
     } finally {
@@ -891,7 +890,7 @@ export default function RiderPickupPhotoQrPortal() {
                     {tx("Current status","လက်ရှိအခြေအနေ")}: {safeText(selectedPickup.mobile_status || selectedPickup.role_assignment_status || selectedPickup.assignment_status)}
                   </p>
                   <p className="mt-1 text-sm font-bold text-slate-700">
-                    {tx("Next action","နောက်လုပ်ဆောင်ရန်")}: {safeText(selectedPickup.next_action).replaceAll("_"," ")}
+                    {tx("Next action","နောက်လုပ်ဆောင်ရန်")}: {safeText(selectedPickup.next_action).replace(/_/g," ")}
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">

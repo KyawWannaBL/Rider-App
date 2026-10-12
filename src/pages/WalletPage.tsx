@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { RefreshCw, WalletCards } from "lucide-react";
 import { supabase } from "../integrations/supabase/client";
@@ -99,7 +98,7 @@ export default function WalletPage() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="font-mono text-sm font-black text-blue-700">{r.delivery_way_id || r.pickup_id || "-"}</p>
-                      <p className="mt-1 text-sm font-bold text-slate-700">{String(r.ledger_type || "COD settlement").replaceAll("_", " ")}</p>
+                      <p className="mt-1 text-sm font-bold text-slate-700">{String(r.ledger_type || "COD settlement").replace(/_/g, " ")}</p>
                       <p className="mt-1 text-xs font-semibold text-slate-500">{r.created_at ? new Date(r.created_at).toLocaleString() : "-"}</p>
                     </div>
                     <div className="text-left sm:text-right">
