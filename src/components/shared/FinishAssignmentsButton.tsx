@@ -22,8 +22,16 @@ export function FinishAssignmentsButton({ onFinished }: { onFinished?: () => voi
         return;
       }
 
-      setMessage("Assignments finished. Your status is now AVAILABLE for new jobs.");
+      // A successful RPC alone is insufficient: the returned workforce status
+      // must be AVAILABLE before we tell the user they can accept more work.
+      const availability = String(data?.availability || "").toUpperCase();
+      if (availability !== "AVAILABLE") {
+        setMessage(`Finish returned ${availability || "no availability status"}. Refresh and check remaining assignments before taking another job.`);
+        await onFinished?.();
+        return;
+      }
       await onFinished?.();
+      setMessage(`Assignments finished. Workforce ${data?.worker_code || ""} is AVAILABLE for new jobs. If another screen still shows BUSY, refresh its workforce list.`);
     } catch (error: any) {
       setMessage(error?.message || "Unable to finish assignments.");
     } finally {
