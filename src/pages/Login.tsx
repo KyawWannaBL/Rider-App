@@ -7,6 +7,8 @@ import {
   ArrowRight,
   CheckCircle2,
   Download,
+  Eye,
+  EyeOff,
   Globe,
   Loader2,
   Lock,
@@ -51,6 +53,7 @@ export default function Login() {
   const [email, setEmail] = useState(getRememberedEmail());
   const [phone, setPhone] = useState("+959");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [logoFailed, setLogoFailed] = useState(false);
@@ -331,8 +334,9 @@ export default function Login() {
                   <span style={{ display: "block", marginBottom: 7, color: "#cbd5e1", fontSize: 12, fontWeight: 800 }}>
                     {t("Password", "စကားဝှက်")}
                   </span>
+                  <div style={{ position: "relative" }}>
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     required
                     autoComplete="current-password"
                     value={password}
@@ -347,10 +351,21 @@ export default function Login() {
                       borderRadius: 12,
                       background: "#ffffff",
                       color: "#0f172a",
-                      padding: "0 14px",
+                      padding: "0 56px 0 14px",
                       fontSize: 16,
                     }}
                   />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    title={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((current) => !current)}
+                    style={{ position: "absolute", right: 4, top: 4, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", border: 0, borderRadius: 10, background: "transparent", color: "#334155", cursor: "pointer" }}
+                  >
+                    {showPassword ? <EyeOff size={22} /> : <Eye size={22} />}
+                  </button>
+                  </div>
                 </label>
 
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
