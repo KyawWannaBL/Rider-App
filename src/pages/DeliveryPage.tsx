@@ -551,7 +551,16 @@ export default function DeliveryPage() {
         return true;
       }
       if (mobileStatus !== "DELIVERED") {
-        throw new Error("Delivery confirmation did not return authoritative DELIVERED status.");
+        // Never repeat the delivery mutation automatically: a retry can duplicate COD
+        // or proof side-effects when the server committed but returned an older shape.
+        const reported = String(data?.current_status || data?.status || data?.stop_status || "UNKNOWN").toUpperCase();
+        const details = String(data?.message || data?.error || "").trim();
+        await load(selected.delivery_way_id);
+        throw new Error(
+          `Delivery not confirmed. Server mobile status: ${mobileStatus || "MISSING"}; stop status: ${reported}.` +
+          (details ? ` ${details}` : "") +
+          " Refresh and check the latest parcel status before trying again. Do not collect COD twice."
+        );
       }
 
       const successMessage = tx(
