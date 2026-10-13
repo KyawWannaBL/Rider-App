@@ -5,10 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 export function FinishAssignmentsButton({ onFinished }: { onFinished?: () => void | Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [confirmedWorker, setConfirmedWorker] = useState("");
 
   async function finish() {
     setBusy(true);
     setMessage("");
+    setConfirmedWorker("");
     try {
       const { data, error } = await (supabase as any).rpc("be_field_finish_assignments_v196");
       if (error) throw error;
@@ -31,6 +33,7 @@ export function FinishAssignmentsButton({ onFinished }: { onFinished?: () => voi
         return;
       }
       await onFinished?.();
+      setConfirmedWorker(String(data?.worker_code || "Worker"));
       setMessage(`Assignments finished. Workforce ${data?.worker_code || ""} is AVAILABLE for new jobs. If another screen still shows BUSY, refresh its workforce list.`);
     } catch (error: any) {
       setMessage(error?.message || "Unable to finish assignments.");
@@ -61,7 +64,14 @@ export function FinishAssignmentsButton({ onFinished }: { onFinished?: () => voi
           Finish Assignments
         </button>
       </div>
-      {message && <div role="status" aria-live="polite" className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700">{message}</div>}
+      {confirmedWorker && (
+        <div role="status" aria-live="assertive" className="mt-4 rounded-2xl border-2 border-emerald-600 bg-emerald-100 p-5 text-center shadow-lg">
+          <div className="flex items-center justify-center gap-2 text-2xl font-black text-emerald-900"><CheckCircle2 className="h-8 w-8" /> AVAILABLE / တာဝန်အသစ်လက်ခံနိုင်ပါပြီ</div>
+          <div className="mt-2 text-lg font-bold text-emerald-900">{confirmedWorker}: BUSY → AVAILABLE</div>
+          <p className="mt-1 text-sm font-semibold text-emerald-800">Confirmed by workforce system. Ready for new assignments.</p>
+        </div>
+      )}
+      {message && !confirmedWorker && <div role="alert" aria-live="assertive" className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700">{message}</div>}
     </section>
   );
 }
