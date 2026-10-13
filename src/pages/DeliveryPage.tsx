@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
-import { isNativeAndroidApp, takeNativePhotoFile, chooseNativeGalleryFile } from "../lib/nativePhoto";
+import { isNativeAndroidApp, takeNativePhotoFile, chooseNativeGalleryFile, consumeRestoredNativePhoto, NATIVE_PHOTO_RESTORED_EVENT } from "../lib/nativePhoto";
 
 const PAYMENT_METHODS = ["CASH", "PREPAID", "QR", "BANK_TRANSFER", "MOBILE_WALLET"];
 const PROOF_MAX_BYTES = 950 * 1024;
@@ -282,6 +282,25 @@ export default function DeliveryPage() {
       setMsg(error?.message || "Unable to prepare proof photo.");
     }
   }
+
+  // Android can recreate the WebView while the native camera is open.
+  // Pickup already restores this result; delivery proof must do the same.
+  useEffect(() => {
+    const recoverDeliveryProof = () => {
+      const restored = consumeRestoredNativePhoto();
+      if (!restored || restored.context.kind !== "delivery-proof") return;
+      if (restored.error) {
+        setMsg(restored.error);
+        return;
+      }
+      if (restored.file) void choosePhoto(restored.file);
+    };
+    recoverDeliveryProof();
+    window.addEventListener(NATIVE_PHOTO_RESTORED_EVENT, recoverDeliveryProof);
+    return () => window.removeEventListener(NATIVE_PHOTO_RESTORED_EVENT, recoverDeliveryProof);
+    // Capture restoration is intentionally registered once per mounted delivery screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function approveProofPhoto() {
     if (!proofFile) return setMsg("Capture a proof photo first.");
