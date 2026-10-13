@@ -55,9 +55,9 @@ export default function Login() {
   const [successMsg, setSuccessMsg] = useState("");
   const [logoFailed, setLogoFailed] = useState(false);
   const [riderRelease, setRiderRelease] = useState({
-    build: 75,
-    version: "1.0.75",
-    apk: "/downloads/Britium-Express-Rider-Build75.apk",
+    build: 95,
+    version: "1.0.95",
+    apk: "/downloads/Britium-Express-Rider.apk",
   });
 
   const t = (en: string, my: string) => (language === "en" ? en : my);
