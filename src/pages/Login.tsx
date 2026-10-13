@@ -140,7 +140,7 @@ export default function Login() {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo: `${window.location.origin}/#/login`,
+        redirectTo: "https://www.britiumexpress.com/reset-password",
       });
       if (error) throw error;
       riderFeedback("success");
