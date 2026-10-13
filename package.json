@@ -17,9 +17,13 @@
     "verify:ui-css": "node scripts/verify-ui-css.mjs",
     "verify:enterprise-integration": "node scripts/verify-enterprise-integration.mjs",
     "verify:rider-auth-recovery-v132": "node scripts/verify-rider-auth-recovery-v132.mjs",
-    "verify:rider-notification-feedback": "node scripts/verify-rider-notification-feedback.mjs"
+    "verify:rider-notification-feedback": "node scripts/verify-rider-notification-feedback.mjs",
+    "verify:mobile-layout": "node scripts/verify-mobile-layout.cjs"
   },
   "dependencies": {
+    "@capacitor/app": "^7.1.0",
+    "@capacitor/camera": "^7.0.2",
+    "@capacitor/core": "^7.4.3",
     "@hookform/resolvers": "^3.9.0",
     "@iconify/react": "^6.0.2",
     "@radix-ui/react-accordion": "^1.2.0",
@@ -51,6 +55,7 @@
     "@radix-ui/react-tooltip": "^1.1.4",
     "@supabase/supabase-js": "^2.55.0",
     "@tanstack/react-query": "^5.56.2",
+    "autoprefixer": "^10.4.20",
     "axios": "^1.13.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -61,6 +66,7 @@
     "input-otp": "^1.2.4",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
+    "postcss": "^8.4.47",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -71,16 +77,11 @@
     "recharts": "^2.12.7",
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.5.2",
+    "tailwindcss": "^3.4.17",
     "tw-animate-css": "^1.4.0",
     "vaul": "^0.9.3",
     "zod": "^3.23.8",
-    "zustand": "^5.0.9",
-    "tailwindcss": "^3.4.17",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47",
-    "@capacitor/core": "^7.4.3",
-    "@capacitor/app": "^7.1.0",
-    "@capacitor/camera": "^7.0.2"
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@babel/generator": "^7.28.0",
@@ -97,6 +98,7 @@
     "eslint-plugin-react-refresh": "^0.4.9",
     "globals": "^15.9.0",
     "lovable-tagger": "1.1.9",
+    "playwright-core": "1.64.0",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1"

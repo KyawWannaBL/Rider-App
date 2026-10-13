@@ -607,3 +607,24 @@ html.be-android-tablet-compat .rider-login-card h2 {
     display: none !important;
   }
 }
+
+/* Keep tablet navigation and landscape notifications inside the viewport. */
+.be-screen-shell { min-height: 100vh; min-height: 100dvh; }
+.be-rider-desktop-nav { min-width: 0; max-width: 100%; overflow-x: auto; }
+.be-rider-desktop-nav a { flex: 0 0 auto; white-space: nowrap; }
+.be-rider-notification-panel {
+  display: flex; flex-direction: column;
+  max-height: calc(100vh - 88px);
+  max-height: calc(100vh - 88px - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100dvh - 88px - env(safe-area-inset-bottom, 0px));
+}
+.be-rider-notification-panel > div { flex-shrink: 0; }
+.be-rider-notification-panel .be-rider-notification-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Fallback positions for old WebViews that ignore max()/env(). */
+.be-mobile-bottom-nav {
+  left: .5rem; right: .5rem; bottom: .5rem;
+  left: max(.5rem, env(safe-area-inset-left));
+  right: max(.5rem, env(safe-area-inset-right));
+  bottom: max(.5rem, env(safe-area-inset-bottom));
+}

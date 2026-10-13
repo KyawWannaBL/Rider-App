@@ -198,14 +198,14 @@ export function Layout() {
             </div>
           </div>
 
-          <nav className="mt-3 hidden items-center gap-1 rounded-2xl bg-slate-100/80 p-1 lg:flex">
+          <nav className="be-rider-desktop-nav mt-3 hidden items-center gap-1 rounded-2xl bg-slate-100/80 p-1 lg:flex">
             {navItems.map(({ to, en, my, icon: Icon }) => (
               <NavLink key={to} to={to} className={desktopNavClass}>
                 <Icon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
                 {tx(en, my)}
               </NavLink>
             ))}
-            <div className="ml-auto flex items-center gap-1 pr-1">
+            <div className="ml-auto flex shrink-0 items-center gap-1 pr-1">
               <NavLink to="/availability" className={desktopNavClass}>{tx("Availability", "အလုပ်ဆင်းနိုင်မှု")}</NavLink>
               <NavLink to="/documents" className={desktopNavClass}>{tx("Documents", "စာရွက်စာတမ်း")}</NavLink>
               <NavLink to="/support" className={desktopNavClass}>{tx("Support", "အကူအညီ")}</NavLink>
@@ -215,7 +215,7 @@ export function Layout() {
       </header>
 
       {openNotifications && (
-        <section className="fixed right-3 top-[76px] z-50 w-[calc(100vw-1.5rem)] max-w-md overflow-hidden rounded-[28px] border border-white/70 bg-white/95 shadow-[0_30px_80px_rgba(15,23,42,.22)] backdrop-blur-2xl sm:right-4 sm:top-20">
+        <section className="be-rider-notification-panel fixed right-3 top-[76px] z-50 w-[calc(100vw-1.5rem)] max-w-md overflow-hidden rounded-[28px] border border-white/70 bg-white/95 shadow-[0_30px_80px_rgba(15,23,42,.22)] backdrop-blur-2xl sm:right-4 sm:top-20">
           <div className="border-b border-slate-100 bg-gradient-to-r from-slate-950 to-slate-800 p-4 text-white">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -244,7 +244,7 @@ export function Layout() {
             </div>
           </div>
 
-          <div className="be-scrollbar max-h-[62vh] space-y-2 overflow-y-auto p-3">
+          <div className="be-rider-notification-list be-scrollbar max-h-[62vh] space-y-2 overflow-y-auto p-3">
             {notifications.length === 0 && (
               <div className="rounded-2xl bg-slate-50 p-8 text-center">
                 <Bell className="mx-auto h-8 w-8 text-slate-300" />
