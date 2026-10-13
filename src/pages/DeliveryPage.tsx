@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
+import { isNativeAndroidApp, takeNativePhotoFile, chooseNativeGalleryFile } from "../lib/nativePhoto";
 
 const PAYMENT_METHODS = ["CASH", "PREPAID", "QR", "BANK_TRANSFER", "MOBILE_WALLET"];
 const PROOF_MAX_BYTES = 950 * 1024;
@@ -838,7 +839,27 @@ export default function DeliveryPage() {
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <label className="rounded-2xl border p-3 font-bold">
                     {tx("Delivery proof photo","ပို့ဆောင်မှု သက်သေဓာတ်ပုံ")}
-                    <input type="file" accept="image/*" capture="environment" onChange={(e) => choosePhoto(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
+                    {isNativeAndroidApp() ? (
+                      <div className="mt-2 flex flex-col gap-2">
+                        <button type="button" className="rounded-xl bg-blue-700 p-3 text-white" onClick={async () => {
+                          try {
+                            const file = await takeNativePhotoFile("delivery-proof", { kind: "delivery-proof", route: window.location.hash.replace(/^#/, "") || "/delivery" });
+                            await choosePhoto(file);
+                          } catch (error: any) {
+                            setMsg(error?.message || "Unable to capture delivery photo.");
+                          }
+                        }}>{tx("Take photo with camera", "ကင်မရာဖြင့် ဓာတ်ပုံရိုက်ရန်")}</button>
+                        <button type="button" className="rounded-xl border border-slate-300 p-3" onClick={async () => {
+                          try {
+                            await choosePhoto(await chooseNativeGalleryFile("delivery-proof"));
+                          } catch (error: any) {
+                            setMsg(error?.message || "Unable to select delivery photo.");
+                          }
+                        }}>{tx("Choose from gallery", "ဓာတ်ပုံရွေးရန်")}</button>
+                      </div>
+                    ) : (
+                      <input type="file" accept="image/*" capture="environment" onChange={(e) => choosePhoto(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
+                    )}
                     {proofPreview && <img src={proofPreview} className="mt-3 h-40 w-full rounded-2xl object-cover" />}
                     {proofState === "compressing" && <p className="mt-2 text-sm text-blue-700">{tx("Compressing photo…","ဓာတ်ပုံကို ချုံ့နေသည်…")}</p>}
                     {proofPreview && (
