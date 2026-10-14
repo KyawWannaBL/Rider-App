@@ -6,6 +6,8 @@ import { isNativeAndroidApp, takeNativePhotoFile, chooseNativeGalleryFile, consu
 const PAYMENT_METHODS = ["CASH", "PREPAID", "QR", "BANK_TRANSFER", "MOBILE_WALLET"];
 const PROOF_MAX_BYTES = 950 * 1024;
 const UPLOAD_TIMEOUT_MS = 120_000;
+import { classifyFailureReason } from "../lib/failureCategories";
+
 const FALLBACK_FAILED_REASONS = [
   ["PHONE_OFF", "ဖုန်းစက်ပိတ်ထားသည်။ / Phone switched off"],
   ["PHONE_OUT_OF_COVERAGE", "ဖုန်းဆက်သွယ်မှုဧရိယာပြင်ပသို့ရောက်ရှိနေသည်။ / Outside coverage"],
@@ -1004,7 +1006,7 @@ export default function DeliveryPage() {
                       onChange={(e) => setForm({ ...form, failed_reason: e.target.value })}
                     >
                       <option value="">{tx("Choose failed reason","မအောင်မြင်ရသည့်အကြောင်းပြချက် ရွေးပါ")}</option>
-                      {failureReasons.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                      {(["DIRECT_RTO","VALID_REASON","INVALID_REASON"] as const).map(category => <optgroup key={category} label={category === "DIRECT_RTO" ? "Direct RTO / ချက်ချင်းပြန်ပို့" : category === "VALID_REASON" ? "Valid Reason / သုံးကြိမ်" : "Invalid Reason / မတွက်ပါ"}>{failureReasons.filter(([code]) => classifyFailureReason(String(code)) === category).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</optgroup>)}
                     </select>
                   </div>
 
