@@ -5,6 +5,7 @@ import { useAppState } from "../hooks/useAppState";
 import {
   chooseNativeGalleryFile,
   consumeRestoredNativePhoto,
+  peekRestoredNativePhoto,
   hasNativePhotoBridge,
   isNativeAndroidApp,
   NATIVE_PHOTO_RESTORED_EVENT,
@@ -689,16 +690,23 @@ export default function RiderPickupPhotoQrPortal() {
 
   useEffect(() => {
     let cancelled = false;
+    let recovering = false;
 
     async function recoverRestoredPhoto() {
-      const restored = consumeRestoredNativePhoto();
+      // Do not consume until the pickup is reloaded and the image is attached.
+      // Android may recreate this WebView during camera capture; auth/route
+      // restoration and pickup RPCs can finish in either order.
+      if (recovering || cancelled) return;
+      const restored = peekRestoredNativePhoto();
       if (!restored || restored.context.kind !== "pickup-parcel") return;
       if (restored.error) {
         setMessage(restored.error);
+        consumeRestoredNativePhoto();
         return;
       }
       if (!restored.file || !restored.context.lineNo || !restored.context.pickupId) return;
 
+      recovering = true;
       try {
         setMessage(tx("Recovering the photo just taken...","ယခုရိုက်ထားသော ဓာတ်ပုံကို ပြန်ယူနေသည်..."));
         const { data, error } = await (supabase as any).rpc("be_field_pickup_request_options_v187", { p_limit: 300 });
@@ -713,15 +721,21 @@ export default function RiderPickupPhotoQrPortal() {
         setSearch(String(restored.context.pickupId));
         await selectPickup(pickup);
         if (cancelled) return;
+        // onPhotoSelected retains the file in the parcel draft if upload fails.
         await onPhotoSelected(Number(restored.context.lineNo), restored.file, pickup);
+        consumeRestoredNativePhoto();
       } catch (error: any) {
-        if (!cancelled) setMessage(error?.message || "Unable to restore the captured photo.");
+        if (!cancelled) setMessage(`${error?.message || "Unable to restore the captured photo."} Please retry when connected; the recovered photo is still available.`);
+      } finally {
+        recovering = false;
       }
     }
 
-    void loadAssignedPickups().then(recoverRestoredPhoto);
     const onRestored = () => { void recoverRestoredPhoto(); };
     window.addEventListener(NATIVE_PHOTO_RESTORED_EVENT, onRestored);
+    void loadAssignedPickups().then(recoverRestoredPhoto, (error) => {
+      if (!cancelled) setMessage(error?.message || "Pickup refresh failed; retry to recover your photo.");
+    });
 
     return () => {
       cancelled = true;
