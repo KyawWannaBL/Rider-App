@@ -667,6 +667,7 @@ export default function DeliveryPage() {
 
   async function failDelivery() {
     if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
+    if (form.failed_reason === "OTHER" && !form.remarks.trim()) return setMsg(tx("Please type the failed reason.", "မအောင်မြင်သည့်အကြောင်းပြချက်ကို ရေးပါ။"));
     if (form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE") {
       if (!form.reschedule_date) return setMsg(tx("Choose the customer’s dedicated delivery date.","Customer သတ်မှတ်ထားသော ပို့ဆောင်ရက်ကို ရွေးပါ။"));
       const today = new Date();
@@ -728,6 +729,7 @@ export default function DeliveryPage() {
       return setMsg(tx("Choose a failed delivery reason.","ပို့ဆောင်မှုမအောင်မြင်ရသည့် အကြောင်းပြချက်ကို ရွေးပါ။"));
     }
 
+    if (form.failed_reason === "OTHER" && !form.remarks.trim()) return setMsg(tx("Please type the failed reason.", "မအောင်မြင်သည့်အကြောင်းပြချက်ကို ရေးပါ။"));
     if (form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE") {
       await failDelivery();
       return;
@@ -1009,6 +1011,19 @@ export default function DeliveryPage() {
                       {(["DIRECT_RTO","VALID_REASON","INVALID_REASON"] as const).map(category => <optgroup key={category} label={category === "DIRECT_RTO" ? "Direct RTO / ချက်ချင်းပြန်ပို့" : category === "VALID_REASON" ? "Valid Reason / သုံးကြိမ်" : "Invalid Reason / မတွက်ပါ"}>{failureReasons.filter(([code]) => classifyFailureReason(String(code)) === category).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</optgroup>)}
                     </select>
                   </div>
+                  {failureMode && (
+                    <label className="mt-3 block font-bold">
+                      {tx("Type failed reason / additional details", "မအောင်မြင်သည့်အကြောင်းပြချက်ကို ကိုယ်တိုင်ရေးပါ")}
+                      <textarea
+                        className="mt-1 min-h-24 w-full rounded-2xl border border-slate-300 bg-white p-3 text-slate-900"
+                        maxLength={1000}
+                        value={form.remarks}
+                        onChange={(event) => setForm({ ...form, remarks: event.target.value })}
+                        placeholder={tx("Explain the exact reason in your own words…", "အကြောင်းပြချက်အပြည့်အစုံကို ဤနေရာတွင် ရေးပါ…")}
+                      />
+                      <span className="text-xs text-slate-500">{tx("Select Other for a custom reason. This text is saved with the failed-delivery record.", "ကိုယ်တိုင်ရေးရန် Other ကိုရွေးပါ။ ရေးသားချက်ကို Failed Delivery နှင့် သိမ်းဆည်းမည်။")}</span>
+                    </label>
+                  )}
 
                   {deliveryProgress !== "idle" && (
                     <div className={`mt-3 rounded-2xl border p-4 text-sm font-black ${
