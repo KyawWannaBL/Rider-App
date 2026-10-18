@@ -70,13 +70,20 @@ jobs:
               exit 1
             fi
           done
-      - name: Install and verify Rider web build
+      - name: Install Rider dependencies
         run: |
-          npm ci
+          npm ci --include=dev
+          npm ls vite --depth=0
+          test -x node_modules/.bin/vite
+      - name: Verify and build Rider web application
+        run: |
           npm run build
+          test -f dist/index.html
       - name: Synchronize native Android project
         run: |
-          npx cap sync android
+          # Capacitor CLI is not currently listed in package.json.
+          # Invoke the actual CLI package explicitly rather than the unresolvable "npx cap".
+          npm exec --yes --package=@capacitor/cli@7.4.3 -- cap sync android
           test -f android/gradlew
       - name: Configure upgrade version
         env:
