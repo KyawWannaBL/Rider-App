@@ -126,7 +126,7 @@ jobs:
           if ! keytool -certreq -alias "$RIDER_ANDROID_KEY_ALIAS" \
             -keystore android/app/rider-release.jks \
             -storepass "$RIDER_ANDROID_KEYSTORE_PASSWORD" \
-            -keypass "$RIDER_ANDROID_KEY_PASSWORD" \
+            -keypass "$RIDER_ANDROID_KEYSTORE_PASSWORD" \
             -file /tmp/rider-signing-check.csr >/dev/null 2>&1; then
             echo "::error::Cannot decrypt Rider signing private key. Verify RIDER_ANDROID_KEY_PASSWORD against the existing keystore and alias (PKCS12 stores often require the store password for both)."
             exit 1
@@ -139,7 +139,7 @@ jobs:
                 storeFile file("rider-release.jks")
                 storePassword System.getenv("RIDER_ANDROID_KEYSTORE_PASSWORD")
                 keyAlias System.getenv("RIDER_ANDROID_KEY_ALIAS")
-                keyPassword System.getenv("RIDER_ANDROID_KEY_PASSWORD")
+                keyPassword System.getenv("RIDER_ANDROID_KEYSTORE_PASSWORD")
               }
             }
             buildTypes {
