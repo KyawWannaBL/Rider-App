@@ -1,0 +1,120 @@
+name: Rider Android signed build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "android/**"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.ts"
+      - ".github/workflows/rider-android-release.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rider-android-release
+  cancel-in-progress: true
+
+jobs:
+  signed-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - name: Require existing permanent Rider signing material
+        env:
+          RIDER_ANDROID_KEYSTORE_BASE64: ${{ secrets.RIDER_ANDROID_KEYSTORE_BASE64 }}
+          RIDER_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RIDER_ANDROID_KEYSTORE_PASSWORD }}
+          RIDER_ANDROID_KEY_ALIAS: ${{ secrets.RIDER_ANDROID_KEY_ALIAS }}
+          RIDER_ANDROID_KEY_PASSWORD: ${{ secrets.RIDER_ANDROID_KEY_PASSWORD }}
+          RIDER_ANDROID_CERT_SHA256: ${{ secrets.RIDER_ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          for var in RIDER_ANDROID_KEYSTORE_BASE64 RIDER_ANDROID_KEYSTORE_PASSWORD RIDER_ANDROID_KEY_ALIAS RIDER_ANDROID_KEY_PASSWORD RIDER_ANDROID_CERT_SHA256; do
+            if [ -z "${!var:-}" ]; then
+              echo "::error::Missing permanent Rider signing secret: $var"
+              exit 1
+            fi
+          done
+      - name: Install and verify Rider web build
+        run: |
+          npm ci
+          npm run build
+      - name: Synchronize native Android project
+        run: |
+          npx cap sync android
+          test -f android/gradlew
+      - name: Configure upgrade version
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          path=Path("android/app/build.gradle")
+          data=path.read_text()
+          code=400000+int(os.environ["BUILD_NUMBER"])
+          data,n=re.subn(r"versionCode\s+\d+",f"versionCode {code}",data,count=1)
+          if n!=1: raise SystemExit("Android versionCode missing")
+          path.write_text(data)
+          PY
+      - name: Sign APK with retained Rider certificate
+        env:
+          RIDER_ANDROID_KEYSTORE_BASE64: ${{ secrets.RIDER_ANDROID_KEYSTORE_BASE64 }}
+          RIDER_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RIDER_ANDROID_KEYSTORE_PASSWORD }}
+          RIDER_ANDROID_KEY_ALIAS: ${{ secrets.RIDER_ANDROID_KEY_ALIAS }}
+          RIDER_ANDROID_KEY_PASSWORD: ${{ secrets.RIDER_ANDROID_KEY_PASSWORD }}
+          RIDER_ANDROID_CERT_SHA256: ${{ secrets.RIDER_ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$RIDER_ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/rider-release.jks
+          chmod 600 android/app/rider-release.jks
+          keytool -exportcert -alias "$RIDER_ANDROID_KEY_ALIAS" -keystore android/app/rider-release.jks -storepass "$RIDER_ANDROID_KEYSTORE_PASSWORD" -file /tmp/rider-cert.der
+          actual="$(sha256sum /tmp/rider-cert.der | cut -d' ' -f1)"
+          expected="$(printf '%s' "$RIDER_ANDROID_CERT_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$actual" = "$expected" || { echo "::error::Rider signing certificate mismatch"; exit 1; }
+          cat >> android/app/build.gradle <<'GRADLE'
+          android {
+            signingConfigs {
+              riderPermanent {
+                storeFile file("rider-release.jks")
+                storePassword System.getenv("RIDER_ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RIDER_ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("RIDER_ANDROID_KEY_PASSWORD")
+              }
+            }
+            buildTypes {
+              release { signingConfig signingConfigs.riderPermanent }
+            }
+          }
+          GRADLE
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          test -s app/build/outputs/apk/release/app-release.apk
+      - name: Verify signed package
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt" dump badging "$APK" | head -3
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt" dump badging "$APK" | grep -q "package: name='com.britiumexpress.rider'"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: britium-rider-signed-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
