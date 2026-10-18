@@ -158,6 +158,38 @@ export default function RiderPickupPhotoQrPortal() {
   const pageSize = 20;
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const galleryRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const [bulkPreparing, setBulkPreparing] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState("");
+  const stagedPhotoFiles = useRef<Map<number, File>>(new Map());
+
+  async function stageContinuousPhotos(files: FileList | null) {
+    if (!files?.length || !selectedPickup?.can_open_workspace || bulkPreparing || actionBusy) return;
+    const available = parcels.filter((p) => !p.cargo_photo_url && !stagedPhotoFiles.current.has(p.line_no));
+    if (files.length > available.length) {
+      setMessage(`Selected ${files.length} photos but only ${available.length} empty parcel slots remain. Nothing staged.`);
+      return;
+    }
+    setBulkPreparing(true);
+    let count = 0;
+    try {
+      for (const original of Array.from(files)) {
+        const parcel = available[count];
+        const prepared = await compressPickupPhoto(original);
+        stagedPhotoFiles.current.set(parcel.line_no, prepared);
+        updateParcel(parcel.line_no, {
+          cargo_photo_file: prepared,
+          cargo_photo_name: prepared.name,
+          photo_status: "photo_staged",
+          photo_error: undefined,
+        });
+        count++;
+      }
+      setMessage(`Staged ${count} photos in parcel order. Review each photo/parcel match, then select Upload All. No photos uploaded yet.`);
+    } catch (error: any) {
+      setMessage(`Staged ${count} photos. ${error?.message || "Photo preparation failed."} You can select more photos to continue.`);
+    } finally { setBulkPreparing(false); }
+  }
+
 
   async function loadAssignedPickups() {
     setLoading(true);
@@ -291,6 +323,7 @@ export default function RiderPickupPhotoQrPortal() {
       console.error(error);
       setMessage(error?.message || tx("Pickup action failed.","Pickup လုပ်ဆောင်မှု မအောင်မြင်ပါ။"));
     } finally {
+      setBulkProgress("");
       setActionBusy("");
     }
   }
@@ -589,7 +622,7 @@ export default function RiderPickupPhotoQrPortal() {
   async function uploadAllPhotosForReview() {
     if (!selectedPickup) return;
     const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
-    const pending = parcels.filter((parcel) => !parcel.cargo_photo_url && Boolean(parcel.cargo_photo_file));
+    const pending = parcels.filter((parcel) => !parcel.cargo_photo_url && (Boolean(parcel.cargo_photo_file) || stagedPhotoFiles.current.has(parcel.line_no)));
     const uploadedCount = parcels.filter((parcel) => Boolean(parcel.cargo_photo_url)).length;
 
     if (pending.length === 0) {
@@ -606,7 +639,10 @@ export default function RiderPickupPhotoQrPortal() {
     try {
       for (const parcel of pending) {
         try {
-          await ensurePhotoUploaded(parcel, pickupId);
+          setBulkProgress(`Uploading ${okCount + 1} of ${pending.length}: parcel ${parcel.line_no}`);
+          const staged = stagedPhotoFiles.current.get(parcel.line_no);
+          await ensurePhotoUploaded(staged ? { ...parcel, cargo_photo_file: staged } : parcel, pickupId);
+          stagedPhotoFiles.current.delete(parcel.line_no);
           okCount += 1;
         } catch (error) {
           console.error("Photo retry failed", parcel.line_no, error);
@@ -968,6 +1004,14 @@ export default function RiderPickupPhotoQrPortal() {
                         `သိမ်းရန်အဆင်သင့် ${readyToSaveCount} Parcel · သိမ်းပြီး ${savedCount}/${parcels.length}`
                       )}
                     </p>
+                    <div className="mb-3 rounded-xl border border-emerald-200 bg-white p-3">
+                      <label className="block text-sm font-black text-emerald-900">Continuous photo selection (50+ parcels)</label>
+                      <input type="file" multiple accept="image/*" disabled={!selectedPickup?.can_open_workspace || bulkPreparing || !!actionBusy}
+                        onChange={(event) => { const files = event.currentTarget.files; void stageContinuousPhotos(files); event.currentTarget.value = ""; }}
+                        className="mt-2 block w-full text-sm" />
+                      <p className="mt-2 text-xs font-semibold text-slate-600">Photos are assigned to empty parcel lines in order across all pages. Review the matches before Upload All. Record actual weights: normally 1-3 kg, or 1-5 kg for eligible special customers; exceptions require review.</p>
+                      {bulkProgress && <p role="status" className="mt-2 font-bold text-blue-700">{bulkProgress}</p>}
+                    </div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <button disabled={!selectedPickup?.can_open_workspace || !!actionBusy || uploadingLine !== null || savingLine !== null || readyToSaveCount === 0} onClick={saveAllParcels} className="rounded-2xl bg-blue-700 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
                       {tx("Save All Ready Parcels","အဆင်သင့် Parcel အားလုံး သိမ်းရန်")}
