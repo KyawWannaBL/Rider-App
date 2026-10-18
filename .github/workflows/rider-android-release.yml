@@ -79,12 +79,19 @@ jobs:
         run: |
           npm run build
           test -f dist/index.html
-      - name: Synchronize native Android project
+      - name: Initialize and synchronize native Android platform
         run: |
-          # Capacitor CLI is not currently listed in package.json.
-          # Invoke the actual CLI package explicitly rather than the unresolvable "npx cap".
-          npm exec --yes --package=@capacitor/cli@7.4.3 -- cap sync android
+          set -euo pipefail
+          # This repository has no checked-in native Android project.
+          # Install matching Capacitor packages in the ephemeral CI workspace.
+          npm install --no-save --package-lock=false @capacitor/cli@7.4.3 @capacitor/android@7.4.3
+          if [ ! -f android/settings.gradle ] && [ ! -f android/settings.gradle.kts ]; then
+            npx cap add android
+          fi
+          npx cap sync android
           test -f android/gradlew
+          test -f android/app/build.gradle
+          test -f android/app/src/main/AndroidManifest.xml
       - name: Configure upgrade version
         env:
           BUILD_NUMBER: ${{ github.run_number }}
