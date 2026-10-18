@@ -172,6 +172,7 @@ jobs:
       - name: Publish verified Rider APK to public downloads
         env:
           RIDER_ANDROID_CERT_SHA256: ${{ secrets.RIDER_ANDROID_CERT_SHA256 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           APK="android/app/build/outputs/apk/release/app-release.apk"
@@ -194,7 +195,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f public/downloads/Britium-Express-Rider.apk "public/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk" public/rider-release.json
           git commit -m "build: publish verified Rider APK build ${GITHUB_RUN_NUMBER}"
-          git push origin HEAD:main
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" push origin HEAD:main
       - uses: actions/upload-artifact@v4
         with:
           name: britium-rider-signed-apk
