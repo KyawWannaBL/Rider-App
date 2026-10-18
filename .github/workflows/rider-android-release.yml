@@ -77,8 +77,18 @@ jobs:
           test -x node_modules/.bin/vite
       - name: Verify and build Rider web application
         run: |
+          set -euo pipefail
           npm run build
-          test -f dist/index.html
+          # Vite copies public/** into dist/**. Exclude previously published APKs
+          # from this Android package to prevent recursive release bundling.
+          rm -rf dist/downloads
+          test -s dist/index.html
+          test -d dist/assets
+          du -sh dist
+          if [ "$(du -sm dist | cut -f1)" -gt 150 ]; then
+            echo "::error::Rider web bundle exceeds 150 MB after excluding past APK downloads"
+            exit 1
+          fi
       - name: Initialize and synchronize native Android platform
         run: |
           set -euo pipefail
