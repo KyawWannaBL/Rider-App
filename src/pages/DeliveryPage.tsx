@@ -745,7 +745,10 @@ export default function DeliveryPage() {
           delivery_way_id: selected.delivery_way_id,
           action: "failed",
           failed_reason: form.failed_reason,
-          remark: form.remarks || null,
+          exception_code: form.failed_reason,
+          exception_reason: form.failed_reason,
+          remark: form.remarks.trim() || null,
+          remarks: form.remarks.trim() || null,
           ...gps,
         },
       });
@@ -784,8 +787,10 @@ export default function DeliveryPage() {
           delivery_way_id:selected.delivery_way_id,
           action:"exception",
           exception_reason:form.failed_reason,
+          exception_code:form.failed_reason,
           failed_reason:form.failed_reason,
-          remark:form.remarks || null,
+          remark:form.remarks.trim() || null,
+          remarks:form.remarks.trim() || null,
           ...gps,
         },
       });
