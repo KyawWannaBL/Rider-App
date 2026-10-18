@@ -55,7 +55,13 @@ export default function Profile() {
     await load();
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void load();
+    const refresh = () => { if (document.visibilityState === "visible") void load(); };
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function signOut() {
     await supabase.auth.signOut();
