@@ -34,7 +34,27 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: android-actions/setup-android@v3
+      - name: Initialize Android SDK from runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "SDK location: $SDK_ROOT"
+          SDKMANAGER=""
+          for candidate in "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager" "$SDK_ROOT/tools/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then SDKMANAGER="$candidate"; break; fi
+          done
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::Android SDK command-line tools not found on runner"
+            exit 1
+          fi
+          echo "Using SDK manager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null || test "${PIPESTATUS[1]}" -eq 0
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          test -x "$SDK_ROOT/build-tools/35.0.0/apksigner"
+          test -x "$SDK_ROOT/build-tools/35.0.0/aapt"
       - name: Require existing permanent Rider signing material
         env:
           RIDER_ANDROID_KEYSTORE_BASE64: ${{ secrets.RIDER_ANDROID_KEYSTORE_BASE64 }}
