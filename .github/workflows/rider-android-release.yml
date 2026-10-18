@@ -149,6 +149,7 @@ jobs:
           GRADLE
           cd android
           chmod +x gradlew
+          ./gradlew :app:signingReport --no-daemon
           ./gradlew assembleRelease --no-daemon
           test -s app/build/outputs/apk/release/app-release.apk
       - name: Verify signed package
