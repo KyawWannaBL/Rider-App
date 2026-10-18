@@ -160,7 +160,24 @@ export default function RiderPickupPhotoQrPortal() {
   const galleryRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const [bulkPreparing, setBulkPreparing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState("");
+  const [batchWeight, setBatchWeight] = useState("2");
+  const [specialRange, setSpecialRange] = useState(false);
+  const [replaceUnsavedWeights, setReplaceUnsavedWeights] = useState(false);
   const stagedPhotoFiles = useRef<Map<number, File>>(new Map());
+
+  function applyBatchWeight() {
+    if (!selectedPickup?.can_open_workspace || actionBusy || savingLine !== null) return;
+    const weight = Number(batchWeight);
+    const max = specialRange ? 5 : 3;
+    if (!Number.isFinite(weight) || weight < 1 || weight > max) {
+      setMessage("Enter an actual parcel weight from 1 to " + max + " kg.");
+      return;
+    }
+    const targets = parcels.filter(p => !p.saved && (replaceUnsavedWeights || !p.parcel_weight.trim())).length;
+    setParcels(current => current.map(p => p.saved || (!replaceUnsavedWeights && p.parcel_weight.trim())
+      ? p : { ...p, parcel_weight: String(weight) }));
+    setMessage("Applied " + weight + " kg to " + targets + " unsaved parcel(s). Confirm actual weights before saving.");
+  }
 
   async function stageContinuousPhotos(files: FileList | null) {
     if (!files?.length || !selectedPickup?.can_open_workspace || bulkPreparing || actionBusy) return;
@@ -1004,6 +1021,20 @@ export default function RiderPickupPhotoQrPortal() {
                         `သိမ်းရန်အဆင်သင့် ${readyToSaveCount} Parcel · သိမ်းပြီး ${savedCount}/${parcels.length}`
                       )}
                     </p>
+                    <div className="mb-3 rounded-xl border border-sky-200 bg-white p-3">
+                      <p className="text-sm font-black text-sky-950">Set Weight for All Parcels / Parcel အားလုံး အလေးချိန်သတ်မှတ်ရန်</p>
+                      <div className="mt-3 flex flex-wrap items-end gap-3">
+                        <label className="text-sm font-bold">Weight (kg)
+                          <input type="number" min="1" max={specialRange ? 5 : 3} step="0.1" value={batchWeight} onChange={e => setBatchWeight(e.target.value)}
+                            className="mt-1 block w-24 rounded-lg border border-slate-300 p-2 text-black" />
+                        </label>
+                        <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={specialRange} onChange={e => setSpecialRange(e.target.checked)} />Special customer (1-5 kg)</label>
+                        <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={replaceUnsavedWeights} onChange={e => setReplaceUnsavedWeights(e.target.checked)} />Replace existing unsaved weights</label>
+                        <button type="button" onClick={applyBatchWeight} disabled={!selectedPickup?.can_open_workspace || !!actionBusy || savingLine !== null}
+                          className="rounded-xl bg-sky-700 px-4 py-3 text-sm font-black text-white disabled:opacity-40">Apply Weight to All Unsaved Parcels</button>
+                      </div>
+                      <p className="mt-2 text-xs font-semibold text-slate-600">Normal: 1-3 kg; special: 1-5 kg. Saved parcels remain unchanged. Use the shared weight only when all selected parcels actually weigh the same.</p>
+                    </div>
                     <div className="mb-3 rounded-xl border border-emerald-200 bg-white p-3">
                       <label className="block text-sm font-black text-emerald-900">Continuous photo selection (50+ parcels)</label>
                       <input type="file" multiple accept="image/*" disabled={!selectedPickup?.can_open_workspace || bulkPreparing || !!actionBusy}
