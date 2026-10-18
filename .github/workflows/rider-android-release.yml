@@ -121,6 +121,17 @@ jobs:
           actual="$(sha256sum /tmp/rider-cert.der | cut -d' ' -f1)"
           expected="$(printf '%s' "$RIDER_ANDROID_CERT_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           test "$actual" = "$expected" || { echo "::error::Rider signing certificate mismatch"; exit 1; }
+          # Exporting the certificate only validates the store password; signing
+          # additionally requires decrypting the alias's private key.
+          if ! keytool -certreq -alias "$RIDER_ANDROID_KEY_ALIAS" \
+            -keystore android/app/rider-release.jks \
+            -storepass "$RIDER_ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$RIDER_ANDROID_KEY_PASSWORD" \
+            -file /tmp/rider-signing-check.csr >/dev/null 2>&1; then
+            echo "::error::Cannot decrypt Rider signing private key. Verify RIDER_ANDROID_KEY_PASSWORD against the existing keystore and alias (PKCS12 stores often require the store password for both)."
+            exit 1
+          fi
+          rm -f /tmp/rider-signing-check.csr /tmp/rider-cert.der
           cat >> android/app/build.gradle <<'GRADLE'
           android {
             signingConfigs {
