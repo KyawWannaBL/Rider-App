@@ -12,7 +12,7 @@ on:
       - ".github/workflows/rider-android-release.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: rider-android-release
@@ -169,6 +169,32 @@ jobs:
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --verbose --print-certs "$APK"
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt" dump badging "$APK" | head -3
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt" dump badging "$APK" | grep -q "package: name='com.britiumexpress.rider'"
+      - name: Publish verified Rider APK to public downloads
+        env:
+          RIDER_ANDROID_CERT_SHA256: ${{ secrets.RIDER_ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          ACTUAL="$("$APKSIGNER" verify --print-certs "$APK" | sed -n 's/^.*certificate SHA-256 digest: //p' | head -n 1 | tr '[:lower:]' '[:upper:]' | tr -d ':[:space:]')"
+          EXPECTED="$(printf '%s' "$RIDER_ANDROID_CERT_SHA256" | tr '[:lower:]' '[:upper:]' | tr -d ':[:space:]')"
+          if [ -z "$ACTUAL" ] || [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Refusing to publish APK: permanent signing certificate mismatch"
+            exit 1
+          fi
+          VERSION_CODE="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | sed -n "s/.*versionCode='\\([0-9]*\\)'.*/\\1/p" | head -n 1)"
+          test -n "$VERSION_CODE"
+          test "$VERSION_CODE" -eq "$((400000 + GITHUB_RUN_NUMBER))"
+          mkdir -p public/downloads
+          cp "$APK" public/downloads/Britium-Express-Rider.apk
+          cp "$APK" "public/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk"
+          printf '{"build":%s,"version":"1.0","versionCode":%s,"apk":"/downloads/Britium-Express-Rider-Build%s.apk","publishedAt":"%s"}\\n' "$GITHUB_RUN_NUMBER" "$VERSION_CODE" "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > public/rider-release.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f public/downloads/Britium-Express-Rider.apk "public/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk" public/rider-release.json
+          git commit -m "build: publish verified Rider APK build ${GITHUB_RUN_NUMBER}"
+          git push origin HEAD:main
       - uses: actions/upload-artifact@v4
         with:
           name: britium-rider-signed-apk
