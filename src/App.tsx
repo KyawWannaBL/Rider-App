@@ -85,6 +85,8 @@ function ConnectionIssue() {
 function Guard({ children }: { children: React.ReactNode }) {
   const { user, profile, profileState, loading } = useAuth();
   if (loading) return <Splash />;
+  // A failed session bootstrap is not a confirmed logout. Keep a retry screen.
+  if (profileState === "error") return <ConnectionIssue />;
   if (!user) return <Navigate to="/login" replace />;
   if (profileState === "checking") return <Splash />;
   if (profileState === "error") return <ConnectionIssue />;
@@ -96,6 +98,7 @@ function Guard({ children }: { children: React.ReactNode }) {
 function LoginPage() {
   const { user, profile, profileState, loading } = useAuth();
   if (loading || (user && profileState === "checking")) return <Splash />;
+  if (profileState === "error") return <ConnectionIssue />;
   if (user && profileState === "approved" && profile) return <Navigate to="/dashboard" replace />;
   if (user && profileState === "error") return <ConnectionIssue />;
   if (user && profileState === "unapproved") return <Navigate to="/pending-approval" replace />;
