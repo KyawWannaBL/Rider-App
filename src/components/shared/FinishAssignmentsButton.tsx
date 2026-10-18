@@ -32,6 +32,22 @@ export function FinishAssignmentsButton({ onFinished }: { onFinished?: () => voi
         await onFinished?.();
         return;
       }
+      // Confirm that the workforce status was actually persisted.
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user?.id) throw new Error("Session expired during workforce verification.");
+      const { data: worker, error: readError } = await (supabase as any)
+        .from("be_mobile_workforce_accounts")
+        .select("metadata")
+        .eq("auth_user_id", auth.user.id)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!worker) throw new Error("Unable to verify your workforce record.");
+      const persisted = String(worker.metadata?.assignment_availability || "").toUpperCase();
+      if (persisted !== "AVAILABLE") {
+        setMessage("Completion response was AVAILABLE, but saved workforce status is " + (persisted || "UNKNOWN") + ". Ask Operations to review active wayplans.");
+        await onFinished?.();
+        return;
+      }
       await onFinished?.();
       setConfirmedWorker(String(data?.worker_code || "Worker"));
       setMessage(`Assignments finished. Workforce ${data?.worker_code || ""} is AVAILABLE for new jobs. If another screen still shows BUSY, refresh its workforce list.`);
