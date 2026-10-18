@@ -124,6 +124,46 @@ export default function DeliveryPage() {
     activeRole === "driver" &&
     String(selected?.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
 
+  async function approveAllHelperDeliveries() {
+    if (activeRole !== "driver" || busy) return;
+    const pending = pickups.filter((job: any) =>
+      String(job.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER"
+      && job.wayplan_id && job.delivery_way_id
+    );
+    if (!pending.length) {
+      setMsg(tx("No Helper deliveries require Driver approval.", "Driver အတည်ပြုရန် Helper ပို့ဆောင်မှုမရှိပါ။"));
+      return;
+    }
+    if (!window.confirm(tx(
+      `Accept all ${pending.length} Helper delivery verifications? Each parcel will be checked and recorded separately.`,
+      `Helper ပို့ဆောင်မှု ${pending.length} ခုလုံးကို အတည်ပြုမည်လား။ တစ်ခုချင်းစီစစ်ဆေးမှတ်တမ်းတင်ပါမည်။`
+    ))) return;
+    setBusy(true);
+    let approved = 0;
+    const failures: string[] = [];
+    try {
+      for (const job of pending) {
+        try {
+          const { data, error } = await (supabase as any).rpc("be_driver_confirm_team_delivery_v176", {
+            p_payload: { wayplan_id: job.wayplan_id, delivery_way_id: job.delivery_way_id },
+          });
+          if (error || data?.ok !== true || String(data?.mobile_status || "").toUpperCase() !== "DELIVERED")
+            throw new Error(error?.message || data?.error || "Driver acceptance was not confirmed.");
+          approved++;
+        } catch (error: any) {
+          failures.push(`${job.delivery_way_id}: ${error?.message || "Failed"}`);
+        }
+      }
+      setMsg(tx(
+        `End-of-day Driver review: ${approved} approved, ${failures.length} not approved. ${failures.join("; ")}`,
+        `Driver နေ့ကုန်စစ်ဆေးမှု: ${approved} ခု အတည်ပြု၊ ${failures.length} ခု မပြီးပါ။ ${failures.join("; ")}`
+      ));
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function resetProofs() {
     setProofFile(null);
     setApprovedProofFile(null);
@@ -420,7 +460,7 @@ export default function DeliveryPage() {
       const message = tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။");
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
     }
-    if (!canDeliver) {
+    if (!canDeliver && !helperPreparedForDriver) {
       const message = tx(
         "Accept the parcel before confirming delivery.",
         "ပို့ဆောင်ပြီး အတည်ပြုရန် ပါဆယ်ကို အရင်လက်ခံပါ။"
@@ -439,7 +479,7 @@ export default function DeliveryPage() {
         "Helper မှ ပို့ဆောင်မှုစစ်ဆေးချက်များ ပြီးစီးထားပါသည်။ Driver အတည်ပြုမှုကို လုပ်ဆောင်နေပါသည်..."
       ));
       try {
-        const { data, error } = await (supabase as any).rpc("be_field_team_confirm_delivery_v146", {
+        const { data, error } = await (supabase as any).rpc("be_driver_confirm_team_delivery_v176", {
           p_payload: {
             wayplan_id: selected.wayplan_id,
             delivery_way_id: selected.delivery_way_id,
@@ -806,6 +846,13 @@ export default function DeliveryPage() {
         <section className="be-surface rounded-[30px] p-5">
           <h1 className="text-3xl font-black">{tx("Delivery / Drop-Off Process","ပို့ဆောင် / ပစ္စည်းချ လုပ်ငန်းစဉ်")}</h1>
           <p className="font-semibold text-slate-600">{tx("Assigned Wayplan stops, arrival, delivery proof, signature, COD/payment confirmation and failed delivery.","တာဝန်ပေးထားသော Wayplan မှတ်တိုင်များ၊ ရောက်ရှိမှု၊ ပို့ဆောင်သက်သေ၊ လက်မှတ်၊ COD/ငွေပေးချေမှု အတည်ပြုခြင်းနှင့် ပို့ဆောင်မအောင်မြင်မှုတို့ကို စီမံပါ။")}</p>
+          {activeRole === "driver" && (
+            <button type="button" onClick={() => void approveAllHelperDeliveries()}
+              disabled={busy || !pickups.some((job: any) => String(job.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER")}
+              className="mt-3 w-full rounded-2xl bg-indigo-700 px-4 py-3 font-black text-white disabled:opacity-50">
+              {tx("End of Day — Accept All Helper Verifications", "နေ့ကုန်တွင် Helper အတည်ပြုချက်အားလုံးကို လက်ခံမည်")}
+            </button>
+          )}
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
             <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{pickups.length} assigned</span>
             <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-900">{activeCount} active</span>
