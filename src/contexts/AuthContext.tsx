@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
+import { enterpriseProfileOverlay } from "@/lib/enterpriseProfileOverlay";
 
 export type EnterpriseProfileState = "checking" | "approved" | "unapproved" | "error";
 
@@ -118,10 +119,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
 
-      setProfile(result?.data || null);
+      const synchronizedProfile = await enterpriseProfileOverlay(result?.data || {});
+      if (!mountedRef.current || requestId !== requestRef.current) return null;
+      setProfile(synchronizedProfile);
       setProfileState("approved");
       setAuthError(null);
-      return result?.data || null;
+      return synchronizedProfile;
     } catch (error: any) {
       if (!mountedRef.current || requestId !== requestRef.current) return null;
       console.error(`Rider Enterprise profile hydration failed (${source})`, error);
