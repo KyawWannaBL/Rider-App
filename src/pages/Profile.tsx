@@ -243,6 +243,7 @@ export default function Profile() {
                   <KeyRound className="h-4 w-4" />
                   {tx("Send Password Recovery","စကားဝှက်ပြန်လည်ရယူရန် ပို့ရန်")}
                 </button>
+            <a href="https://www.britiumexpress.app/account-deletion.html" style={{ display: "block", padding: "14px 12px", color: "#1d4ed8", fontSize: 14, textAlign: "center", textDecoration: "underline" }}>{tx("Request account and data deletion", "အကောင့်နှင့် အချက်အလက် ဖျက်ရန် တောင်းဆိုမည်")}</a>
                 <button
                   onClick={signOut}
                   className="flex h-11 items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 text-sm font-black text-white"
