@@ -13,7 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.photopicker.EmbeddedPhotoPickerFeatureInfo;
 import android.widget.photopicker.EmbeddedPhotoPickerSession;
-import androidx.photopicker.EmbeddedPhotoPickerStateChangeListener;
+import androidx.photopicker.EmbeddedPhotoPickerView.EmbeddedPhotoPickerStateChangeListener;
 import androidx.photopicker.EmbeddedPhotoPickerView;
 import java.util.Collections;
 import java.util.LinkedHashSet;
