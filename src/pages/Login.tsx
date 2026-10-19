@@ -51,7 +51,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(getRememberMe());
   const [email, setEmail] = useState(getRememberedEmail());
-  const [phone, setPhone] = useState("+959");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -152,35 +151,6 @@ export default function Login() {
     }
   }
 
-  async function requestAccess(event: React.FormEvent) {
-    event.preventDefault();
-    clearMessages();
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-        options: {
-          data: {
-            requested_app: "rider_app",
-            requested_role: "rider",
-            phone: phone.trim(),
-          },
-        },
-      });
-      if (error) throw error;
-
-      riderFeedback("success");
-      setSuccessMsg(t(
-        "Request submitted. Admin approval may be required.",
-        "Request တင်ပြီးပါပြီ။ Admin approval လိုနိုင်ပါသည်။"
-      ));
-    } catch (error: any) {
-      setErrorMsg(error?.message || t("Access request failed.", "Access request မအောင်မြင်ပါ။"));
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <main
@@ -427,20 +397,18 @@ export default function Login() {
             )}
 
             {view === "request" && (
-              <form onSubmit={requestAccess}>
-                <p style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.6 }}>
-                  {t("Submit a Rider account request for admin approval.", "Admin approval အတွက် Rider account request တင်ပါ။")}
+              <section aria-label={t("Administrator-provided accounts", "အက်ဒမင်မှ ဖန်တီးပေးသော အကောင့်များ")}>
+                <p style={{ color: "#cbd5e1", fontSize: 14, lineHeight: 1.7 }}>
+                  {t("Britium administrators create all Rider, Driver and Helper accounts. Contact your Britium administrator to request an account or correct your access.", "Rider၊ Driver နှင့် Helper အကောင့်အားလုံးကို Britium အက်ဒမင်မှသာ ဖန်တီးပေးပါသည်။ အကောင့်ရယူရန် သို့မဟုတ် ဝင်ရောက်ခွင့်ပြင်ဆင်ရန် Britium အက်ဒမင်ကို ဆက်သွယ်ပါ။")}
                 </p>
-                <input type="email" required value={email} onChange={(e)=>setEmail(e.target.value)} placeholder={t("Work Email","အလုပ်အီးမေးလ်")} style={{display:"block",width:"100%",minHeight:52,boxSizing:"border-box",border:"1px solid #64748b",borderRadius:12,background:"#fff",color:"#0f172a",padding:"0 14px",fontSize:16,marginBottom:12}}/>
-                <input required value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="+959..." style={{display:"block",width:"100%",minHeight:52,boxSizing:"border-box",border:"1px solid #64748b",borderRadius:12,background:"#fff",color:"#0f172a",padding:"0 14px",fontSize:16,marginBottom:12}}/>
-                <input type="password" required minLength={8} value={password} onChange={(e)=>setPassword(e.target.value)} placeholder={t("New Password (min 8 characters)","စကားဝှက်အသစ် (အနည်းဆုံး ၈ လုံး)")} style={{display:"block",width:"100%",minHeight:52,boxSizing:"border-box",border:"1px solid #64748b",borderRadius:12,background:"#fff",color:"#0f172a",padding:"0 14px",fontSize:16,marginBottom:14}}/>
-                <button type="submit" disabled={loading} style={{width:"100%",minHeight:52,border:0,borderRadius:12,background:"#f4d66d",color:"#07111f",fontWeight:900}}>
-                  {t("Create Account","အကောင့်ဖန်တီးမည်")}
-                </button>
-                <button type="button" onClick={()=>switchView("password")} style={{width:"100%",minHeight:44,marginTop:8,border:0,background:"transparent",color:"#cbd5e1",fontWeight:800}}>
+                <a href="mailto:md@britiumventures.com?subject=Britium%20Rider%20account%20access" style={{ display: "block", minHeight: 48, boxSizing: "border-box", padding: "14px", borderRadius: 12, background: "#f4d66d", color: "#07111f", textAlign: "center", fontWeight: 900 }}>
+                  {t("Contact Britium administrator", "Britium အက်ဒမင်ကို ဆက်သွယ်ရန်")}
+                </a>
+                <p style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.6 }}>{t("Do not send passwords or verification codes. Opening this link does not create an account.", "စကားဝှက်နှင့် အတည်ပြုကုဒ်များ မပို့ပါနှင့်။ ဤလင့်ခ်ကို ဖွင့်ရုံဖြင့် အကောင့်မဖန်တီးပါ။")}</p>
+                <button type="button" onClick={()=>switchView("password")} style={{width:"100%",minHeight:48,marginTop:8,border:0,background:"transparent",color:"#cbd5e1",fontWeight:800}}>
                   {t("Back to Login","Login သို့ ပြန်မည်")}
                 </button>
-              </form>
+              </section>
             )}
 
             {view === "password" && (
@@ -450,7 +418,7 @@ export default function Login() {
                   onClick={() => switchView("request")}
                   style={{ width: "100%", minHeight: 46, borderRadius: 12, border: "1px solid #a78b3f", background: "#1f2937", color: "#f4d66d", fontWeight: 800, marginBottom: 10 }}
                 >
-                  {t("Create Account", "အကောင့်အသစ်ဖန်တီးရန်")}
+                  {t("Request account access", "အကောင့်ဝင်ရောက်ခွင့် တောင်းရန်")}
                 </button>
                 <a
                   href={riderRelease.apk}
