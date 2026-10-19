@@ -464,6 +464,7 @@ export default function Login() {
           </div>
         </section>
 
+            <a href="https://www.britiumexpress.app/account-deletion.html" style={{ display: "block", padding: "14px 12px", color: "#f6d178", fontSize: 14, textAlign: "center", textDecoration: "underline" }}>{t("Request account and data deletion", "အကောင့်နှင့် အချက်အလက် ဖျက်ရန် တောင်းဆိုမည်")}</a>
         <p style={{ margin: "16px 0 0", textAlign: "center", color: "#64748b", fontSize: 11, fontWeight: 700 }}>
           © {new Date().getFullYear()} Britium Express · Field Operations Platform
         </p>
