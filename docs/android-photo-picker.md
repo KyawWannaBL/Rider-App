@@ -10,7 +10,7 @@ Only a selected, granted image URI is read. The native bridge limits input to 25
 
 ## Validation
 
-- Node tests cover embedded success, standard fallback, explicit cancellation, concurrent picker requests and read errors.
+- Node tests cover embedded success, standard fallback, explicit cancellation, busy-error propagation and read errors. They do not exercise concurrent native calls.
 - Python tests exercise generated-manifest/plugin registration and repeatability.
 - The unsigned GitHub workflow compiles the actual Java bridge and checks merged APK permissions without release signing secrets or publishing.
 - Physical-device checks remain required: standard selection on Android 8/11/13; embedded selection on Android 14 Extension 15+ and Android 16; cancel/back, cloud images, rotated images, picker fallback, camera resume, preview, upload and replacement upload on each workforce role. No such device tests have been claimed.
