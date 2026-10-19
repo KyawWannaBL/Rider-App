@@ -13,6 +13,8 @@ on:
       - "postcss.config.cjs"
       - "capacitor.config.ts"
       - "android-assets/rider-app-icon.png"
+      - "android-assets/photo-picker/**"
+      - "scripts/configure-android-photo-picker.py"
       - "public/logo.png"
       - "public/images/**"
       - ".github/workflows/build-rider-apk.yml"
@@ -197,13 +199,13 @@ jobs:
 
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
+          # Camera capture and system-selected gallery files do not need broad
+          # media-library/storage access. Keep uploads scoped to selected files.
           permissions = [
               ("android.permission.INTERNET", None),
               ("android.permission.CAMERA", None),
               ("android.permission.ACCESS_FINE_LOCATION", None),
               ("android.permission.ACCESS_COARSE_LOCATION", None),
-              ("android.permission.READ_MEDIA_IMAGES", None),
-              ("android.permission.READ_EXTERNAL_STORAGE", 'android:maxSdkVersion="32"'),
           ]
           marker = "<application"
           additions = ""
@@ -216,7 +218,7 @@ jobs:
           manifest.write_text(text)
 
           run_number = int(os.environ["RIDER_VERSION_CODE"])
-          version_code = 100000 + run_number
+          version_code = 500000 + run_number
           version_name = f"1.0.{run_number}"
           gradle = Path("android/app/build.gradle")
           source = gradle.read_text()
@@ -227,6 +229,9 @@ jobs:
           gradle.write_text(source)
           print(f"Android versionCode={version_code}, versionName={version_name}")
           PY
+
+      - name: Configure native embedded and standard photo pickers
+        run: python3 scripts/configure-android-photo-picker.py
 
       - name: Set Google Play compatible minimum Android SDK
         run: |
@@ -305,6 +310,19 @@ jobs:
           RIDER_ANDROID_KEY_PASSWORD: ${{ secrets.RIDER_ANDROID_KEY_PASSWORD }}
         run: ./gradlew --no-daemon assembleRelease bundleRelease
 
+      - name: Verify packaged APK has no broad media permissions
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          AAPT="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          "$AAPT" dump permissions "$APK" | tee rider-permissions.txt
+          if grep -Eq 'android\.permission\.(READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE)' rider-permissions.txt; then
+            echo "::error::Broad media/storage permission remains in the merged Rider APK; use system photo selection instead."
+            exit 1
+          fi
+
       - name: Verify release certificate is permanent
         env:
           RIDER_ANDROID_CERT_SHA256: ${{ secrets.RIDER_ANDROID_CERT_SHA256 }}
@@ -339,7 +357,7 @@ jobs:
           {
             "build": ${GITHUB_RUN_NUMBER},
             "version": "1.0.${GITHUB_RUN_NUMBER}",
-            "versionCode": $((100000 + GITHUB_RUN_NUMBER)),
+            "versionCode": $((500000 + GITHUB_RUN_NUMBER)),
             "apk": "/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk",
             "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
@@ -353,6 +371,7 @@ jobs:
             Britium-Express-Rider.apk
             Britium-Express-Rider.aab
             rider-signing-info.txt
+            rider-permissions.txt
             rider-release-sha256.txt
           retention-days: 30
       - name: Commit signed public APK
@@ -367,4 +386,6 @@ jobs:
             git commit -m "build: publish signed Rider Android release"
             git push origin HEAD:main
           fi
+
+
 

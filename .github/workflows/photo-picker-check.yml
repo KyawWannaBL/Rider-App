@@ -1,0 +1,71 @@
+name: Verify Android photo picker
+
+on:
+  pull_request:
+    paths:
+      - 'src/lib/nativePhoto.ts'
+      - 'src/lib/selectGalleryPhoto.ts'
+      - 'android-assets/photo-picker/**'
+      - 'scripts/*photo-picker*'
+      - '.github/workflows/*'
+  push:
+    branches: ['codex/android-photo-picker-support']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: photo-picker-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-picker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Check picker fallback and native configuration
+        run: |
+          node --test scripts/test-photo-picker.mjs
+          python3 scripts/test-android-photo-picker.py
+      - name: Install dependencies
+        run: |
+          npm ci --include=dev
+          npm install --no-save --package-lock=false @capacitor/cli@7.4.3 @capacitor/android@7.4.3
+      - name: Verify and build web application
+        run: |
+          npm run build
+          rm -rf dist/downloads
+      - name: Configure native Android project
+        run: |
+          npx cap add android
+          npx cap sync android
+          python3 scripts/configure-android-photo-picker.py
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Compile native picker without release credentials
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+      - name: Check packaged permissions
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions android/app/build/outputs/apk/debug/app-debug.apk | tee picker-permissions.txt
+          if grep -Eq 'android\.permission\.(READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE)' picker-permissions.txt; then
+            echo 'Broad photo-library permission remains in the merged APK.'
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: photo-picker-debug-verification
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            picker-permissions.txt
+          retention-days: 7
