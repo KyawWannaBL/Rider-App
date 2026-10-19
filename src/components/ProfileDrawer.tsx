@@ -1,3 +1,4 @@
+import { enterpriseProfileOverlay } from "@/lib/enterpriseProfileOverlay";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Building2, LogOut, Mail, MapPin, RefreshCw, User, X } from "lucide-react";
@@ -19,7 +20,7 @@ export function ProfileDrawer({ open, onClose }: ProfileDrawerProps) {
   async function load(){
     setLoading(true);
     const {data,error}=await (supabase as any).rpc("be_field_profile_snapshot_v91");
-    if(error){setMessage(error.message);setProfile(null);} else {setProfile(data);setMessage("");}
+    if(error){setMessage(error.message);setProfile(null);} else {setProfile(await enterpriseProfileOverlay(data));setMessage("");}
     setLoading(false);
   }
 
