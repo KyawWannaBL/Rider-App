@@ -228,6 +228,24 @@ jobs:
           print(f"Android versionCode={version_code}, versionName={version_name}")
           PY
 
+      - name: Set Google Play compatible minimum Android SDK
+        run: |
+          set -euo pipefail
+          # Play automatic protection rejects bundles with minSdkVersion below 24.
+          # Capacitor Android generates this configuration in android/variables.gradle.
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          p = Path("android/variables.gradle")
+          source = p.read_text()
+          updated, count = re.subn(r"(minSdkVersion\s*=\s*)\d+", r"\g<1>24", source, count=1)
+          if count != 1:
+              raise SystemExit("Could not locate generated Capacitor minSdkVersion")
+          p.write_text(updated)
+          print("Android minSdkVersion set to 24 for Google Play automatic protection")
+          PY
+
       - name: Restore permanent Britium release keystore
         env:
           RIDER_ANDROID_KEYSTORE_BASE64: ${{ secrets.RIDER_ANDROID_KEYSTORE_BASE64 }}
