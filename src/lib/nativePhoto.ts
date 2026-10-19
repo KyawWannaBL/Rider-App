@@ -7,6 +7,7 @@ export type NativePhotoRestoreContext = {
   prefix?: string;
   lineNo?: number;
   pickupId?: string;
+  deliveryWayId?: string;
   createdAt?: number;
 };
 
@@ -313,3 +314,4 @@ export async function chooseNativeGalleryFile(
     throw error;
   }
 }
+

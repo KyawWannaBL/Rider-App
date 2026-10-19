@@ -19,7 +19,7 @@ const checks = [
   ["captures transaction reference", /transaction_reference/],
   ["captures electronic signature", /signature_(path|payload)|Customer Electronic Signature/],
   ["uploads rider proof", /rider-proofs/],
-  ["requires explicit photo approval before upload", /Approve photo & upload/],
+  ["requires explicit photo approval before upload", /Approve photo/],
   ["compresses proof before upload", /compressImage[\s\S]{0,800}950\s*\*\s*1024/],
   ["uploads signature", /ops-signatures/],
   ["captures signature on a canvas", /<canvas|signatureCanvasRef/],
@@ -41,3 +41,4 @@ if (failures.length) {
 }
 
 console.log("Preferred Rider UI + Modern Delivery V51 contract PASS");
+

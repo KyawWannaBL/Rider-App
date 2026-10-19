@@ -13,6 +13,9 @@ import {
   takeNativePhotoFile,
 } from "@/lib/nativePhoto";
 
+import { mergeCaptureParcels, canReuseUploadedPhoto, needsPhotoReplacement, isCurrentParcelDraft } from "@/lib/pickupPhotoState";
+import { confirmPhotoUpload } from "@/lib/proofUploadState";
+
 type PickupRow = Record<string, any>;
 
 type ParcelDraft = {
@@ -29,6 +32,11 @@ type ParcelDraft = {
   photo_status?: string;
   photo_error?: string;
   saved?: boolean;
+  review_status?: string;
+  review_note?: string;
+  reviewed_photo_url?: string;
+  previous_photo_url?: string;
+  draft_revision?: number;
 };
 
 function rowsFromSnapshot(data: any): PickupRow[] {
@@ -167,9 +175,19 @@ export default function RiderPickupPhotoQrPortal() {
   const [specialRange, setSpecialRange] = useState(false);
   const [replaceUnsavedWeights, setReplaceUnsavedWeights] = useState(false);
   const stagedPhotoFiles = useRef<Map<number, File>>(new Map());
+  const activePickupRef = useRef("");
+  const photoWorkRef = useRef(false);
+  const saveWorkRef = useRef(false);
+  const parcelDraftsRef = useRef<ParcelDraft[]>([]);
+  const pickupDrafts = useRef(new Map<string, ParcelDraft[]>());
+  const snapshotRequest = useRef(0);
+  const photoRevisions = useRef(new Map<string, number>());
+  const uploadPaths = useRef(new WeakMap<File, Map<string, string>>());
+  const pendingUploads = useRef(new Map<string, Promise<any>>());
+  useEffect(() => { parcelDraftsRef.current = parcels; }, [parcels]);
 
   function applyBatchWeight() {
-    if (!selectedPickup?.can_open_workspace || actionBusy || savingLine !== null) return;
+    if (!selectedPickup?.can_open_workspace || actionBusy || savingLine !== null || photoWorkRef.current || saveWorkRef.current) return;
     const weight = Number(batchWeight);
     const max = specialRange ? 5 : 3;
     if (!Number.isFinite(weight) || weight < 1 || weight > max) {
@@ -178,27 +196,34 @@ export default function RiderPickupPhotoQrPortal() {
     }
     const targets = parcels.filter(p => !p.saved && (replaceUnsavedWeights || !p.parcel_weight.trim())).length;
     setParcels(current => current.map(p => p.saved || (!replaceUnsavedWeights && p.parcel_weight.trim())
-      ? p : { ...p, parcel_weight: String(weight) }));
+      ? p : { ...p, parcel_weight: String(weight), draft_revision: (p.draft_revision || 0) + 1 }));
     setMessage("Applied " + weight + " kg to " + targets + " unsaved parcel(s). Confirm actual weights before saving.");
   }
 
   async function stageContinuousPhotos(files: FileList | null) {
-    if (!files?.length || !selectedPickup?.can_open_workspace || bulkPreparing || actionBusy) return;
-    const available = parcels.filter((p) => !p.cargo_photo_url && !stagedPhotoFiles.current.has(p.line_no));
+    if (!files?.length || !selectedPickup?.can_open_workspace || bulkPreparing || actionBusy || photoWorkRef.current || saveWorkRef.current) return;
+    const stagePickupId = activePickupRef.current;
+    const available = parcels.filter((p) => !p.cargo_photo_url && !p.cargo_photo_file && !stagedPhotoFiles.current.has(p.line_no));
     if (files.length > available.length) {
       setMessage(`Selected ${files.length} photos but only ${available.length} empty parcel slots remain. Nothing staged.`);
       return;
     }
+    photoWorkRef.current = true;
     setBulkPreparing(true);
     let count = 0;
     try {
       for (const original of Array.from(files)) {
         const parcel = available[count];
         const prepared = await compressPickupPhoto(original);
+        if (activePickupRef.current !== stagePickupId) return;
+        const preview = await readPhotoPreview(prepared);
+        if (activePickupRef.current !== stagePickupId) return;
         stagedPhotoFiles.current.set(parcel.line_no, prepared);
-        updateParcel(parcel.line_no, {
+        editParcel(parcel.line_no, {
           cargo_photo_file: prepared,
           cargo_photo_name: prepared.name,
+          cargo_photo_data_url: preview,
+          saved: false,
           photo_status: "photo_staged",
           photo_error: undefined,
         });
@@ -207,7 +232,7 @@ export default function RiderPickupPhotoQrPortal() {
       setMessage(`Staged ${count} photos in parcel order. Review each photo/parcel match, then select Upload All. No photos uploaded yet.`);
     } catch (error: any) {
       setMessage(`Staged ${count} photos. ${error?.message || "Photo preparation failed."} You can select more photos to continue.`);
-    } finally { setBulkPreparing(false); }
+    } finally { photoWorkRef.current = false; setBulkPreparing(false); }
   }
 
 
@@ -257,6 +282,17 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function selectPickup(row: PickupRow) {
+    const targetId = safeText(row.pickup_id || row.pickup_way_id, "");
+    if (activePickupRef.current) pickupDrafts.current.set(activePickupRef.current, parcelDraftsRef.current);
+    if (activePickupRef.current !== targetId) {
+      stagedPhotoFiles.current.clear();
+      setUploadingLine(null);
+      setSavingLine(null);
+      parcelDraftsRef.current = pickupDrafts.current.get(targetId) || [];
+      setParcels(parcelDraftsRef.current);
+    }
+    activePickupRef.current = targetId;
+    const request = ++snapshotRequest.current;
     setSelectedPickup(row);
     setCorrectedCount(String(row.parcel_count || row.expected_parcels || 1));
     setCountReason("");
@@ -280,35 +316,18 @@ export default function RiderPickupPhotoQrPortal() {
     const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_snapshot", {
       p_pickup_id: pickupId,
     });
-    if (error) {
-      console.error(error);
-      setMessage(error.message);
-      setParcels(buildParcels(row));
+    if (request !== snapshotRequest.current || activePickupRef.current !== pickupId) return;
+    if (error || data?.ok === false) {
+      setMessage(error?.message || data?.error || "Unable to load saved parcel photos. Retry the refresh before retaking photos.");
+      if (!parcelDraftsRef.current.length) setParcels(buildParcels(row));
       return;
     }
 
     const generated = buildParcels(row);
     const savedParcels = Array.isArray(data?.parcels) ? data.parcels : [];
 
-    const merged = generated.map((draft) => {
-      const saved = savedParcels.find((p: any) => Number(p.line_no || p.row_no) === draft.line_no);
-      if (!saved) return draft;
-
-      return {
-        ...draft,
-        waybill_no: saved.waybill_no || draft.waybill_no,
-        delivery_way_id: saved.delivery_way_id || draft.delivery_way_id,
-        temp_qr_code: saved.temp_qr_code || draft.temp_qr_code,
-        parcel_weight: saved.parcel_weight ? String(saved.parcel_weight) : "",
-        remarks: saved.remarks || "",
-        cargo_photo_url: saved.cargo_photo_url || "",
-        cargo_photo_data_url: saved.cargo_photo_data_url || "",
-        cargo_photo_name: saved.cargo_photo_name || "",
-        photo_status: saved.photo_status || draft.photo_status,
-        saved: true,
-      };
-    });
-
+    const merged = mergeCaptureParcels(generated, savedParcels, parcelDraftsRef.current);
+    parcelDraftsRef.current = merged;
     setParcels(merged);
   }
 
@@ -352,11 +371,16 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   function updateParcel(lineNo: number, patch: Partial<ParcelDraft>) {
-    setParcels((current) =>
-      current.map((parcel) =>
-        parcel.line_no === lineNo ? { ...parcel, ...patch, saved: patch.saved ?? parcel.saved } : parcel
-      )
+    const next = parcelDraftsRef.current.map((parcel) =>
+      parcel.line_no === lineNo ? { ...parcel, ...patch, saved: patch.saved ?? parcel.saved } : parcel
     );
+    parcelDraftsRef.current = next;
+    setParcels(next);
+  }
+
+  function editParcel(lineNo: number, patch: Partial<ParcelDraft>) {
+    const current = parcelDraftsRef.current.find(row => row.line_no === lineNo);
+    updateParcel(lineNo, { ...patch, saved: false, draft_revision: (current?.draft_revision || 0) + 1 });
   }
 
   async function refreshParcelSnapshot() {
@@ -373,25 +397,41 @@ export default function RiderPickupPhotoQrPortal() {
       throw new Error("Your Rider session expired. Sign in again, then retry the photo upload.");
     }
 
-    const extension = photoExtension(file);
-    const path = `pickup/${safeStorageSegment(pickupId)}/${safeStorageSegment(deliveryWayId)}/${Date.now()}-${lineNo}.${extension}`;
-    const { data: uploaded, error } = await supabase.storage.from("rider-proofs").upload(path, file, {
-      upsert: false,
-      cacheControl: "3600",
-      contentType: file.type || "image/jpeg",
+    const scope = `${pickupId}:${lineNo}`;
+    let paths = uploadPaths.current.get(file);
+    if (!paths) { paths = new Map(); uploadPaths.current.set(file, paths); }
+    let path = paths.get(scope);
+    if (!path) {
+      const id = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      path = `pickup/${safeStorageSegment(pickupId)}/${safeStorageSegment(deliveryWayId)}/${id}-${lineNo}.${photoExtension(file)}`;
+      paths.set(scope, path);
+    }
+    const storedPath = path;
+    await confirmPhotoUpload({
+      path: storedPath,
+      pending: pendingUploads.current,
+      upload: () => supabase.storage.from("rider-proofs").upload(storedPath, file, {
+        upsert: false, cacheControl: "3600", contentType: file.type || "image/jpeg",
+      }),
+      verifyExisting: async () => {
+        const { data, error } = await supabase.storage.from("rider-proofs").download(storedPath);
+        if (error || !data || data.size !== file.size) return false;
+        const hash = async (blob: Blob) => new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
+        const [original, stored] = await Promise.all([hash(file), hash(data)]);
+        return original.every((byte, index) => byte === stored[index]);
+      },
     });
-    if (error) throw new Error(`Photo upload failed: ${error.message}`);
-
-    const { data } = supabase.storage.from("rider-proofs").getPublicUrl(uploaded?.path || path);
+    const { data } = supabase.storage.from("rider-proofs").getPublicUrl(storedPath);
     const url = data?.publicUrl;
     if (!url) throw new Error("Unable to create Rider proof URL.");
     return url;
   }
 
   async function openCameraForParcel(lineNo: number) {
+    const capturePickup = selectedPickup;
     if (isNativeAndroidApp()) {
       try {
-        const pickupId = safeText(selectedPickup?.pickup_id || selectedPickup?.pickup_way_id, "");
+        const pickupId = safeText(capturePickup?.pickup_id || capturePickup?.pickup_way_id, "");
         const route = window.location.hash.replace(/^#/, "") || "/pickup-verification";
         setMessage(tx("Opening device camera... Return here after taking the photo.","Device camera ဖွင့်နေသည်... ဓာတ်ပုံရိုက်ပြီးနောက် ဤနေရာသို့ ပြန်လာပါ။"));
         const file = await takeNativePhotoFile(`pickup-${lineNo}`, {
@@ -400,7 +440,7 @@ export default function RiderPickupPhotoQrPortal() {
           lineNo,
           pickupId,
         });
-        await onPhotoSelected(lineNo, file);
+        await onPhotoSelected(lineNo, file, capturePickup || undefined);
       } catch (error: any) {
         setMessage(error?.message || "Unable to take photo.");
       }
@@ -415,10 +455,14 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function openGalleryForParcel(lineNo: number) {
+    const capturePickup = selectedPickup;
     if (isNativeAndroidApp()) {
       try {
-        const file = await chooseNativeGalleryFile(`pickup-${lineNo}`);
-        await onPhotoSelected(lineNo, file);
+        const file = await chooseNativeGalleryFile(`pickup-${lineNo}`, {
+          kind: "pickup-parcel", route: window.location.hash.replace(/^#/, "") || "/pickup-verification",
+          lineNo, pickupId: safeText(capturePickup?.pickup_id || capturePickup?.pickup_way_id, ""),
+        });
+        await onPhotoSelected(lineNo, file, capturePickup || undefined);
       } catch (error: any) {
         setMessage(error?.message || "Unable to choose photo.");
       }
@@ -430,6 +474,7 @@ export default function RiderPickupPhotoQrPortal() {
   async function onPhotoSelected(lineNo: number, file?: File, pickupOverride?: PickupRow) {
     const activePickup = pickupOverride || selectedPickup;
     if (!file || !activePickup) return;
+    if (photoWorkRef.current || saveWorkRef.current) { setMessage("Wait for the current photo or parcel save to finish."); return; }
     if (!activePickup.can_open_workspace) {
       setMessage(tx(
         "This pickup is not assigned to your field-team account.",
@@ -439,7 +484,7 @@ export default function RiderPickupPhotoQrPortal() {
     }
 
     const pickupId = safeText(activePickup.pickup_id || activePickup.pickup_way_id, "");
-    const currentParcel = parcels.find((parcel) => parcel.line_no === lineNo);
+    const currentParcel = parcelDraftsRef.current.find((parcel) => parcel.line_no === lineNo);
     if (currentParcel?.cargo_photo_url) {
       const replaceUploaded = window.confirm(tx(
         `Parcel ${lineNo} already has an uploaded photo. Review the existing photo before replacing it. Do you want to replace it?`,
@@ -450,91 +495,63 @@ export default function RiderPickupPhotoQrPortal() {
         return;
       }
     }
-    const deliveryWayId = currentParcel?.delivery_way_id || lineCode("D", pickupId, lineNo);
-    let prepared = file;
-    let preview = "";
-
+    if (activePickupRef.current !== pickupId) return;
+    const key = `${pickupId}:${lineNo}`;
+    const revision = (photoRevisions.current.get(key) || 0) + 1;
+    photoRevisions.current.set(key, revision);
+    const stillCurrent = () => activePickupRef.current === pickupId && photoRevisions.current.get(key) === revision;
+    photoWorkRef.current = true;
     setUploadingLine(lineNo);
-    setMessage(tx(`Preparing and uploading cargo photo for parcel ${lineNo}...`,`Parcel ${lineNo} အတွက် ဓာတ်ပုံပြင်ဆင်ပြီး Upload တင်နေသည်...`));
-
     try {
-      prepared = await compressPickupPhoto(file);
-      preview = await readPhotoPreview(prepared);
-
-      updateParcel(lineNo, {
-        cargo_photo_data_url: preview,
-        cargo_photo_file: prepared,
-        cargo_photo_url: "",
-        cargo_photo_name: prepared.name || file.name || `pickup-${lineNo}.jpg`,
-        photo_status: "photo_uploading",
-        photo_error: undefined,
+      const prepared = await compressPickupPhoto(file);
+      const preview = await readPhotoPreview(prepared);
+      if (!stillCurrent()) return;
+      editParcel(lineNo, {
+        cargo_photo_data_url: preview, cargo_photo_file: prepared, cargo_photo_url: "",
+        previous_photo_url: currentParcel?.cargo_photo_url || currentParcel?.previous_photo_url,
+        cargo_photo_name: prepared.name, photo_status: "photo_staged", photo_error: undefined, saved: false,
       });
-
-      const url = await uploadPhotoFile(lineNo, prepared, pickupId, deliveryWayId);
-      updateParcel(lineNo, {
-        cargo_photo_data_url: preview,
-        cargo_photo_file: undefined,
-        cargo_photo_url: url,
-        cargo_photo_name: prepared.name || file.name || `pickup-${lineNo}.jpg`,
-        photo_status: "photo_uploaded",
-        photo_error: undefined,
-      });
-
-      setMessage(tx(
-        `Parcel ${lineNo} photo uploaded successfully. Enter weight and save the parcel when ready.`,
-        `Parcel ${lineNo} ဓာတ်ပုံ Upload အောင်မြင်ပါပြီ။ အလေးချိန်ထည့်ပြီး Parcel ကို သိမ်းနိုင်ပါပြီ။`
-      ));
+      stagedPhotoFiles.current.set(lineNo, prepared);
+      setMessage(tx(`Parcel ${lineNo}: review the photo, then approve and upload.`, `Parcel ${lineNo}: ဓာတ်ပုံကို စစ်ဆေးပြီး အတည်ပြုကာ Upload တင်ပါ။`));
     } catch (error: any) {
-      const errorMessage = error?.message || `Unable to upload parcel ${lineNo} photo.`;
-      if (!preview) preview = await readPhotoPreview(prepared).catch(() => "");
-
-      updateParcel(lineNo, {
-        cargo_photo_data_url: preview,
-        cargo_photo_file: prepared,
-        cargo_photo_url: "",
-        cargo_photo_name: prepared.name || file.name || `pickup-${lineNo}.jpg`,
-        photo_status: "photo_upload_failed",
-        photo_error: errorMessage,
-      });
-
-      setMessage(tx(
-        `Parcel ${lineNo}: ${errorMessage} Tap Retry Photo Upload.`,
-        `Parcel ${lineNo}: ဓာတ်ပုံ Upload မအောင်မြင်ပါ။ Retry Photo Upload ကိုနှိပ်ပြီး ပြန်စမ်းပါ။`
-      ));
-    } finally {
-      setUploadingLine(null);
-    }
+      if (stillCurrent()) setMessage(error?.message || "Unable to prepare the selected photo. Existing photo kept.");
+    } finally { photoWorkRef.current = false; if (stillCurrent()) setUploadingLine(null); }
   }
 
   async function ensurePhotoUploaded(parcel: ParcelDraft, pickupId: string) {
-    if (parcel.cargo_photo_url) return parcel.cargo_photo_url;
-    if (!parcel.cargo_photo_file) throw new Error(`Parcel ${parcel.line_no} requires a cargo photo.`);
-
+    if (!parcel.cargo_photo_file && canReuseUploadedPhoto(parcel)) return parcel.cargo_photo_url!;
+    if (!parcel.cargo_photo_file) throw new Error(`Parcel ${parcel.line_no}: take a new photo to replace the rejected evidence.`);
+    if (activePickupRef.current !== pickupId) throw new Error("Pickup changed. Return to the original pickup to continue.");
+    if (photoWorkRef.current) throw new Error("Another photo operation is in progress. Please wait.");
+    photoWorkRef.current = true;
+    const file = parcel.cargo_photo_file;
     setUploadingLine(parcel.line_no);
-    updateParcel(parcel.line_no, { photo_status: "photo_uploading", photo_error: undefined });
+    updateParcel(parcel.line_no, { photo_status: "photo_uploading", photo_error: undefined, saved: false });
     try {
-      const url = await uploadPhotoFile(parcel.line_no, parcel.cargo_photo_file, pickupId, parcel.delivery_way_id);
-      updateParcel(parcel.line_no, {
-        cargo_photo_url: url,
-        cargo_photo_file: undefined,
-        photo_status: "photo_uploaded",
-        photo_error: undefined,
-      });
+      const url = await uploadPhotoFile(parcel.line_no, file, pickupId, parcel.delivery_way_id);
+      if (activePickupRef.current !== pickupId) throw new Error("Pickup changed while uploading. Return to the original pickup and retry the same photo.");
+      const current = parcelDraftsRef.current.find(row => row.line_no === parcel.line_no);
+      if (!isCurrentParcelDraft(current, parcel) || current?.cargo_photo_file !== file) throw new Error("Photo changed during upload. The newer draft has been kept.");
+      updateParcel(parcel.line_no, { cargo_photo_url: url, cargo_photo_file: undefined,
+        photo_status: "photo_uploaded", photo_error: undefined, saved: false });
+      stagedPhotoFiles.current.delete(parcel.line_no);
       return url;
     } catch (error: any) {
-      const errorMessage = error?.message || `Photo upload failed for parcel ${parcel.line_no}.`;
-      updateParcel(parcel.line_no, {
-        photo_status: "photo_upload_failed",
-        photo_error: errorMessage,
-      });
+      if (activePickupRef.current === pickupId && isCurrentParcelDraft(parcelDraftsRef.current.find(row => row.line_no === parcel.line_no), parcel)) updateParcel(parcel.line_no, { photo_status: "photo_upload_failed", photo_error: error?.message || "Photo upload failed", saved: false });
       throw error;
-    } finally {
-      setUploadingLine(null);
-    }
+    } finally { photoWorkRef.current = false; if (activePickupRef.current === pickupId) setUploadingLine(null); }
+  }
+
+  async function approveParcelPhoto(parcel: ParcelDraft) {
+    const id = activePickupRef.current;
+    try {
+      await ensurePhotoUploaded(parcel, id);
+      if (activePickupRef.current === id) setMessage(tx(`Parcel ${parcel.line_no}: photo uploaded. Save Photo & Parcel to send it for review.`, `Parcel ${parcel.line_no}: ဓာတ်ပုံ Upload ပြီးပါပြီ။ စစ်ဆေးရန် ဓာတ်ပုံနှင့် Parcel ကို သိမ်းပါ။`));
+    } catch (error: any) { if (activePickupRef.current === id) setMessage(error?.message || "Photo upload failed."); }
   }
 
   async function saveParcel(parcel: ParcelDraft) {
-    if (!selectedPickup) return false;
+    if (!selectedPickup || saveWorkRef.current || photoWorkRef.current) return false;
     if (!selectedPickup.can_open_workspace) {
       setMessage(tx("This pickup is not assigned to your field-team account.","ဤ Pickup ကို သင့် field-team account သို့ တာဝန်ပေးထားခြင်း မရှိသေးပါ။"));
       return false;
@@ -549,6 +566,7 @@ export default function RiderPickupPhotoQrPortal() {
       return false;
     }
 
+    saveWorkRef.current = true;
     setSavingLine(parcel.line_no);
     const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
 
@@ -558,6 +576,7 @@ export default function RiderPickupPhotoQrPortal() {
     } catch (error: any) {
       setMessage(error?.message || `Photo upload failed for parcel ${parcel.line_no}.`);
       setSavingLine(null);
+      saveWorkRef.current = false;
       return false;
     }
 
@@ -577,18 +596,25 @@ export default function RiderPickupPhotoQrPortal() {
     };
 
     try {
+      if (activePickupRef.current !== pickupId) throw new Error("Pickup changed before save. Return to the original pickup to continue.");
       const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_save", {
         p_payload: payload,
       });
       if (error) throw error;
       if (data?.ok !== true) throw new Error(data?.error || "Enterprise did not confirm the parcel save.");
 
+      if (activePickupRef.current !== pickupId) return true;
+      if (!isCurrentParcelDraft(parcelDraftsRef.current.find(row => row.line_no === parcel.line_no), parcel)) {
+        setMessage("The earlier parcel version was saved. Your newer edits are kept; review and save them again.");
+        return false;
+      }
       updateParcel(parcel.line_no, {
         cargo_photo_url: durablePhotoUrl,
         cargo_photo_file: undefined,
         photo_status: data.photo_status || "photo_uploaded",
         saved: true,
       });
+      if (activePickupRef.current !== pickupId) return true;
       await refreshParcelSnapshot();
       setMessage(tx(`Parcel ${parcel.line_no} saved successfully.`,`Parcel ${parcel.line_no} ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။`));
       return true;
@@ -597,7 +623,8 @@ export default function RiderPickupPhotoQrPortal() {
       setMessage(`Parcel ${parcel.line_no}: ${error?.message || "Save failed. Please retry."}`);
       return false;
     } finally {
-      setSavingLine(null);
+      saveWorkRef.current = false;
+      if (activePickupRef.current === pickupId) setSavingLine(null);
     }
   }
 
@@ -704,9 +731,6 @@ export default function RiderPickupPhotoQrPortal() {
         } catch (error) {
           console.error("Photo retry failed", parcel.line_no, error);
         }
-      }
-      if (okCount > 0) {
-        await refreshParcelSnapshot();
       }
       setMessage(tx(
         `Photo upload completed: ${okCount}/${pending.length} pending photo(s) uploaded. Uploaded photos remain visible and ready for parcel save/review.`,
@@ -1092,7 +1116,7 @@ export default function RiderPickupPhotoQrPortal() {
                     </div>
                     <div className="mb-3 rounded-xl border border-emerald-200 bg-white p-3">
                       <label className="block text-sm font-black text-emerald-900">Continuous photo selection (50+ parcels)</label>
-                      <input type="file" multiple accept="image/*" disabled={!selectedPickup?.can_open_workspace || bulkPreparing || !!actionBusy}
+                      <input type="file" multiple accept="image/*" disabled={!selectedPickup?.can_open_workspace || bulkPreparing || uploadingLine !== null || savingLine !== null || !!actionBusy}
                         onChange={(event) => { const files = event.currentTarget.files; void stageContinuousPhotos(files); event.currentTarget.value = ""; }}
                         className="mt-2 block w-full text-sm" />
                       <p className="mt-2 text-xs font-semibold text-slate-600">Photos are assigned to empty parcel lines in order across all pages. Review the matches before Upload All. Record actual weights: normally 1-3 kg, or 1-5 kg for eligible special customers; exceptions require review.</p>
@@ -1103,7 +1127,7 @@ export default function RiderPickupPhotoQrPortal() {
                       {tx("Save All Ready Parcels","အဆင်သင့် Parcel အားလုံး သိမ်းရန်")}
                     </button>
                     <button disabled={!selectedPickup?.can_open_workspace || !!actionBusy || uploadingLine !== null || savingLine !== null} onClick={uploadAllPhotosForReview} className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-40">
-                      {tx("Upload All Photos for Review","ဓာတ်ပုံအားလုံး စစ်ဆေးရန် တင်ရန်")}
+                      {tx("Approve & Upload All Photos","ဓာတ်ပုံအားလုံး စစ်ဆေးရန် တင်ရန်")}
                     </button>
                     <button onClick={() => printQrCards(parcels)} className="rounded-2xl bg-slate-950 px-5 py-4 font-black text-white">
                       {tx("Print All Temporary QR Codes","ယာယီ QR Code အားလုံး ပုံနှိပ်ရန်")}
@@ -1113,7 +1137,7 @@ export default function RiderPickupPhotoQrPortal() {
                 </div>
 
                 {pagedParcels.map((parcel) => (
-                  <article key={parcel.line_no} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <article data-parcel-line={parcel.line_no} key={parcel.line_no} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                       <div>
                         <p className="text-sm font-black uppercase tracking-widest text-slate-600">
@@ -1140,7 +1164,7 @@ export default function RiderPickupPhotoQrPortal() {
                           Print This QR
                         </button>
                         <button
-                          disabled={!selectedPickup?.can_open_workspace || savingLine === parcel.line_no || uploadingLine === parcel.line_no}
+                          disabled={!selectedPickup?.can_open_workspace || savingLine !== null || uploadingLine !== null || !!actionBusy || bulkPreparing}
                           onClick={() => saveParcel(parcel)}
                           className="rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
                         >
@@ -1154,8 +1178,9 @@ export default function RiderPickupPhotoQrPortal() {
                         <label className="block">
                           <span className="text-xs font-black uppercase tracking-widest text-slate-600">Weight (KG)</span>
                           <input
+                            disabled={savingLine !== null || uploadingLine !== null || !!actionBusy || bulkPreparing}
                             value={parcel.parcel_weight}
-                            onChange={(e) => updateParcel(parcel.line_no, { parcel_weight: e.target.value })}
+                            onChange={(e) => editParcel(parcel.line_no, { parcel_weight: e.target.value, saved: false })}
                             inputMode="decimal"
                             placeholder="0.0"
                             className="mt-2 w-full rounded-2xl border border-slate-300 px-5 py-4 text-right text-lg font-black outline-none focus:border-blue-600"
@@ -1165,8 +1190,9 @@ export default function RiderPickupPhotoQrPortal() {
                         <label className="block">
                           <span className="text-xs font-black uppercase tracking-widest text-slate-600">Parcel Remarks</span>
                           <textarea
+                            disabled={savingLine !== null || uploadingLine !== null || !!actionBusy || bulkPreparing}
                             value={parcel.remarks}
-                            onChange={(e) => updateParcel(parcel.line_no, { remarks: e.target.value })}
+                            onChange={(e) => editParcel(parcel.line_no, { remarks: e.target.value, saved: false })}
                             placeholder="Fragile / special handling note..."
                             className="mt-2 min-h-[90px] w-full rounded-2xl border border-slate-300 px-5 py-4 font-semibold outline-none focus:border-blue-600"
                           />
@@ -1180,7 +1206,7 @@ export default function RiderPickupPhotoQrPortal() {
                           <img
                             src={parcel.cargo_photo_data_url || parcel.cargo_photo_url}
                             alt={`Cargo parcel ${parcel.line_no}`}
-                            className="h-40 w-full rounded-2xl border border-slate-200 object-cover"
+                            className="h-40 w-full rounded-2xl border border-slate-200 object-contain"
                           />
                         ) : (
                           <div className="flex h-40 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-center text-sm font-black text-slate-500">
@@ -1188,8 +1214,12 @@ export default function RiderPickupPhotoQrPortal() {
                           </div>
                         )}
 
-                        {parcel.cargo_photo_url && (
-                          <a href={parcel.cargo_photo_url} target="_blank" rel="noopener noreferrer"
+                        {parcel.review_status && <div className={`rounded-xl p-3 text-sm font-bold ${needsPhotoReplacement(parcel.review_status) ? "bg-rose-100 text-rose-900" : "bg-blue-50 text-blue-900"}`}>
+                          Enterprise review: {parcel.review_status.replace(/_/g, " ")}
+                          {parcel.review_note && <p>{parcel.review_note}</p>}
+                        </div>}
+                        {(parcel.cargo_photo_url || parcel.previous_photo_url) && (
+                          <a href={parcel.cargo_photo_url || parcel.previous_photo_url} target="_blank" rel="noopener noreferrer"
                             className="block rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-black text-emerald-900 underline">
                             {tx("View Already Uploaded Photo - Check Before Retaking", "တင်ပြီးသော ဓာတ်ပုံကို ကြည့်ရန်")}
                           </a>
@@ -1200,6 +1230,7 @@ export default function RiderPickupPhotoQrPortal() {
                             fileRefs.current[parcel.line_no] = el;
                           }}
                           type="file"
+                          disabled={savingLine !== null || uploadingLine !== null || !!actionBusy || bulkPreparing}
                           accept="image/*"
                           capture="environment"
                           className="hidden"
@@ -1215,6 +1246,7 @@ export default function RiderPickupPhotoQrPortal() {
                             galleryRefs.current[parcel.line_no] = el;
                           }}
                           type="file"
+                          disabled={savingLine !== null || uploadingLine !== null || !!actionBusy || bulkPreparing}
                           accept="image/*"
                           className="hidden"
                           onChange={(e) => {
@@ -1228,7 +1260,7 @@ export default function RiderPickupPhotoQrPortal() {
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <button
                             type="button"
-                            disabled={!selectedPickup?.can_open_workspace || uploadingLine === parcel.line_no}
+                            disabled={!selectedPickup?.can_open_workspace || uploadingLine !== null || savingLine !== null || !!actionBusy || bulkPreparing}
                             onClick={() => void openCameraForParcel(parcel.line_no)}
                             className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -1236,7 +1268,7 @@ export default function RiderPickupPhotoQrPortal() {
                           </button>
                           <button
                             type="button"
-                            disabled={!selectedPickup?.can_open_workspace || uploadingLine === parcel.line_no}
+                            disabled={!selectedPickup?.can_open_workspace || uploadingLine !== null || savingLine !== null || !!actionBusy || bulkPreparing}
                             onClick={() => void openGalleryForParcel(parcel.line_no)}
                             className="w-full rounded-2xl border-2 border-dashed border-slate-300 bg-white px-4 py-4 font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -1262,7 +1294,7 @@ export default function RiderPickupPhotoQrPortal() {
                               : parcel.photo_status === "photo_upload_failed"
                                 ? tx("Photo upload failed","ဓာတ်ပုံ Upload မအောင်မြင်")
                                 : parcel.cargo_photo_file
-                                  ? tx("Photo ready to retry","ဓာတ်ပုံ ပြန်တင်ရန် အဆင်သင့်")
+                                  ? tx("Photo preview — awaiting approval","ဓာတ်ပုံ စစ်ဆေးအတည်ပြုရန်")
                                   : tx("No photo uploaded","ဓာတ်ပုံ မတင်ရသေး")}
                         </div>
 
@@ -1272,14 +1304,14 @@ export default function RiderPickupPhotoQrPortal() {
                           </p>
                         )}
 
-                        {parcel.photo_status === "photo_upload_failed" && parcel.cargo_photo_file && (
+                        {parcel.cargo_photo_file && (
                           <button
                             type="button"
-                            disabled={!selectedPickup?.can_open_workspace || uploadingLine === parcel.line_no}
-                            onClick={() => void onPhotoSelected(parcel.line_no, parcel.cargo_photo_file)}
+                            disabled={!selectedPickup?.can_open_workspace || uploadingLine !== null || savingLine !== null || !!actionBusy || bulkPreparing}
+                            onClick={() => void approveParcelPhoto(parcel)}
                             className="w-full rounded-2xl bg-rose-600 px-4 py-3 font-black text-white disabled:opacity-40"
                           >
-                            {tx("Retry Photo Upload","ဓာတ်ပုံ Upload ပြန်စမ်းရန်")}
+                            {parcel.photo_status === "photo_upload_failed" ? tx("Retry Photo Upload","ဓာတ်ပုံ Upload ပြန်စမ်းရန်") : tx("Approve Photo & Upload", "ဓာတ်ပုံကို အတည်ပြုပြီး Upload တင်ရန်")}
                           </button>
                         )}
 
@@ -1300,7 +1332,7 @@ export default function RiderPickupPhotoQrPortal() {
                         {!parcel.saved && (
                           <button
                             type="button"
-                            disabled={!selectedPickup?.can_open_workspace || savingLine === parcel.line_no || uploadingLine === parcel.line_no}
+                            disabled={!selectedPickup?.can_open_workspace || savingLine !== null || uploadingLine !== null || !!actionBusy || bulkPreparing}
                             onClick={() => saveParcel(parcel)}
                             className="w-full rounded-2xl bg-blue-700 px-4 py-4 font-black text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -1313,8 +1345,8 @@ export default function RiderPickupPhotoQrPortal() {
                         {!parcel.saved && (
                           <p className="text-xs font-bold leading-5 text-slate-500">
                             {tx(
-                              "The photo uploads immediately after capture/selection. Then enter weight and press Save Photo & Parcel.",
-                              "ဓာတ်ပုံရိုက်/ရွေးပြီးသည်နှင့် ချက်ချင်း Upload တင်ပါမည်။ ထို့နောက် အလေးချိန်ထည့်ပြီး ဓာတ်ပုံနှင့် Parcel ကို သိမ်းရန် ကိုနှိပ်ပါ။"
+                              "Review your selected photo, approve and upload it, then save the parcel with its actual weight. Save Photo & Parcel also confirms the displayed photo.",
+                              "ရွေးထားသောဓာတ်ပုံကို စစ်ဆေးပြီး အတည်ပြုကာ Upload တင်ပါ။ အလေးချိန်ထည့်ပြီး ဓာတ်ပုံနှင့် Parcel ကို သိမ်းပါ။"
                             )}
                           </p>
                         )}
@@ -1372,3 +1404,4 @@ export default function RiderPickupPhotoQrPortal() {
     </div>
   );
 }
+
