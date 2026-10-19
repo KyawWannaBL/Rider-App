@@ -1,3 +1,4 @@
+import { enterpriseProfileOverlay } from "@/lib/enterpriseProfileOverlay";
 import { useEffect, useMemo, useState } from "react";
 import { KeyRound, LogOut, RefreshCw, ShieldCheck, Truck, UserRound, WalletCards } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -28,7 +29,7 @@ export default function Profile() {
       setLoading(false);
       return;
     }
-    const next=data || { identity: {}, workforce: {}, profile: {}, counts: {} };
+    const next=await enterpriseProfileOverlay(data || { identity: {}, workforce: {}, profile: {}, counts: {} });
     setSnapshot(next);
     setEditForm({
       full_name:String(next?.canonical?.display_name || next?.identity?.display_name || next?.workforce?.display_name || next?.workforce?.full_name || next?.profile?.full_name || ""),
