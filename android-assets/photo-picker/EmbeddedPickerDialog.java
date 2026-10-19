@@ -12,6 +12,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.photopicker.EmbeddedPhotoPickerFeatureInfo;
+import android.widget.photopicker.EmbeddedPhotoPickerProviderFactory;
 import android.widget.photopicker.EmbeddedPhotoPickerSession;
 import androidx.photopicker.EmbeddedPhotoPickerView.EmbeddedPhotoPickerStateChangeListener;
 import androidx.photopicker.EmbeddedPhotoPickerView;
@@ -69,6 +70,7 @@ final class EmbeddedPickerDialog {
         };
         picker.addEmbeddedPhotoPickerStateChangeListener(new EmbeddedPhotoPickerStateChangeListener() {
             @Override public void onSessionOpened(EmbeddedPhotoPickerSession session) {
+                if (finished[0]) { session.close(); return; }
                 opened[0] = true;
                 handler.removeCallbacks(fallback);
             }
@@ -84,6 +86,7 @@ final class EmbeddedPickerDialog {
                 result.selected(uri);
             }
         });
+        picker.setProvider(EmbeddedPhotoPickerProviderFactory.create(activity.getApplicationContext()));
         picker.setEmbeddedPhotoPickerFeatureInfo(new EmbeddedPhotoPickerFeatureInfo.Builder()
             .setMaxSelectionLimit(1)
             .setMimeTypes(Collections.singletonList("image/*"))
@@ -91,7 +94,10 @@ final class EmbeddedPickerDialog {
         cancel.setOnClickListener(view -> cancelled.run());
         standard.setOnClickListener(view -> fallback.run());
         dialog.setOnCancelListener(value -> cancelled.run());
-        dialog.setOnDismissListener(value -> handler.removeCallbacks(fallback));
+        dialog.setOnDismissListener(value -> {
+            finished[0] = true;
+            handler.removeCallbacks(fallback);
+        });
         dialog.setContentView(content);
         dialog.show();
         Window window = dialog.getWindow();
