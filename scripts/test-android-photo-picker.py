@@ -23,6 +23,7 @@ class AndroidPickerConfigurationTest(unittest.TestCase):
             gradle = root / 'android/app/build.gradle'
             gradle.write_text('android {}')
             (root / 'android/variables.gradle').write_text('ext { compileSdkVersion = 35\ntargetSdkVersion = 35\nminSdkVersion = 24 }')
+            (root / 'android/build.gradle').write_text("buildscript { dependencies { classpath 'com.android.tools.build:gradle:8.7.2' } }")
             shutil.copytree(ROOT / 'android-assets', root / 'android-assets')
             module.configure(root)
             module.configure(root)
@@ -35,6 +36,7 @@ class AndroidPickerConfigurationTest(unittest.TestCase):
             self.assertEqual(gradle.read_text().count('androidx.photopicker:photopicker:1.0.0-alpha02'), 1)
             self.assertIn('compileSdkVersion = 36', (root / 'android/variables.gradle').read_text())
             self.assertIn('minSdkVersion = 24', (root / 'android/variables.gradle').read_text())
+            self.assertIn('com.android.tools.build:gradle:8.9.1', (root / 'android/build.gradle').read_text())
 
 if __name__ == '__main__':
     unittest.main()
