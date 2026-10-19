@@ -20,7 +20,8 @@ export function ProfileDrawer({ open, onClose }: ProfileDrawerProps) {
   async function load(){
     setLoading(true);
     const {data,error}=await (supabase as any).rpc("be_field_profile_snapshot_v91");
-    if(error){setMessage(error.message);setProfile(null);} else {setProfile(await enterpriseProfileOverlay(data));setMessage("");}
+    const next=await enterpriseProfileOverlay(error ? {} : data);
+    setProfile(next);setMessage(error && !next?.canonical?.display_name ? error.message : "");
     setLoading(false);
   }
 

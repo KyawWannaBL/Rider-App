@@ -24,12 +24,8 @@ export default function Profile() {
     setLoading(true);
     setMessage(tx("Refreshing Rider profile...","Rider Profile ကို ပြန်ဖွင့်နေသည်..."));
     const { data, error } = await (supabase as any).rpc("be_field_profile_snapshot_v91");
-    if (error) {
-      setMessage(`Unable to load profile: ${error.message}`);
-      setLoading(false);
-      return;
-    }
-    const next=await enterpriseProfileOverlay(data || { identity: {}, workforce: {}, profile: {}, counts: {} });
+    const next=await enterpriseProfileOverlay(error ? { identity: {}, workforce: {}, profile: {}, counts: {} } : (data || { identity: {}, workforce: {}, profile: {}, counts: {} }));
+    if (error && !next?.canonical?.display_name) setMessage(`Unable to load profile: ${error.message}`);
     setSnapshot(next);
     setEditForm({
       full_name:String(next?.canonical?.display_name || next?.identity?.display_name || next?.workforce?.display_name || next?.workforce?.full_name || next?.profile?.full_name || ""),
