@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "VITE_ENABLE_ROUTE_MESSAGING=true vite",
-    "build": "npm run verify:rider-notification-feedback && npm run verify:rider-pickup-save-state-v135 && npm run verify:rider-auth-recovery-v132 && npm run verify:preferred-rider-modern-delivery-v51 && npm run verify:ui-css && npm run verify:enterprise-integration && vite build",
+    "build": "npm run test:pickup-photo-state && npm run verify:rider-notification-feedback && npm run verify:rider-pickup-save-state-v135 && npm run verify:rider-auth-recovery-v132 && npm run verify:preferred-rider-modern-delivery-v51 && npm run verify:ui-css && npm run verify:enterprise-integration && vite build",
     "build:dev": "VITE_ENABLE_ROUTE_MESSAGING=true vite build --mode development --sourcemap",
     "build:map": "VITE_ENABLE_ROUTE_MESSAGING=true vite build --sourcemap",
     "lint": "eslint .",
@@ -18,7 +18,9 @@
     "verify:enterprise-integration": "node scripts/verify-enterprise-integration.mjs",
     "verify:rider-auth-recovery-v132": "node scripts/verify-rider-auth-recovery-v132.mjs",
     "verify:rider-notification-feedback": "node scripts/verify-rider-notification-feedback.mjs",
-    "verify:mobile-layout": "node scripts/verify-mobile-layout.cjs"
+    "verify:mobile-layout": "node scripts/verify-mobile-layout.cjs",
+    "test:pickup-photo-state": "node scripts/test-photo-state.mjs",
+    "test:pickup-photo-browser": "node scripts/test-pickup-photo-browser.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^7.1.0",

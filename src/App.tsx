@@ -89,7 +89,6 @@ function Guard({ children }: { children: React.ReactNode }) {
   if (profileState === "error") return <ConnectionIssue />;
   if (!user) return <Navigate to="/login" replace />;
   if (profileState === "checking") return <Splash />;
-  if (profileState === "error") return <ConnectionIssue />;
   if (profileState === "unapproved") return <Navigate to="/pending-approval" replace />;
   if (!profile) return <ConnectionIssue />;
   return children;
@@ -100,7 +99,6 @@ function LoginPage() {
   if (loading || (user && profileState === "checking")) return <Splash />;
   if (profileState === "error") return <ConnectionIssue />;
   if (user && profileState === "approved" && profile) return <Navigate to="/dashboard" replace />;
-  if (user && profileState === "error") return <ConnectionIssue />;
   if (user && profileState === "unapproved") return <Navigate to="/pending-approval" replace />;
   return <Login />;
 }
@@ -137,3 +135,4 @@ export default function App() {
     </HashRouter>
   );
 }
+

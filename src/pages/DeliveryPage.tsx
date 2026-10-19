@@ -3,6 +3,9 @@ import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
 import { isNativeAndroidApp, takeNativePhotoFile, chooseNativeGalleryFile, consumeRestoredNativePhoto, NATIVE_PHOTO_RESTORED_EVENT } from "../lib/nativePhoto";
 
+import { deliveryPhotoScope, isCurrentDeliveryPhoto } from "../lib/deliveryPhotoState";
+import { confirmPhotoUpload } from "../lib/proofUploadState";
+
 const PAYMENT_METHODS = ["CASH", "PREPAID", "QR", "BANK_TRANSFER", "MOBILE_WALLET"];
 const PROOF_MAX_BYTES = 950 * 1024;
 const UPLOAD_TIMEOUT_MS = 120_000;
@@ -86,6 +89,12 @@ export default function DeliveryPage() {
   const tx = (en:string,my:string) => language === "my" ? my : en;
   const [pickups, setPickups] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
+  const selectedDeliveryRef = useRef("");
+  const photoRevision = useRef(0);
+  const restoredProofRef = useRef<ReturnType<typeof consumeRestoredNativePhoto>>(null);
+  const uploadPaths = useRef(new WeakMap<File, Map<string, string>>());
+  const pendingUploads = useRef(new Map<string, Promise<any>>());
+  const deliverySubmissionRef = useRef(false);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [approvedProofFile, setApprovedProofFile] = useState<File | null>(null);
   const [proofState, setProofState] = useState<"idle" | "compressing" | "ready" | "approved">("idle");
@@ -102,6 +111,7 @@ export default function DeliveryPage() {
   const [activeActions, setActiveActions] = useState<Record<string, boolean>>({});
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
+  const drawnSignatureRef = useRef<File | null>(null);
   const [form, setForm] = useState({
     receiver_name: "",
     receiver_phone: "",
@@ -165,15 +175,19 @@ export default function DeliveryPage() {
   }
 
   function resetProofs() {
+    photoRevision.current++;
     setProofFile(null);
     setApprovedProofFile(null);
     setProofState("idle");
     setSignatureFile(null);
+    drawnSignatureRef.current = null;
+    clearSignatureCanvas();
     setProofPreview("");
     setSignaturePreview("");
   }
 
   function selectJob(job: any) {
+    selectedDeliveryRef.current = String(job.delivery_way_id || "");
     setSelected(job);
     setFailureMode(false);
     setSignatureOnBehalf(false);
@@ -220,7 +234,7 @@ export default function DeliveryPage() {
       list[0] ||
       null;
     if (next) selectJob(next);
-    else setSelected(null);
+    else { selectedDeliveryRef.current = ""; resetProofs(); setSelected(null); }
     setMsg(tx(`Loaded ${list.length} assigned delivery stop(s).`,`တာဝန်ပေးထားသော ပို့ဆောင်မှတ်တိုင် ${list.length} ခု ဖွင့်ပြီးပါပြီ။`));
   }
 
@@ -306,18 +320,22 @@ export default function DeliveryPage() {
     return await arriveAtCustomer();
   }
 
-  async function choosePhoto(file?: File) {
-    if (!file) return;
+  async function choosePhoto(file?: File, deliveryId = selectedDeliveryRef.current) {
+    if (!file || busy || !deliveryId || deliveryId !== selectedDeliveryRef.current) return;
+    const revision = ++photoRevision.current;
+    const stillCurrent = () => isCurrentDeliveryPhoto(deliveryId, revision, selectedDeliveryRef.current, photoRevision.current);
     setProofState("compressing");
     setApprovedProofFile(null);
     try {
       const compressed = await compressImage(file, 950 * 1024);
       if (compressed.size > PROOF_MAX_BYTES) throw new Error("Proof photo remains larger than 950 KB after compression.");
+      if (!stillCurrent()) return;
       setProofFile(compressed);
       setProofPreview(URL.createObjectURL(compressed));
       setProofState("ready");
-      setMsg(`Proof compressed to ${Math.ceil(compressed.size / 1024)} KB. Review it, then press “{tx("Approve photo & upload","ဓာတ်ပုံအတည်ပြုပြီး Upload တင်ရန်")}”.`);
+      setMsg(`Proof compressed to ${Math.ceil(compressed.size / 1024)} KB. Review it, then approve the photo. It uploads when delivery is confirmed.`);
     } catch (error: any) {
+      if (!stillCurrent()) return;
       setProofFile(null);
       setProofPreview("");
       setProofState("idle");
@@ -325,27 +343,31 @@ export default function DeliveryPage() {
     }
   }
 
-  // Android can recreate the WebView while the native camera is open.
-  // Pickup already restores this result; delivery proof must do the same.
+  // Keep restored evidence until the assigned stop has loaded; never attach it to another stop.
   useEffect(() => {
     const recoverDeliveryProof = () => {
       const restored = consumeRestoredNativePhoto();
-      if (!restored || restored.context.kind !== "delivery-proof") return;
-      if (restored.error) {
-        setMsg(restored.error);
+      if (restored?.context.kind === "delivery-proof") restoredProofRef.current = restored;
+      const pending = restoredProofRef.current;
+      if (!pending || !selectedDeliveryRef.current || busy) return;
+      const scope = deliveryPhotoScope(pending.context);
+      if (scope !== selectedDeliveryRef.current) {
+        setMsg("Recovered photo belongs to another delivery. Open that delivery to review it.");
         return;
       }
-      if (restored.file) void choosePhoto(restored.file);
+      restoredProofRef.current = null;
+      if (pending.error) setMsg(pending.error);
+      else if (pending.file) void choosePhoto(pending.file, scope);
     };
     recoverDeliveryProof();
     window.addEventListener(NATIVE_PHOTO_RESTORED_EVENT, recoverDeliveryProof);
     return () => window.removeEventListener(NATIVE_PHOTO_RESTORED_EVENT, recoverDeliveryProof);
-    // Capture restoration is intentionally registered once per mounted delivery screen.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selected?.delivery_way_id, busy]);
+
+  useEffect(() => () => { if (proofPreview) URL.revokeObjectURL(proofPreview); }, [proofPreview]);
 
   function approveProofPhoto() {
-    if (!proofFile) return setMsg("Capture a proof photo first.");
+    if (!proofFile || proofState === "compressing" || busy) return setMsg("Wait for the photo to finish preparing, then review it.");
     setApprovedProofFile(proofFile);
     setProofState("approved");
     setMsg("Delivery proof approved. It will upload only when delivery is confirmed.");
@@ -363,6 +385,8 @@ export default function DeliveryPage() {
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
     event.preventDefault();
+    if (busy) return;
+    drawnSignatureRef.current = null;
     drawingRef.current = true;
     const p = canvasPoint(event);
     const ctx = canvas.getContext("2d");
@@ -372,7 +396,7 @@ export default function DeliveryPage() {
 
   function drawSignature(event: any) {
     const canvas = signatureCanvasRef.current;
-    if (!canvas || !drawingRef.current) return;
+    if (!canvas || !drawingRef.current || busy) return;
     event.preventDefault();
     const p = canvasPoint(event);
     const ctx = canvas.getContext("2d");
@@ -390,12 +414,14 @@ export default function DeliveryPage() {
   }
 
   function clearSignatureCanvas() {
+    drawnSignatureRef.current = null;
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
     canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   async function signatureCanvasFile() {
+    if (drawnSignatureRef.current) return drawnSignatureRef.current;
     const canvas = signatureCanvasRef.current;
     if (!canvas) return null;
     const ctx = canvas.getContext("2d");
@@ -407,11 +433,12 @@ export default function DeliveryPage() {
     }
     if (!hasInk) return null;
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    return blob ? new File([blob], "customer-signature.png", { type: "image/png" }) : null;
+    drawnSignatureRef.current = blob ? new File([blob], "customer-signature.png", { type: "image/png" }) : null;
+    return drawnSignatureRef.current;
   }
 
   function chooseSignature(file?: File) {
-    if (!file) return;
+    if (!file || busy) return;
     setSignatureFile(file);
     setSignaturePreview(URL.createObjectURL(file));
   }
@@ -419,12 +446,22 @@ export default function DeliveryPage() {
   async function upload(bucket: "rider-proofs" | "ops-signatures", file: File, prefix: string) {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user?.id) throw new Error("Sign in before uploading proof.");
-    const path = `${auth.user.id}/${prefix}/${safeName(file)}`;
-    const result = await withTimeout(supabase.storage.from(bucket).upload(path, file, {
-      upsert: false,
-      contentType: file.type || "image/jpeg",
-    }), UPLOAD_TIMEOUT_MS);
-    if (result.error) throw result.error;
+    const scope = `${bucket}/${auth.user.id}/${prefix}`;
+    let paths = uploadPaths.current.get(file);
+    if (!paths) { paths = new Map(); uploadPaths.current.set(file, paths); }
+    let path = paths.get(scope);
+    if (!path) { path = `${auth.user.id}/${prefix}/${safeName(file)}`; paths.set(scope, path); }
+    await confirmPhotoUpload({
+      path: `${bucket}/${path}`, pending: pendingUploads.current,
+      upload: () => supabase.storage.from(bucket).upload(path!, file, { upsert: false, contentType: file.type || "image/jpeg" }),
+      verifyExisting: async () => {
+        const existing = await supabase.storage.from(bucket).download(path!);
+        if (existing.error || !existing.data) return false;
+        const digest = async (blob: Blob) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()))).join(",");
+        return await digest(existing.data) === await digest(file);
+      },
+      timeoutMs: UPLOAD_TIMEOUT_MS,
+    });
     if (bucket === "rider-proofs") {
       return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
     }
@@ -456,6 +493,13 @@ export default function DeliveryPage() {
   }
 
   async function deliver() {
+    if (deliverySubmissionRef.current || busy) return false;
+    deliverySubmissionRef.current = true;
+    try { return await performDelivery(); }
+    finally { deliverySubmissionRef.current = false; }
+  }
+
+  async function performDelivery() {
     if (!selected) {
       const message = tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။");
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
@@ -872,6 +916,7 @@ export default function DeliveryPage() {
               return (
                 <button
                   key={p.id || `${p.wayplan_id}-${p.delivery_way_id}`}
+                  disabled={busy}
                   onClick={() => selectJob(p)}
                   className={`w-full rounded-2xl border p-3 text-left hover:bg-slate-50 ${current ? "border-blue-600 bg-blue-50" : "border-slate-200"}`}
                 >
@@ -925,36 +970,39 @@ export default function DeliveryPage() {
                     {tx("Delivery proof photo","ပို့ဆောင်မှု သက်သေဓာတ်ပုံ")}
                     {isNativeAndroidApp() ? (
                       <div className="mt-2 flex flex-col gap-2">
-                        <button type="button" className="rounded-xl bg-blue-700 p-3 text-white" onClick={async () => {
+                        <button type="button" disabled={busy || proofState === "compressing"} className="rounded-xl bg-blue-700 p-3 text-white" onClick={async () => {
                           try {
-                            const file = await takeNativePhotoFile("delivery-proof", { kind: "delivery-proof", route: window.location.hash.replace(/^#/, "") || "/delivery" });
-                            await choosePhoto(file);
+                            const deliveryWayId = selectedDeliveryRef.current;
+                            const file = await takeNativePhotoFile("delivery-proof", { kind: "delivery-proof", deliveryWayId, route: `/delivery?deliveryWayId=${encodeURIComponent(deliveryWayId)}` });
+                            await choosePhoto(file, deliveryWayId);
                           } catch (error: any) {
                             setMsg(error?.message || "Unable to capture delivery photo.");
                           }
                         }}>{tx("Take photo with camera", "ကင်မရာဖြင့် ဓာတ်ပုံရိုက်ရန်")}</button>
-                        <button type="button" className="rounded-xl border border-slate-300 p-3" onClick={async () => {
+                        <button type="button" disabled={busy || proofState === "compressing"} className="rounded-xl border border-slate-300 p-3" onClick={async () => {
                           try {
-                            await choosePhoto(await chooseNativeGalleryFile("delivery-proof"));
+                            const deliveryWayId = selectedDeliveryRef.current;
+                            const file = await chooseNativeGalleryFile("delivery-proof", { kind: "delivery-proof", deliveryWayId, route: `/delivery?deliveryWayId=${encodeURIComponent(deliveryWayId)}` });
+                            await choosePhoto(file, deliveryWayId);
                           } catch (error: any) {
                             setMsg(error?.message || "Unable to select delivery photo.");
                           }
                         }}>{tx("Choose from gallery", "ဓာတ်ပုံရွေးရန်")}</button>
                       </div>
                     ) : (
-                      <input type="file" accept="image/*" capture="environment" onChange={(e) => choosePhoto(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
+                      <input type="file" accept="image/*" capture="environment" disabled={busy || proofState === "compressing"} onChange={(e) => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ""; void choosePhoto(file); }} className="mt-2 block w-full text-sm" />
                     )}
-                    {proofPreview && <img src={proofPreview} className="mt-3 h-40 w-full rounded-2xl object-cover" />}
+                    {proofPreview && <img src={proofPreview} alt="Delivery proof to review" className="mt-3 h-40 w-full rounded-2xl object-contain" />}
                     {proofState === "compressing" && <p className="mt-2 text-sm text-blue-700">{tx("Compressing photo…","ဓာတ်ပုံကို ချုံ့နေသည်…")}</p>}
                     {proofPreview && (
-                      <button type="button" disabled={proofState === "approved"} onClick={approveProofPhoto} className="mt-3 w-full rounded-xl bg-emerald-600 p-3 text-white disabled:opacity-50">
-                        {proofState === "approved" ? tx("Photo approved","ဓာတ်ပုံ အတည်ပြုပြီး") : tx("Approve photo & upload","ဓာတ်ပုံအတည်ပြုပြီး Upload တင်ရန်")}
+                      <button type="button" disabled={proofState === "approved" || proofState === "compressing" || busy} onClick={approveProofPhoto} className="mt-3 w-full rounded-xl bg-emerald-600 p-3 text-white disabled:opacity-50">
+                        {proofState === "approved" ? tx("Photo approved","ဓာတ်ပုံ အတည်ပြုပြီး") : tx("Approve photo","ဓာတ်ပုံအတည်ပြုရန်")}
                       </button>
                     )}
                   </label>
                   <label className="rounded-2xl border p-3 font-bold">
                     {tx("Customer Electronic Signature","Customer အီလက်ထရွန်နစ်လက်မှတ်")}
-                    <input type="file" accept="image/*" onChange={(e) => chooseSignature(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
+                    <input type="file" accept="image/*" disabled={busy} onChange={(e) => chooseSignature(e.target.files?.[0])} className="mt-2 block w-full text-sm" />
                     <canvas
                       ref={signatureCanvasRef}
                       width={600}
@@ -968,7 +1016,7 @@ export default function DeliveryPage() {
                       onTouchEnd={stopSignature}
                       className="mt-3 h-32 w-full touch-none rounded-xl border bg-white"
                     />
-                    <button type="button" onClick={clearSignatureCanvas} className="mt-2 rounded-lg border px-3 py-2 text-xs">{tx("Clear drawn signature","ရေးထားသောလက်မှတ် ဖျက်ရန်")}</button>
+                    <button type="button" disabled={busy} onClick={clearSignatureCanvas} className="mt-2 rounded-lg border px-3 py-2 text-xs">{tx("Clear drawn signature","ရေးထားသောလက်မှတ် ဖျက်ရန်")}</button>
                     <div className="mt-3 flex gap-2">
                       <input
                         className="min-w-0 flex-1 rounded-xl border bg-slate-100 p-3 font-bold disabled:cursor-not-allowed"
@@ -1154,3 +1202,4 @@ export default function DeliveryPage() {
     </div>
   );
 }
+
