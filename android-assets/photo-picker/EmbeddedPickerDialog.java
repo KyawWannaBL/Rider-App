@@ -73,8 +73,8 @@ final class EmbeddedPickerDialog {
                 handler.removeCallbacks(fallback);
             }
             @Override public void onSessionError(Throwable error) { handler.post(fallback); }
-            @Override public void onUriPermissionGranted(List<Uri> uris) { selected.addAll(uris); }
-            @Override public void onUriPermissionRevoked(List<Uri> uris) { selected.removeAll(uris); }
+            @Override public void onUriPermissionGranted(List<? extends Uri> uris) { selected.addAll(uris); }
+            @Override public void onUriPermissionRevoked(List<? extends Uri> uris) { selected.removeAll(uris); }
             @Override public void onSelectionComplete() {
                 if (finished[0]) return;
                 if (selected.isEmpty()) { cancelled.run(); return; }
