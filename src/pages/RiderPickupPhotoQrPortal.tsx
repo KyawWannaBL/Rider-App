@@ -147,6 +147,9 @@ export default function RiderPickupPhotoQrPortal() {
   const params = useParams();
   const [pickups, setPickups] = useState<PickupRow[]>([]);
   const [selectedPickup, setSelectedPickup] = useState<PickupRow | null>(null);
+  const [correctedCount, setCorrectedCount] = useState("");
+  const [countReason, setCountReason] = useState("");
+  const [countRequestPending, setCountRequestPending] = useState(false);
   const [parcels, setParcels] = useState<ParcelDraft[]>([]);
   const [search, setSearch] = useState(params.pickupId || "");
   const [message, setMessage] = useState(language === "my" ? "တာဝန်ပေးထားသော Pickup များကို ဖွင့်နေသည်..." : "Loading assigned pickups...");
@@ -255,6 +258,9 @@ export default function RiderPickupPhotoQrPortal() {
 
   async function selectPickup(row: PickupRow) {
     setSelectedPickup(row);
+    setCorrectedCount(String(row.parcel_count || row.expected_parcels || 1));
+    setCountReason("");
+    setCountRequestPending(false);
 
     const pickupId = safeText(row.pickup_id || row.pickup_way_id, "");
 
@@ -585,8 +591,32 @@ export default function RiderPickupPhotoQrPortal() {
     }
   }
 
+  async function requestPickupCountCorrection() {
+    if (!selectedPickup || actionBusy || countRequestPending) return;
+    const nextCount = Number(correctedCount);
+    const requested = Number(selectedPickup.parcel_count || selectedPickup.expected_parcels || 1);
+    if (!Number.isInteger(nextCount) || nextCount < 1 || nextCount > 500 || nextCount === requested) {
+      setMessage("Enter a different whole-number parcel count between 1 and 500."); return;
+    }
+    if (countReason.trim().length < 8 || parcels.some(p => p.saved)) {
+      setMessage("Add a reason (at least 8 characters). Count corrections must be requested before saving parcels."); return;
+    }
+    setActionBusy("count-correction");
+    try {
+      const {data,error} = await (supabase as any).rpc("be_rider_request_pickup_count_change_v1", {
+        p_pickup_id: safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, ""),
+        p_count:nextCount,p_reason:countReason.trim(),
+      });
+      if (error || data?.ok === false) throw new Error(error?.message || data?.error || "Count correction request failed");
+      setCountRequestPending(true);
+      setMessage("Count discrepancy sent for supervisor review. Original request stays unchanged until approved.");
+    } catch (e:any) { setMessage(e?.message || "Count correction request failed."); }
+    finally {setActionBusy("");}
+  }
+
   async function submitPickupVerification() {
     if (!selectedPickup) return;
+    if (countRequestPending) { setMessage("Pickup count correction is pending supervisor review. Refresh after approval before verifying."); return; }
     const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
     const validSaved = parcels.filter((p) => p.saved);
     if (validSaved.length === 0) {
@@ -977,7 +1007,7 @@ export default function RiderPickupPhotoQrPortal() {
                       </button>
                     )}
                     {nextAction === "CAPTURE_AND_VERIFY" && (
-                      <button onClick={submitPickupVerification} disabled={!!actionBusy || savedCount === 0} className="rounded-2xl bg-violet-700 px-5 py-3 font-black text-white disabled:opacity-40">
+                      <button onClick={submitPickupVerification} disabled={!!actionBusy || savedCount === 0 || countRequestPending} className="rounded-2xl bg-violet-700 px-5 py-3 font-black text-white disabled:opacity-40">
                         {tx("Submit Verification","Verification တင်သွင်းရန်")}
                       </button>
                     )}
@@ -1004,6 +1034,21 @@ export default function RiderPickupPhotoQrPortal() {
                   <h2 className="mt-2 text-2xl font-black">{safeText(selectedPickup.merchant_name)}</h2>
                   <p className="mt-2 font-semibold text-slate-600">{safeText(selectedPickup.sender_phone)}</p>
                   <p className="mt-2 text-base font-semibold text-slate-700">{safeText(selectedPickup.pickup_address)}</p>
+
+                  <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                    <p className="text-sm font-black text-amber-950">Pickup quantity differs from CS / Merchant request?</p>
+                    <p className="mt-1 text-xs text-amber-900">Reported count is submitted for supervisor approval before verification. Saved parcels and the original customer request are not overwritten.</p>
+                    <div className="mt-3 flex flex-wrap items-end gap-2">
+                      <label className="text-sm font-bold text-slate-950">Actual parcel count
+                        <input type="number" min="1" max="500" step="1" value={correctedCount} onChange={e=>setCorrectedCount(e.target.value)} className="mt-1 block w-32 rounded-lg border p-2 text-black" />
+                      </label>
+                      <label className="text-sm font-bold text-slate-950">Reason for difference
+                        <input value={countReason} onChange={e=>setCountReason(e.target.value)} maxLength={500} placeholder="e.g. Merchant has two extra parcels" className="mt-1 block w-64 rounded-lg border p-2 text-black" />
+                      </label>
+                      <button type="button" className="rounded-xl bg-amber-800 px-4 py-2 font-bold text-white disabled:opacity-40" onClick={()=>void requestPickupCountCorrection()} disabled={!!actionBusy || !selectedPickup.can_open_workspace || countRequestPending || parcels.some(p=>p.saved)}>Submit count correction</button>
+                    </div>
+                    {countRequestPending&&<p role="status" className="mt-2 font-bold text-amber-900">Pending supervisor review — verification must wait.</p>}
+                  </div>
 
                   <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
                     <p className="text-sm font-black uppercase tracking-widest text-slate-600">{tx("Batch Info","Batch အချက်အလက်")}</p>
