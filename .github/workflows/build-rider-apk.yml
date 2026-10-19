@@ -246,6 +246,22 @@ jobs:
           print("Android minSdkVersion set to 24 for Google Play automatic protection")
           PY
 
+      - name: Configure Google Play Android target API 36
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          path = Path("android/variables.gradle")
+          source = path.read_text()
+          for variable in ("compileSdkVersion", "targetSdkVersion"):
+              source, count = re.subn(r"(" + variable + r"\s*=\s*)\d+", lambda match: match.group(1) + "36", source, count=1)
+              if count != 1:
+                  raise SystemExit("Missing Android SDK configuration: " + variable)
+          path.write_text(source)
+          print("compileSdkVersion=36 targetSdkVersion=36")
+          PY
+
       - name: Restore permanent Britium release keystore
         env:
           RIDER_ANDROID_KEYSTORE_BASE64: ${{ secrets.RIDER_ANDROID_KEYSTORE_BASE64 }}
@@ -329,7 +345,18 @@ jobs:
           }
           EOF
 
+      - name: Upload signed Rider release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Britium-Express-Rider-Android-Release
+          path: |
+            Britium-Express-Rider.apk
+            Britium-Express-Rider.aab
+            rider-signing-info.txt
+            rider-release-sha256.txt
+          retention-days: 30
       - name: Commit signed public APK
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -341,13 +368,3 @@ jobs:
             git push origin HEAD:main
           fi
 
-      - name: Upload signed Rider release artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Britium-Express-Rider-Android-Release
-          path: |
-            Britium-Express-Rider.apk
-            Britium-Express-Rider.aab
-            rider-signing-info.txt
-            rider-release-sha256.txt
-          retention-days: 30
