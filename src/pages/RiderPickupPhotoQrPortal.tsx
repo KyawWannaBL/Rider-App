@@ -440,6 +440,16 @@ export default function RiderPickupPhotoQrPortal() {
 
     const pickupId = safeText(activePickup.pickup_id || activePickup.pickup_way_id, "");
     const currentParcel = parcels.find((parcel) => parcel.line_no === lineNo);
+    if (currentParcel?.cargo_photo_url) {
+      const replaceUploaded = window.confirm(tx(
+        `Parcel ${lineNo} already has an uploaded photo. Review the existing photo before replacing it. Do you want to replace it?`,
+        `Parcel ${lineNo} တွင် ဓာတ်ပုံတင်ပြီးဖြစ်သည်။ အသစ်ဖြင့် အစားထိုးမည်လား။`
+      ));
+      if (!replaceUploaded) {
+        setMessage(tx(`Parcel ${lineNo}: existing photo kept. No duplicate upload made.`, `Parcel ${lineNo}: မူလဓာတ်ပုံကို ထိန်းသိမ်းထားသည်။`));
+        return;
+      }
+    }
     const deliveryWayId = currentParcel?.delivery_way_id || lineCode("D", pickupId, lineNo);
     let prepared = file;
     let preview = "";
@@ -1178,6 +1188,13 @@ export default function RiderPickupPhotoQrPortal() {
                           </div>
                         )}
 
+                        {parcel.cargo_photo_url && (
+                          <a href={parcel.cargo_photo_url} target="_blank" rel="noopener noreferrer"
+                            className="block rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-black text-emerald-900 underline">
+                            {tx("View Already Uploaded Photo - Check Before Retaking", "တင်ပြီးသော ဓာတ်ပုံကို ကြည့်ရန်")}
+                          </a>
+                        )}
+                        {parcel.cargo_photo_name && <p className="text-xs font-semibold text-slate-600">Photo: {parcel.cargo_photo_name}</p>}
                         <input
                           ref={(el) => {
                             fileRefs.current[parcel.line_no] = el;
