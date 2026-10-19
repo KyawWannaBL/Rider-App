@@ -12,7 +12,9 @@ const SUPABASE_ANON_KEY =
 // safe runtime fallback. These values are public client credentials; RLS/RPC
 // authorization remains authoritative on the backend.
 export const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY)
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { "x-britium-data-epoch": "2026-10-20" } },
+    })
   : null;
 
 export const isSupabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
