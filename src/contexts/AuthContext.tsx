@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result: any = await retry(async () => {
         const rpcResult: any = await withTimeout(
-          (supabase as any).rpc("be_rider_profile_snapshot"),
+          (supabase as any).rpc(currentUser.email?.toLowerCase() === "rideradmin@britiumexpress.com" ? "be_rider_admin_profile_snapshot_v1" : "be_rider_profile_snapshot"),
           8000,
           "Enterprise profile"
         );
