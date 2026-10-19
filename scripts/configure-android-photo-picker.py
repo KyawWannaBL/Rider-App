@@ -69,6 +69,16 @@ def configure(root=ROOT):
         if count != 1:
             raise RuntimeError('Missing SDK configuration: ' + name)
     variables.write_text(source)
+    # AndroidX PhotoPicker alpha02 requires AGP >= 8.9.1. Capacitor 7 generates
+    # 8.7.2; its Gradle 8.11.1 wrapper already satisfies the newer plugin.
+    build_gradle = root / 'android/build.gradle'
+    source = build_gradle.read_text()
+    match = re.search(r'com\.android\.tools\.build:gradle:(\d+)\.(\d+)\.(\d+)', source)
+    if not match:
+        raise RuntimeError('Missing generated Android Gradle plugin version')
+    if tuple(map(int, match.groups())) < (8, 9, 1):
+        source = source[:match.start()] + 'com.android.tools.build:gradle:8.9.1' + source[match.end():]
+        build_gradle.write_text(source)
 
 if __name__ == '__main__':
     configure()
