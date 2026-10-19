@@ -17,7 +17,7 @@ class AndroidPickerConfigurationTest(unittest.TestCase):
             main = root / 'android/app/src/main'
             package = main / 'java/com/britiumexpress/rider'
             package.mkdir(parents=True)
-            (main / 'AndroidManifest.xml').write_text('<manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.CAMERA"/><uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/><application/></manifest>')
+            (main / 'AndroidManifest.xml').write_text('<manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/><application/></manifest>')
             activity = package / 'MainActivity.java'
             activity.write_text('package com.britiumexpress.rider; import com.getcapacitor.BridgeActivity; public class MainActivity extends BridgeActivity {}')
             gradle = root / 'android/app/build.gradle'
