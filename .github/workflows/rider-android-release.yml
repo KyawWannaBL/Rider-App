@@ -6,6 +6,8 @@ on:
     paths:
       - "src/**"
       - "android/**"
+      - "android-assets/photo-picker/**"
+      - "scripts/configure-android-photo-picker.py"
       - "package.json"
       - "package-lock.json"
       - "capacitor.config.ts"
@@ -52,7 +54,7 @@ jobs:
           fi
           echo "Using SDK manager: $SDKMANAGER"
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null || test "${PIPESTATUS[1]}" -eq 0
-          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
           test -x "$SDK_ROOT/build-tools/35.0.0/apksigner"
           test -x "$SDK_ROOT/build-tools/35.0.0/aapt"
       - name: Require existing permanent Rider signing material
@@ -102,6 +104,8 @@ jobs:
           test -f android/gradlew
           test -f android/app/build.gradle
           test -f android/app/src/main/AndroidManifest.xml
+      - name: Configure native embedded and standard photo pickers
+        run: python3 scripts/configure-android-photo-picker.py
       - name: Configure upgrade version
         env:
           BUILD_NUMBER: ${{ github.run_number }}
@@ -200,3 +204,4 @@ jobs:
           name: britium-rider-signed-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
+

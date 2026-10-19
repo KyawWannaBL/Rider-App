@@ -1,5 +1,8 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { selectGalleryPhoto } from "./selectGalleryPhoto";
+
+const NativePhotoPicker = registerPlugin<{ pickImage: () => Promise<{ path: string; format: string }> }>("BritiumPhotoPicker");
 
 export type NativePhotoRestoreContext = {
   kind: string;
@@ -231,9 +234,10 @@ async function nativePhotoFile(source: CameraSource, prefix: string): Promise<Fi
     // URI avoids returning a multi-megabyte base64 string through the Android
     // bridge. This is materially safer on Android 8/tablets where opening the
     // system Camera Activity can recreate the WebView under memory pressure.
-    const result = await Camera.getPhoto({
+    const standardPickerOrCamera = () => Camera.getPhoto({
       quality: 84,
       allowEditing: false,
+      saveToGallery: false,
       resultType: CameraResultType.Uri,
       source,
       correctOrientation: true,
@@ -245,6 +249,12 @@ async function nativePhotoFile(source: CameraSource, prefix: string): Promise<Fi
       promptLabelPicture: "Take Photo",
     });
 
+    const result = source === CameraSource.Photos
+      ? await selectGalleryPhoto(
+          Capacitor.isPluginAvailable("BritiumPhotoPicker") ? () => NativePhotoPicker.pickImage() : undefined,
+          standardPickerOrCamera,
+        )
+      : await standardPickerOrCamera();
     return await cameraResultToFile(result, prefix);
   } catch (error: any) {
     const message = String(error?.message || error || "");
@@ -314,4 +324,5 @@ export async function chooseNativeGalleryFile(
     throw error;
   }
 }
+
 
