@@ -22,6 +22,8 @@ def configure(root=ROOT):
     for item in list(element.findall('uses-permission')):
         if item.get(f'{{{ANDROID}}}name') in forbidden:
             element.remove(item)
+    if not any(item.get(f'{{{ANDROID}}}name') == 'android.permission.CAMERA' for item in element.findall('uses-permission')):
+        element.insert(0, ET.Element('uses-permission', {f'{{{ANDROID}}}name': 'android.permission.CAMERA'}))
     service_name = 'com.google.android.gms.metadata.ModuleDependencies'
     service = next((s for s in application.findall('service') if s.get(f'{{{ANDROID}}}name') == service_name), None)
     if service is None:
