@@ -24,7 +24,7 @@ test('Delivery snapshot application errors retain the current jobs and evidence'
 test('Pickup snapshot application errors retain staged parcels and show the error',async()=>{
   let replaced=false,message='';
   const pickupSource=fs.readFileSync('src/pages/RiderPickupPhotoQrPortal.tsx','utf8');
-  await production('loadAssignedPickups',{tx,setLoading:()=>{},setMessage:v=>message=v,supabase:{rpc:async()=>({data:{ok:false,error:'Pickup service unavailable'}})},setPickups:()=>replaced=true,selectedPickup:{pickup_id:'P-A'},params:{},search:'',setSelectedPickup:()=>{},setParcels:()=>{}},pickupSource)();
+  await production('loadAssignedPickups',{photoWorkRef:{current:false},saveWorkRef:{current:false},batchWorkRef:{current:false},tx,setLoading:()=>{},setMessage:v=>message=v,supabase:{rpc:async()=>({data:{ok:false,error:'Pickup service unavailable'}})},setPickups:()=>replaced=true,selectedPickup:{pickup_id:'P-A'},params:{},search:'',setSelectedPickup:()=>{},setParcels:()=>{}},pickupSource)();
   assert.equal(replaced,false);assert.match(message,/Pickup service unavailable/);
 });
 

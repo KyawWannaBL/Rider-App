@@ -51,7 +51,7 @@ export function mergeCaptureParcels<T extends CapturePhotoDraft>(generated: T[],
       reviewed_photo_url: photo,
       saved: Number(server.parcel_weight) > 0 && Boolean(photo) && !needsPhotoReplacement(status),
     } : draft;
-    const hasDraft = local && !local.saved && Boolean(local.cargo_photo_file || local.cargo_photo_url ||
+    const hasDraft = local && (!local.saved || !server || !(Number(server.parcel_weight) > 0 && Boolean(photo))) && Boolean(local.cargo_photo_file || local.cargo_photo_url ||
       local.cargo_photo_data_url || local.parcel_weight || local.remarks);
     return (hasDraft ? { ...remote, ...local,
       review_status: server ? status : local.review_status,

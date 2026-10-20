@@ -16,6 +16,8 @@ import {
 
 import { mergeCaptureParcels, canReuseUploadedPhoto, needsPhotoReplacement, isCurrentParcelDraft } from "@/lib/pickupPhotoState";
 import { confirmPhotoUpload } from "@/lib/proofUploadState";
+import { preparePickupPhoto } from "@/lib/pickupPhotoPreparation";
+import { loadPickupDrafts, upsertPickupDrafts } from "@/lib/pickupDraftStore";
 
 type PickupRow = Record<string, any>;
 
@@ -30,6 +32,7 @@ type ParcelDraft = {
   cargo_photo_url?: string;
   cargo_photo_file?: File;
   cargo_photo_name?: string;
+  cargo_photo_path?: string;
   photo_status?: string;
   photo_error?: string;
   saved?: boolean;
@@ -71,49 +74,8 @@ function qrImageUrl(value: string) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(value)}`;
 }
 
-async function compressPickupPhoto(file: File, maxBytes = 8 * 1024 * 1024): Promise<File> {
-  const mime = String(file.type || "").toLowerCase();
-  if (mime && !mime.startsWith("image/")) throw new Error("Select an image file.");
-  if (file.size > 14 * 1024 * 1024) {
-    throw new Error("Photo is too large. Please choose an image smaller than 14 MB.");
-  }
-
-  // Compression is optional. Older iOS/Android WebViews may not support
-  // createImageBitmap/OffscreenCanvas even though direct file upload works.
-  if (file.size <= maxBytes || /heic|heif/.test(mime) || typeof Worker === "undefined") return file;
-
-  let worker: Worker | null = null;
-  try {
-    worker = new Worker(new URL("../workers/proofCompressionWorker.ts", import.meta.url), { type: "module" });
-    const buffer = await file.arrayBuffer();
-    return await new Promise<File>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(new Error("Photo compression timed out.")), 20_000);
-      worker!.onmessage = (event) => {
-        window.clearTimeout(timer);
-        if (!event.data?.ok) return reject(new Error(event.data?.error || "Photo compression failed."));
-        resolve(new File([event.data.buffer], event.data.name || "pickup-proof.jpg", { type: event.data.type || "image/jpeg" }));
-      };
-      worker!.onerror = () => {
-        window.clearTimeout(timer);
-        reject(new Error("Photo compression failed."));
-      };
-      worker!.postMessage({ buffer, type: file.type, name: file.name, maxBytes, maxWidth: 1600, maxHeight: 1200 }, [buffer]);
-    });
-  } catch (error) {
-    if (file.size <= 14 * 1024 * 1024) return file;
-    throw error;
-  } finally {
-    worker?.terminate();
-  }
-}
-
-function readPhotoPreview(file: File): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => resolve("");
-    reader.readAsDataURL(file);
-  });
+async function compressPickupPhoto(file: File): Promise<File> {
+  return preparePickupPhoto(file);
 }
 
 function safeStorageSegment(value: string) {
@@ -185,10 +147,65 @@ export default function RiderPickupPhotoQrPortal() {
   const photoRevisions = useRef(new Map<string, number>());
   const uploadPaths = useRef(new WeakMap<File, Map<string, string>>());
   const pendingUploads = useRef(new Map<string, Promise<any>>());
+  const draftUserRef = useRef("");
+  const mountedRef = useRef(true);
+  const batchWorkRef = useRef(false);
+  const previewUrls = useRef(new Map<string, string>());
+  const [draftWarning, setDraftWarning] = useState("");
+  const failedDraftLines = useRef(new Map<string, number>());
+  const draftWriteVersions = useRef(new Map<string, number>());
   useEffect(() => { parcelDraftsRef.current = parcels; }, [parcels]);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; for (const url of previewUrls.current.values()) URL.revokeObjectURL(url); previewUrls.current.clear(); }; }, []);
+
+  function photoPreview(file: File, _pickup: string, _line: number) {
+    return URL.createObjectURL(file);
+  }
+
+  function commitPhotoPreview(url: string, pickup: string, line: number) {
+    const key = `${pickup}:${line}`;
+    const previous = previewUrls.current.get(key);
+    if (previous && previous !== url) URL.revokeObjectURL(previous);
+    previewUrls.current.set(key, url);
+  }
+
+  async function persistDraftRows(next: ParcelDraft[], pickup = activePickupRef.current) {
+    if (!draftUserRef.current || !pickup) throw new Error("Sign in and reopen this assigned pickup before selecting photos.");
+    const versions = next.map(row => {
+      const key = `${draftUserRef.current}:${pickup}:${row.line_no}`;
+      const version = (draftWriteVersions.current.get(key) || 0) + 1;
+      draftWriteVersions.current.set(key, version);
+      return { key, version };
+    });
+    try {
+      await upsertPickupDrafts(draftUserRef.current, pickup, next);
+      for (const { key, version } of versions) {
+        if ((failedDraftLines.current.get(key) || 0) <= version) failedDraftLines.current.delete(key);
+      }
+      if (!failedDraftLines.current.size) setDraftWarning("");
+    } catch (error) {
+      for (const { key, version } of versions) {
+        if (draftWriteVersions.current.get(key) === version) failedDraftLines.current.set(key, version);
+      }
+      draftFailure(error);
+      throw error;
+    }
+  }
+
+  async function retryDraftBackup() {
+    if (photoWorkRef.current || saveWorkRef.current || batchWorkRef.current) return;
+    try {
+      await persistDraftRows(parcelDraftsRef.current);
+      if (!failedDraftLines.current.size) setMessage("Draft backup restored. Photos and weights can recover after refresh.");
+    } catch (error) { draftFailure(error); }
+  }
+
+  function draftFailure(error: any) {
+    setDraftWarning(error?.message || "Local photo recovery is unavailable. Keep this screen open and retry before reloading.");
+  }
+
 
   function applyBatchWeight() {
-    if (!selectedPickup?.can_open_workspace || actionBusy || savingLine !== null || photoWorkRef.current || saveWorkRef.current) return;
+    if (!selectedPickup?.can_open_workspace || actionBusy || savingLine !== null || photoWorkRef.current || saveWorkRef.current || batchWorkRef.current) return;
     const weight = Number(batchWeight);
     const max = specialRange ? 5 : 3;
     if (!Number.isFinite(weight) || weight < 1 || weight > max) {
@@ -196,13 +213,16 @@ export default function RiderPickupPhotoQrPortal() {
       return;
     }
     const targets = parcels.filter(p => !p.saved && (replaceUnsavedWeights || !p.parcel_weight.trim())).length;
-    setParcels(current => current.map(p => p.saved || (!replaceUnsavedWeights && p.parcel_weight.trim())
-      ? p : { ...p, parcel_weight: String(weight), draft_revision: (p.draft_revision || 0) + 1 }));
+    const next = parcelDraftsRef.current.map(p => p.saved || (!replaceUnsavedWeights && p.parcel_weight.trim())
+      ? p : { ...p, parcel_weight: String(weight), draft_revision: (p.draft_revision || 0) + 1 });
+    parcelDraftsRef.current = next;
+    setParcels(next);
+    void persistDraftRows(next).catch(draftFailure);
     setMessage("Applied " + weight + " kg to " + targets + " unsaved parcel(s). Confirm actual weights before saving.");
   }
 
   async function stageContinuousPhotos(files: FileList | File[] | null, pickupOverride?: PickupRow, targetLines?: number[]) {
-    if (!files?.length || !(pickupOverride || selectedPickup)?.can_open_workspace || photoWorkRef.current || saveWorkRef.current) return false;
+    if (!files?.length || !(pickupOverride || selectedPickup)?.can_open_workspace || photoWorkRef.current || saveWorkRef.current || batchWorkRef.current) return false;
     const stagePickup = pickupOverride || selectedPickup;
     const stagePickupId = safeText(stagePickup?.pickup_id || stagePickup?.pickup_way_id, "");
     if (!stagePickupId || activePickupRef.current !== stagePickupId) return false;
@@ -217,14 +237,15 @@ export default function RiderPickupPhotoQrPortal() {
     photoWorkRef.current = true;
     setBulkPreparing(true);
     let count = 0;
+    const preparedPhotos: { parcel: ParcelDraft; file: File; preview: string }[] = [];
+    const committedPreviews = new Set<string>();
     try {
-      const preparedPhotos: { parcel: ParcelDraft; file: File; preview: string }[] = [];
       for (const original of Array.from(files)) {
         const parcel = available[count]!;
         setBulkProgress(`Preparing ${count + 1}/${files.length}: parcel ${parcel.line_no}`);
         const prepared = await compressPickupPhoto(original);
         if (activePickupRef.current !== stagePickupId) return;
-        const preview = await readPhotoPreview(prepared);
+        const preview = photoPreview(prepared, stagePickupId, parcel.line_no);
         if (activePickupRef.current !== stagePickupId) return;
         preparedPhotos.push({ parcel, file: prepared, preview });
         count++;
@@ -232,16 +253,18 @@ export default function RiderPickupPhotoQrPortal() {
       // Commit the prepared batch together. A failed image must not strand a
       // restored batch with some reserved lines already occupied on retry.
       if (activePickupRef.current !== stagePickupId) return false;
-      for (const {parcel,file,preview} of preparedPhotos) {
-        stagedPhotoFiles.current.set(parcel.line_no, file);
-        editParcel(parcel.line_no, {
-          cargo_photo_file: file,
-          cargo_photo_name: file.name,
-          cargo_photo_data_url: preview,
-          saved: false,
-          photo_status: "photo_staged",
-          photo_error: undefined,
-        });
+      const staged = preparedPhotos.map<ParcelDraft>(({parcel,file,preview}) => ({ ...parcel,
+        cargo_photo_file: file, cargo_photo_name: file.name, cargo_photo_data_url: preview,
+        cargo_photo_path: undefined, saved: false, photo_status: "photo_staged", photo_error: undefined,
+        draft_revision: (parcel.draft_revision || 0) + 1,
+      }));
+      await persistDraftRows(staged, stagePickupId);
+      if (activePickupRef.current !== stagePickupId) return false;
+      for (const parcel of staged) {
+        commitPhotoPreview(parcel.cargo_photo_data_url!, stagePickupId, parcel.line_no);
+        committedPreviews.add(parcel.cargo_photo_data_url!);
+        stagedPhotoFiles.current.set(parcel.line_no, parcel.cargo_photo_file);
+        updateParcel(parcel.line_no, parcel, false);
       }
       setMessage(`Staged ${count} photos in parcel order. Review each photo/parcel match, then select Upload All. No photos uploaded yet.`);
       setBulkProgress(`${count} photos ready for review`);
@@ -249,7 +272,10 @@ export default function RiderPickupPhotoQrPortal() {
     } catch (error: any) {
       setMessage(`No photos from this batch were staged. ${error?.message || "Photo preparation failed."} Retry the batch; existing photos were kept.`);
       return false;
-    } finally { photoWorkRef.current = false; setBulkPreparing(false); }
+    } finally {
+      for (const prepared of preparedPhotos) if (!committedPreviews.has(prepared.preview)) URL.revokeObjectURL(prepared.preview);
+      photoWorkRef.current = false; setBulkPreparing(false);
+    }
   }
 
   async function selectBulkPhotos() {
@@ -274,6 +300,7 @@ export default function RiderPickupPhotoQrPortal() {
 
 
   async function loadAssignedPickups() {
+    if (photoWorkRef.current || saveWorkRef.current || batchWorkRef.current) return;
     setLoading(true);
     setMessage(tx("Loading Enterprise Pickup Requests...","Enterprise Pickup Request များကို ဖွင့်နေသည်..."));
 
@@ -289,12 +316,19 @@ export default function RiderPickupPhotoQrPortal() {
       return;
     }
 
+    if (!mountedRef.current) return;
     const rows: PickupRow[] = (Array.isArray(data?.requests) ? data.requests : []).filter(
       (row: PickupRow) => row?.assigned_to_me === true && row?.can_open_workspace === true
     );
     setPickups(rows);
-
-    const requested = selectedPickup?.pickup_id || params.pickupId || search;
+    const { data: auth } = await supabase.auth.getSession();
+    if (!mountedRef.current) return;
+    const userId = auth?.session?.user?.id || "";
+    if (draftUserRef.current && draftUserRef.current !== userId) { setLoading(false); setMessage("Account changed. Reopen pickup verification before continuing."); return; }
+    draftUserRef.current = userId;
+    let remembered = "";
+    try { remembered = localStorage.getItem(`britium.pickup.last:${draftUserRef.current}`) || ""; } catch { /* Remembering the last pickup is optional; IndexedDB holds the drafts. */ }
+    const requested = selectedPickup?.pickup_id || params.pickupId || search || remembered;
     const requestedRow = rows.find((row) => row.pickup_id === requested || row.pickup_way_id === requested);
     const first =
       (requestedRow?.can_open_workspace ? requestedRow : null) ||
@@ -322,7 +356,11 @@ export default function RiderPickupPhotoQrPortal() {
   async function selectPickup(row: PickupRow) {
     const targetId = safeText(row.pickup_id || row.pickup_way_id, "");
     if (activePickupRef.current) pickupDrafts.current.set(activePickupRef.current, parcelDraftsRef.current);
-    if (activePickupRef.current !== targetId) {
+    const changingPickup = activePickupRef.current !== targetId;
+    if (changingPickup) {
+      setParcelPage(1);
+      for (const url of previewUrls.current.values()) URL.revokeObjectURL(url);
+      previewUrls.current.clear();
       stagedPhotoFiles.current.clear();
       setUploadingLine(null);
       setSavingLine(null);
@@ -338,7 +376,6 @@ export default function RiderPickupPhotoQrPortal() {
 
     const pickupId = safeText(row.pickup_id || row.pickup_way_id, "");
 
-    setParcelPage(1);
 
     if (!row.can_open_workspace) {
       setParcels([]);
@@ -354,7 +391,7 @@ export default function RiderPickupPhotoQrPortal() {
     const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_snapshot", {
       p_pickup_id: pickupId,
     });
-    if (request !== snapshotRequest.current || activePickupRef.current !== pickupId) return;
+    if (!mountedRef.current || request !== snapshotRequest.current || activePickupRef.current !== pickupId) return;
     if (error || data?.ok === false) {
       setMessage(error?.message || data?.error || "Unable to load saved parcel photos. Retry the refresh before retaking photos.");
       if (!parcelDraftsRef.current.length) setParcels(buildParcels(row));
@@ -363,10 +400,21 @@ export default function RiderPickupPhotoQrPortal() {
 
     const generated = buildParcels(row);
     const savedParcels = Array.isArray(data?.parcels) ? data.parcels : [];
-
-    const merged = mergeCaptureParcels(generated, savedParcels, parcelDraftsRef.current);
+    let cached: ParcelDraft[] = [];
+    try { cached = await loadPickupDrafts(draftUserRef.current, pickupId) as ParcelDraft[]; }
+    catch (error) { draftFailure(error); }
+    if (!mountedRef.current || request !== snapshotRequest.current || activePickupRef.current !== pickupId) return;
+    const local = new Map(cached.map(parcel => [parcel.line_no, parcel]));
+    for (const parcel of parcelDraftsRef.current) {
+      if (parcel.cargo_photo_file || parcel.cargo_photo_url || parcel.parcel_weight || parcel.remarks) local.set(parcel.line_no, parcel);
+    }
+    const merged = mergeCaptureParcels(generated, savedParcels, [...local.values()]).map(parcel => ({ ...parcel,
+      cargo_photo_data_url: parcel.cargo_photo_file ? (() => { const url = photoPreview(parcel.cargo_photo_file, pickupId, parcel.line_no); commitPhotoPreview(url, pickupId, parcel.line_no); return url; })() : undefined,
+    }));
     parcelDraftsRef.current = merged;
     setParcels(merged);
+    setParcelPage(page => Math.min(page, Math.max(1, Math.ceil(merged.length / pageSize))));
+    try { if (draftUserRef.current) localStorage.setItem(`britium.pickup.last:${draftUserRef.current}`, pickupId); } catch { /* Remembering the last pickup is optional; IndexedDB holds the drafts. */ }
   }
 
   async function refreshPickupAfterAction(pickupId: string) {
@@ -408,12 +456,14 @@ export default function RiderPickupPhotoQrPortal() {
     }
   }
 
-  function updateParcel(lineNo: number, patch: Partial<ParcelDraft>) {
+  function updateParcel(lineNo: number, patch: Partial<ParcelDraft>, persist = true) {
     const next = parcelDraftsRef.current.map((parcel) =>
       parcel.line_no === lineNo ? { ...parcel, ...patch, saved: patch.saved ?? parcel.saved } : parcel
     );
     parcelDraftsRef.current = next;
     setParcels(next);
+    const changed = next.find(parcel => parcel.line_no === lineNo);
+    if (persist && changed) void persistDraftRows([changed]).catch(draftFailure);
   }
 
   function editParcel(lineNo: number, patch: Partial<ParcelDraft>) {
@@ -431,6 +481,9 @@ export default function RiderPickupPhotoQrPortal() {
 
     const { data: sessionResult, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) throw sessionError;
+    if (!mountedRef.current || sessionResult?.session?.user?.id !== draftUserRef.current) {
+      throw new Error("Account or pickup screen changed. Return to the original account before retrying.");
+    }
     if (!sessionResult?.session?.user) {
       throw new Error("Your Rider session expired. Sign in again, then retry the photo upload.");
     }
@@ -438,13 +491,16 @@ export default function RiderPickupPhotoQrPortal() {
     const scope = `${pickupId}:${lineNo}`;
     let paths = uploadPaths.current.get(file);
     if (!paths) { paths = new Map(); uploadPaths.current.set(file, paths); }
-    let path = paths.get(scope);
+    let path = parcelDraftsRef.current.find(parcel => parcel.line_no === lineNo)?.cargo_photo_path || paths.get(scope);
     if (!path) {
       const id = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       path = `pickup/${safeStorageSegment(pickupId)}/${safeStorageSegment(deliveryWayId)}/${id}-${lineNo}.${photoExtension(file)}`;
       paths.set(scope, path);
     }
     const storedPath = path;
+    updateParcel(lineNo, { cargo_photo_path: storedPath });
+    const recoverable = parcelDraftsRef.current.find(parcel => parcel.line_no === lineNo);
+    if (recoverable) await persistDraftRows([recoverable], pickupId);
     await confirmPhotoUpload({
       path: storedPath,
       pending: pendingUploads.current,
@@ -512,7 +568,7 @@ export default function RiderPickupPhotoQrPortal() {
   async function onPhotoSelected(lineNo: number, file?: File, pickupOverride?: PickupRow) {
     const activePickup = pickupOverride || selectedPickup;
     if (!file || !activePickup) return;
-    if (photoWorkRef.current || saveWorkRef.current) { setMessage("Wait for the current photo or parcel save to finish."); return; }
+    if (batchWorkRef.current || photoWorkRef.current || saveWorkRef.current) { setMessage("Wait for the current photo or parcel save to finish."); return; }
     if (!activePickup.can_open_workspace) {
       setMessage(tx(
         "This pickup is not assigned to your field-team account.",
@@ -540,20 +596,28 @@ export default function RiderPickupPhotoQrPortal() {
     const stillCurrent = () => activePickupRef.current === pickupId && photoRevisions.current.get(key) === revision;
     photoWorkRef.current = true;
     setUploadingLine(lineNo);
+    let pendingPreview = "";
     try {
       const prepared = await compressPickupPhoto(file);
-      const preview = await readPhotoPreview(prepared);
+      const preview = photoPreview(prepared, pickupId, lineNo);
+      pendingPreview = preview;
       if (!stillCurrent()) return;
-      editParcel(lineNo, {
-        cargo_photo_data_url: preview, cargo_photo_file: prepared, cargo_photo_url: "",
+      const next = { ...currentParcel, line_no: lineNo,
+        cargo_photo_data_url: preview, cargo_photo_file: prepared, cargo_photo_url: "", cargo_photo_path: undefined,
         previous_photo_url: currentParcel?.cargo_photo_url || currentParcel?.previous_photo_url,
         cargo_photo_name: prepared.name, photo_status: "photo_staged", photo_error: undefined, saved: false,
-      });
+        draft_revision: (currentParcel?.draft_revision || 0) + 1,
+      } as ParcelDraft;
+      await persistDraftRows([next], pickupId);
+      if (!stillCurrent()) return;
+      commitPhotoPreview(preview, pickupId, lineNo);
+      pendingPreview = "";
+      updateParcel(lineNo, next, false);
       stagedPhotoFiles.current.set(lineNo, prepared);
       setMessage(tx(`Parcel ${lineNo}: review the photo, then approve and upload.`, `Parcel ${lineNo}: ဓာတ်ပုံကို စစ်ဆေးပြီး အတည်ပြုကာ Upload တင်ပါ။`));
     } catch (error: any) {
       if (stillCurrent()) setMessage(error?.message || "Unable to prepare the selected photo. Existing photo kept.");
-    } finally { photoWorkRef.current = false; if (stillCurrent()) setUploadingLine(null); }
+    } finally { if (pendingPreview) URL.revokeObjectURL(pendingPreview); photoWorkRef.current = false; if (stillCurrent()) setUploadingLine(null); }
   }
 
   async function ensurePhotoUploaded(parcel: ParcelDraft, pickupId: string) {
@@ -571,7 +635,8 @@ export default function RiderPickupPhotoQrPortal() {
       const current = parcelDraftsRef.current.find(row => row.line_no === parcel.line_no);
       if (!isCurrentParcelDraft(current, parcel) || current?.cargo_photo_file !== file) throw new Error("Photo changed during upload. The newer draft has been kept.");
       updateParcel(parcel.line_no, { cargo_photo_url: url, cargo_photo_file: undefined,
-        photo_status: "photo_uploaded", photo_error: undefined, saved: false });
+        photo_status: "photo_uploaded", photo_error: undefined, saved: false }, false);
+      await persistDraftRows([parcelDraftsRef.current.find(row => row.line_no === parcel.line_no)!], pickupId);
       stagedPhotoFiles.current.delete(parcel.line_no);
       return url;
     } catch (error: any) {
@@ -581,6 +646,7 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function approveParcelPhoto(parcel: ParcelDraft) {
+    if (batchWorkRef.current) return;
     const id = activePickupRef.current;
     try {
       await ensurePhotoUploaded(parcel, id);
@@ -588,8 +654,8 @@ export default function RiderPickupPhotoQrPortal() {
     } catch (error: any) { if (activePickupRef.current === id) setMessage(error?.message || "Photo upload failed."); }
   }
 
-  async function saveParcel(parcel: ParcelDraft) {
-    if (!selectedPickup || saveWorkRef.current || photoWorkRef.current) return false;
+  async function saveParcel(parcel: ParcelDraft, inBatch = false) {
+    if (!selectedPickup || saveWorkRef.current || photoWorkRef.current || (batchWorkRef.current && !inBatch)) return false;
     if (!selectedPickup.can_open_workspace) {
       setMessage(tx("This pickup is not assigned to your field-team account.","ဤ Pickup ကို သင့် field-team account သို့ တာဝန်ပေးထားခြင်း မရှိသေးပါ။"));
       return false;
@@ -634,7 +700,8 @@ export default function RiderPickupPhotoQrPortal() {
     };
 
     try {
-      if (activePickupRef.current !== pickupId) throw new Error("Pickup changed before save. Return to the original pickup to continue.");
+      const { data: auth } = await supabase.auth.getSession();
+      if (!mountedRef.current || auth?.session?.user?.id !== draftUserRef.current || activePickupRef.current !== pickupId) throw new Error("Account or pickup changed before save. Return to the original pickup to continue.");
       const { data, error } = await (supabase as any).rpc("be_pickup_parcel_capture_save", {
         p_payload: payload,
       });
@@ -651,9 +718,11 @@ export default function RiderPickupPhotoQrPortal() {
         cargo_photo_file: undefined,
         photo_status: data.photo_status || "photo_uploaded",
         saved: true,
-      });
+      }, false);
+      const confirmed = parcelDraftsRef.current.find(row => row.line_no === parcel.line_no);
+      if (confirmed) await persistDraftRows([confirmed], pickupId).catch(draftFailure);
       if (activePickupRef.current !== pickupId) return true;
-      await refreshParcelSnapshot();
+      if (!inBatch) await refreshParcelSnapshot();
       setMessage(tx(`Parcel ${parcel.line_no} saved successfully.`,`Parcel ${parcel.line_no} ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။`));
       return true;
     } catch (error: any) {
@@ -715,68 +784,56 @@ export default function RiderPickupPhotoQrPortal() {
   }
 
   async function saveAllParcels() {
-    const readyParcels = parcels.filter((parcel) => {
-      const weight = Number(parcel.parcel_weight || 0);
-      const hasPhoto = Boolean(parcel.cargo_photo_file || parcel.cargo_photo_url || parcel.cargo_photo_data_url);
-      return Number.isFinite(weight) && weight > 0 && hasPhoto;
-    });
-
-    if (readyParcels.length === 0) {
-      setMessage(tx(
-        "No parcel is ready to save yet. Enter weight and capture/upload a cargo photo first.",
-        "သိမ်းရန် အဆင်သင့်ဖြစ်သော Parcel မရှိသေးပါ။ အလေးချိန်ထည့်ပြီး ကုန်ပစ္စည်းဓာတ်ပုံကို ရိုက်ယူ/Upload တင်ပါ။"
-      ));
-      return;
-    }
-
+    if (!selectedPickup || batchWorkRef.current || photoWorkRef.current || saveWorkRef.current) return;
+    const pickupId = activePickupRef.current;
+    const ready = parcelDraftsRef.current.filter(parcel => !parcel.saved && Number(parcel.parcel_weight) > 0 &&
+      Number.isFinite(Number(parcel.parcel_weight)) && Boolean(parcel.cargo_photo_file || parcel.cargo_photo_url));
+    if (!ready.length) { setMessage("No unsaved parcel is ready. Enter its actual weight and select a photo first."); return; }
+    batchWorkRef.current = true;
+    setActionBusy("save_all_parcels");
+    const failed: number[] = [];
     let okCount = 0;
-    for (const parcel of readyParcels) {
-      const ok = await saveParcel(parcel);
-      if (ok) okCount += 1;
-    }
-
-    setMessage(tx(
-      `Saved ${okCount}/${readyParcels.length} ready parcel record(s).`,
-      `သိမ်းရန်အဆင်သင့် Parcel ${okCount}/${readyParcels.length} ကို သိမ်းဆည်းပြီးပါပြီ။`
-    ));
+    try {
+      await persistDraftRows(ready, pickupId);
+      for (const [index, original] of ready.entries()) {
+        if (activePickupRef.current !== pickupId) break;
+        setBulkProgress(`Saving ${index + 1}/${ready.length}: parcel ${original.line_no}`);
+        const current = parcelDraftsRef.current.find(parcel => parcel.line_no === original.line_no)!;
+        if (await saveParcel(current, true)) okCount++; else failed.push(original.line_no);
+      }
+      // One reconciliation per batch avoids a full snapshot request after every parcel.
+      if (activePickupRef.current === pickupId) await refreshParcelSnapshot();
+      setMessage(`Saved ${okCount}/${ready.length} ready parcel record(s).${failed.length ? ` Failed parcels: ${failed.join(", ")}. Their photos and weights are kept; retry Save All.` : ""}`);
+    } catch (error: any) {
+      draftFailure(error);
+      setMessage(`Saved ${okCount}/${ready.length}. ${error?.message || "Batch interrupted."} Existing photos are kept; retry the remaining parcels.`);
+    } finally { batchWorkRef.current = false; setActionBusy(""); }
   }
 
   async function uploadAllPhotosForReview() {
-    if (!selectedPickup) return;
-    const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
-    const pending = parcels.filter((parcel) => !parcel.cargo_photo_url && (Boolean(parcel.cargo_photo_file) || stagedPhotoFiles.current.has(parcel.line_no)));
-    const uploadedCount = parcels.filter((parcel) => Boolean(parcel.cargo_photo_url)).length;
-
-    if (pending.length === 0) {
-      setMessage(
-        uploadedCount > 0
-          ? tx(`All ${uploadedCount} selected photo(s) are already uploaded. Enter parcel weight and save when ready.`,`ရွေးထားသော ဓာတ်ပုံ ${uploadedCount} ပုံလုံး Upload ပြီးပါပြီ။ အလေးချိန်ထည့်ပြီး Parcel ကို သိမ်းပါ။`)
-          : tx("Capture or choose at least one cargo photo before using Upload All.","Upload All မလုပ်မီ ကုန်ပစ္စည်းဓာတ်ပုံ အနည်းဆုံးတစ်ပုံ ရိုက်ယူ/ရွေးချယ်ပါ။")
-      );
-      return;
-    }
-
+    if (!selectedPickup || batchWorkRef.current || photoWorkRef.current || saveWorkRef.current) return;
+    const pickupId = activePickupRef.current;
+    const pending = parcelDraftsRef.current.filter(parcel => !parcel.cargo_photo_url && Boolean(parcel.cargo_photo_file));
+    const uploadedCount = parcelDraftsRef.current.filter(parcel => Boolean(parcel.cargo_photo_url)).length;
+    if (!pending.length) { setMessage(uploadedCount ? `All ${uploadedCount} selected photo(s) are already uploaded. Enter parcel weight and save when ready.` : "Capture or choose a cargo photo first."); return; }
+    batchWorkRef.current = true;
     setActionBusy("upload_all_photos");
+    const failed: number[] = [];
     let okCount = 0;
     try {
-      for (const parcel of pending) {
+      await persistDraftRows(pending, pickupId);
+      for (const [index, original] of pending.entries()) {
+        if (activePickupRef.current !== pickupId) break;
+        setBulkProgress(`Uploading ${index + 1}/${pending.length}: parcel ${original.line_no}`);
         try {
-          setBulkProgress(`Uploading ${okCount + 1} of ${pending.length}: parcel ${parcel.line_no}`);
-          const staged = stagedPhotoFiles.current.get(parcel.line_no);
-          await ensurePhotoUploaded(staged ? { ...parcel, cargo_photo_file: staged } : parcel, pickupId);
-          stagedPhotoFiles.current.delete(parcel.line_no);
-          okCount += 1;
-        } catch (error) {
-          console.error("Photo retry failed", parcel.line_no, error);
-        }
+          const current = parcelDraftsRef.current.find(parcel => parcel.line_no === original.line_no)!;
+          await ensurePhotoUploaded(current, pickupId);
+          okCount++;
+        } catch { failed.push(original.line_no); }
       }
-      setMessage(tx(
-        `Photo upload completed: ${okCount}/${pending.length} pending photo(s) uploaded. Uploaded photos remain visible and ready for parcel save/review.`,
-        `ဓာတ်ပုံ Upload ပြီးပါပြီ။ စောင့်ဆိုင်းနေသော ဓာတ်ပုံ ${okCount}/${pending.length} ပုံ တင်ပြီးပါပြီ။ တင်ပြီးသောဓာတ်ပုံများကို မပျောက်စေဘဲ Parcel သိမ်းရန်/စစ်ဆေးရန် အဆင်သင့်ထားပါမည်။`
-      ));
-    } finally {
-      setActionBusy("");
-    }
+      setMessage(`${failed.length ? "Photo upload incomplete" : "Photo upload completed"}: ${okCount}/${pending.length} pending photo(s) uploaded.${failed.length ? ` Failed parcels: ${failed.join(", ")}. Their photos are kept on this device; retry Upload All.` : " Uploaded photos remain visible and ready for parcel save/review."}`);
+    } catch (error: any) { draftFailure(error); setMessage(error?.message || "Upload batch interrupted. Existing photos are kept."); }
+    finally { batchWorkRef.current = false; setActionBusy(""); }
   }
 
   function ensureQr(parcel: ParcelDraft) {
@@ -948,7 +1005,7 @@ export default function RiderPickupPhotoQrPortal() {
           </div>
           <button
             onClick={loadAssignedPickups}
-            disabled={loading}
+            disabled={loading || !!actionBusy || bulkPreparing || savingLine !== null || uploadingLine !== null}
             className="rounded-2xl bg-rose-500 px-5 py-3 text-sm font-black text-white disabled:opacity-60"
           >
             {loading ? tx("Loading...","ဖွင့်နေသည်...") : tx("Refresh","ပြန်ဖွင့်ရန်")}
@@ -957,12 +1014,14 @@ export default function RiderPickupPhotoQrPortal() {
       </header>
 
       <main className="mx-auto max-w-[1200px] space-y-5 px-4 py-5 pb-56">
+        {draftWarning && <div role="alert" className="rounded-xl border border-red-400 bg-red-50 p-4 font-bold text-red-900">{draftWarning}<button type="button" className="ml-3 rounded border px-3 py-2" disabled={Boolean(actionBusy) || bulkPreparing || uploadingLine !== null || savingLine !== null} onClick={() => void retryDraftBackup()}>Retry draft backup</button></div>}
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <label className="mb-4 block">
             <span className="mb-2 block text-xs font-black uppercase tracking-widest text-slate-600">
               {tx("Enterprise Pickup Request","Enterprise Pickup Request")}
             </span>
             <select
+              disabled={loading || !!actionBusy || bulkPreparing || savingLine !== null || uploadingLine !== null}
               value={pickupId}
               onChange={(e) => {
                 const row = pickups.find((item) => String(item.pickup_id || item.pickup_way_id) === e.target.value);

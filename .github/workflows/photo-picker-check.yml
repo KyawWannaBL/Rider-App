@@ -6,6 +6,7 @@ on:
       - 'src/**'
       - 'package.json'
       - 'scripts/test-rider-*.mjs'
+      - 'scripts/test-pickup-*.mjs'
       - 'tests/**'
       - 'src/lib/selectGalleryPhoto.ts'
       - 'android-assets/photo-picker/**'
@@ -48,6 +49,7 @@ jobs:
           npx playwright-core install --with-deps chromium
           node scripts/test-bulk-pickup-browser.mjs
           node scripts/test-pickup-photo-browser.mjs
+          npm run test:pickup-recovery
           npm run build
           rm -rf dist/downloads
       - name: Configure native Android project
