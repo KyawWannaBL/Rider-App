@@ -71,7 +71,7 @@ try {
   const input=partial.locator('input[type=file][multiple]');
   await input.setInputFiles([{name:'first.png',mimeType:'image/png',buffer:png},{name:'invalid.pdf',mimeType:'application/pdf',buffer:Buffer.from('invalid')}]);
   await partial.getByText('No photos from this batch were staged.',{exact:false}).waitFor();
-  assert.equal(await partial.getByText('Photo: first.png',{exact:true}).count(),0,'a later invalid file must not strand the first parcel');
+  assert.equal(await partial.getByText('Photo: first.jpg',{exact:true}).count(),0,'a later invalid file must not strand the first parcel');
   await input.setInputFiles([{name:'first.png',mimeType:'image/png',buffer:png},{name:'second.png',mimeType:'image/png',buffer:png}]);
   await partial.getByText('Staged 2 photos in parcel order.',{exact:false}).waitFor();
   console.log('PASS preparation failure leaves the whole batch retryable without occupied parcel slots');

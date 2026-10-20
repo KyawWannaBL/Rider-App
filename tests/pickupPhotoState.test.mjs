@@ -49,3 +49,21 @@ test('refresh updates independent review status without discarding a pending rep
   assert.equal(row.cargo_photo_file,file);
   assert.equal(row.review_status,'REUPLOAD_REQUIRED');
 });
+
+test('a partial snapshot cannot erase recovered evidence from a 99-photo mixed-weight batch', () => {
+  const generated=Array.from({length:99},(_,i)=>blank(i+1));
+  const recovered=generated.map(row=>({...row,saved:true,parcel_weight:row.line_no>97?'4':'2',cargo_photo_url:'https://proof/'+row.line_no}));
+  const stored=[1,2,3,4,5,6,7,8,12,13,14].map(saved);
+  const merged=mergeCaptureParcels(generated,stored,recovered);
+  assert.equal(merged.filter(row=>row.cargo_photo_url).length,99,'missing server rows must keep recoverable local evidence');
+  assert.equal(merged.filter(row=>row.saved).length,11,'only authoritative server rows are counted as saved');
+  assert.equal(merged[98].parcel_weight,'4');assert.equal(merged[8].saved,false);
+});
+
+ test('incomplete server confirmation retains cached evidence as an unsaved draft', () => {
+  const row=mergeCaptureParcels([blank(1)],[{line_no:1,parcel_weight:0,cargo_photo_url:'',photo_status:'REUPLOAD_REQUIRED',review_note:'verify label'}],[{...saved(1),parcel_weight:'2',cargo_photo_url:'https://proof/cached'}])[0];
+  assert.equal(row.cargo_photo_url,'https://proof/cached');
+  assert.equal(row.parcel_weight,'2');
+  assert.equal(row.saved,false);
+  assert.equal(row.review_note,'verify label');
+ });
