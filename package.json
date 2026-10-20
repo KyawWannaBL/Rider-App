@@ -22,7 +22,7 @@
     "test:pickup-photo-state": "node scripts/test-photo-state.mjs",
     "test:pickup-photo-browser": "node scripts/test-pickup-photo-browser.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
-    "test:rider-regressions": "node scripts/test-rider-auth-profile.mjs && node scripts/test-rider-api-sync-state.mjs && node scripts/test-rider-delivery-state.mjs"
+    "test:rider-regressions": "node scripts/test-rider-auth-profile.mjs && node scripts/test-rider-api-sync-state.mjs && node scripts/test-rider-delivery-state.mjs && node scripts/test-rider-release-metadata.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^7.1.0",
