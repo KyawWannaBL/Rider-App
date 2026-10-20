@@ -65,4 +65,30 @@ try {
   assert.equal(await race.getByText('Photo: wrong-pickup-two.jpg',{exact:true}).count(),0);
   console.log('PASS switching pickup during restore never attaches recovered evidence to another pickup');
   await race.close();
+  const partial=await browser.newPage();
+  await partial.goto('http://127.0.0.1:4178/tests/browser/index.html');
+  await partial.locator('[data-parcel-line="1"]').waitFor();
+  const input=partial.locator('input[type=file][multiple]');
+  await input.setInputFiles([{name:'first.png',mimeType:'image/png',buffer:png},{name:'invalid.pdf',mimeType:'application/pdf',buffer:Buffer.from('invalid')}]);
+  await partial.getByText('No photos from this batch were staged.',{exact:false}).waitFor();
+  assert.equal(await partial.getByText('Photo: first.png',{exact:true}).count(),0,'a later invalid file must not strand the first parcel');
+  await input.setInputFiles([{name:'first.png',mimeType:'image/png',buffer:png},{name:'second.png',mimeType:'image/png',buffer:png}]);
+  await partial.getByText('Staged 2 photos in parcel order.',{exact:false}).waitFor();
+  console.log('PASS preparation failure leaves the whole batch retryable without occupied parcel slots');
+  await partial.close();
+  const busy=await browser.newPage();
+  await busy.goto('http://127.0.0.1:4178/tests/browser/index.html?native=1');
+  const first=busy.locator('[data-parcel-line="1"]');
+  await first.waitFor();
+  await first.locator('input[type=file]').nth(1).setInputFiles({name:'first.png',mimeType:'image/png',buffer:png});
+  await first.getByRole('button',{name:'Approve Photo & Upload',exact:true}).waitFor();
+  await busy.evaluate(()=>window.__photoFixture.uploadDelay=500);
+  await first.getByRole('button',{name:'Approve Photo & Upload',exact:true}).click();
+  await busy.evaluate(()=>{
+    window.__nativePhotoFixture.restored={context:{kind:'pickup-bulk',pickupId:'P1019-TST-001',lineNos:[2]},files:[new File(['recovered'],'after-busy.jpg',{type:'image/jpeg'})]};
+    window.dispatchEvent(new Event('britium:native-photo-restored'));
+  });
+  await busy.getByText('Photo: after-busy.jpg',{exact:true}).waitFor();
+  console.log('PASS a recovered batch automatically resumes after another photo operation finishes');
+  await busy.close();
 }finally{await browser.close();await server.close();}

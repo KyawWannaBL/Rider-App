@@ -52,4 +52,12 @@ const context={kind:'pickup-bulk',pickupId:'P-1',lineNos:[1,2],route:'/pickup-ve
  const f=fixture();f.state.result.photos.push({path:'file:///extra.jpg'});
  await assert.rejects(f.api.chooseNativeGalleryFiles('bulk',context,2),/at most 2/,'provider cannot silently overflow parcel slots');
 }
+{
+ const f=fixture();f.state.error=new Error('Activity recreated during normalization');
+ await assert.rejects(f.api.chooseNativeGalleryFiles('bulk',context,2),/Activity recreated/);
+ f.api.installNativePhotoRestoreHandler();
+ for(let i=0;i<30&&!f.api.peekRestoredNativePhoto();i++)await Promise.resolve();
+ assert.equal(f.api.peekRestoredNativePhoto()?.files.length,2,'startup resumes native normalization from the cached selection');
+ assert.equal(f.location.hash,'#/pickup-verification/P-1');
+}
 console.log('PASS native bulk bridge: bounded selection, cancellation, interrupted route/context and restored files');
