@@ -296,7 +296,7 @@ async function nativePhotoFile(source: CameraSource, prefix: string): Promise<Fi
     });
 
     const result = source === CameraSource.Photos
-      ? await selectGalleryPhoto(
+      ? await selectGalleryPhoto<{ path?: string; webPath?: string; format: string }>(
           Capacitor.isPluginAvailable("BritiumPhotoPicker") ? () => NativePhotoPicker.pickImage() : undefined,
           standardPickerOrCamera,
         )

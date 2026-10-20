@@ -1,6 +1,6 @@
 // Compatibility contract: be_rider_delivery_wayplan_jobs_v187 · be_current_field_team_identity · be_rider_submit_cod_settlement.
 // Runtime settlement uses the stricter be_field_team_cod_handover_queue_v1 / be_field_team_cod_handover_submit_v1 service layer.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Loader2, RefreshCw, UploadCloud } from "lucide-react";
 import { CODSettlementScreen } from "@/components/rider/CODSettlementScreen";
 import { RiderNotification } from "@/components/rider/RiderNotification";
@@ -17,8 +17,17 @@ export default function CodSettlementPage() {
   const [selectedLine, setSelectedLine] = useState<SettlementLine | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [proof, setProof] = useState({ name: "", dataUrl: "" });
-  const [note, setNote] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, { name?: string; dataUrl?: string; note?: string; reading?: boolean }>>({});
+  const photoReads = useRef<Record<string, number>>({});
+  const photoReadSequence = useRef(0);
+  const submitting = useRef(false);
+  const draft = drafts[selectedLine?.deliveryWayId || ""] || {};
+  const proof = { name: draft.name || "", dataUrl: draft.dataUrl || "" };
+  const note = draft.note || "";
+
+  function updateDraft(wayId: string, patch: Partial<typeof draft>) {
+    setDrafts((current) => ({ ...current, [wayId]: { ...current[wayId], ...patch } }));
+  }
   const [notification, setNotification] = useState<any>(null);
 
   const load = useCallback(async () => {
@@ -63,23 +72,38 @@ export default function CodSettlementPage() {
   const submitted = ["SUBMITTED_TO_FINANCE", "PENDING_FINANCE"].includes(status);
 
   function selectFile(file?: File) {
-    if (!file) return;
+    if (!file || !selectedLine) return;
     if (file.size > 6 * 1024 * 1024) {
       setMessage(tx("Proof photo must be 6 MB or less.", "သက်သေဓာတ်ပုံသည် 6 MB ထက်မကျော်ရပါ။"));
       return;
     }
+    const wayId = selectedLine.deliveryWayId;
+    const readId = ++photoReadSequence.current;
+    photoReads.current[wayId] = readId;
+    updateDraft(wayId, { reading: true });
     const reader = new FileReader();
-    reader.onload = () => setProof({ name: file.name, dataUrl: String(reader.result || "") });
+    reader.onload = () => {
+      if (photoReads.current[wayId] !== readId) return;
+      delete photoReads.current[wayId];
+      updateDraft(wayId, { name: file.name, dataUrl: String(reader.result || ""), reading: false });
+    };
+    reader.onerror = () => {
+      if (photoReads.current[wayId] !== readId) return;
+      delete photoReads.current[wayId];
+      updateDraft(wayId, { reading: false });
+      setMessage(tx("Unable to read handover proof. Please select the photo again.", "ငွေလွှဲပြောင်းသက်သေဓာတ်ပုံကို ဖတ်၍မရပါ။ ဓာတ်ပုံကို ထပ်မံရွေးချယ်ပါ။"));
+    };
     reader.readAsDataURL(file);
   }
 
   async function submitSelected() {
-    if (!selectedLine || !rawSelected) return;
+    if (!selectedLine || !rawSelected || submitting.current || photoReads.current[selectedLine.deliveryWayId]) return;
     if (cleared) {
       setMessage(tx("This settlement is already cleared.", "ဤ COD စာရင်းရှင်းတမ်းကို Cleared ပြုလုပ်ပြီးပါပြီ။"));
       return;
     }
 
+    submitting.current = true;
     setLoading(true);
     try {
       const result = await submitCodHandover(selectedLine.deliveryWayId, {
@@ -94,13 +118,17 @@ export default function CodSettlementPage() {
           `${selectedLine.deliveryWayId}: Finance သို့ လွှဲပြောင်းတင်သွင်းပြီးပါပြီ။ Reference ${result?.settlement_reference || "-"}။`,
         ),
       );
-      setProof({ name: "", dataUrl: "" });
-      setNote("");
-      setSelectedLine(null);
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[selectedLine.deliveryWayId];
+        return next;
+      });
+      setSelectedLine((current) => current?.deliveryWayId === selectedLine.deliveryWayId ? null : current);
       await load();
     } catch (error: any) {
       setMessage(error?.message || tx("COD handover failed.", "COD လွှဲပြောင်းမှု မအောင်မြင်ပါ။"));
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   }
@@ -201,7 +229,7 @@ export default function CodSettlementPage() {
 
                 <textarea
                   value={note}
-                  onChange={(event) => setNote(event.target.value)}
+                  onChange={(event) => updateDraft(selectedLine.deliveryWayId, { note: event.target.value })}
                   placeholder={tx("Handover note (optional)", "လွှဲပြောင်းမှတ်ချက် (မလိုအပ်လျှင်ကျော်နိုင်)")}
                   className="mt-4 min-h-[96px] w-full rounded-2xl border border-slate-200 p-4 font-semibold outline-none focus:border-blue-500"
                 />
@@ -209,7 +237,7 @@ export default function CodSettlementPage() {
                 <button
                   type="button"
                   onClick={() => void submitSelected()}
-                  disabled={loading || !rawSelected?.eligible_to_handover}
+                  disabled={loading || draft.reading || !rawSelected?.eligible_to_handover}
                   className="be-primary-button mt-4 w-full disabled:opacity-40"
                 >
                   <CheckCircle2 className="h-5 w-5" />

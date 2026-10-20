@@ -91,14 +91,15 @@ export default function Profile() {
   }
 
   async function sendPasswordReset() {
-    const email = value(snapshot.identity?.email, snapshot.workforce?.email, snapshot.profile?.email);
+    const { data: auth, error: authError } = await supabase.auth.getUser();
+    const email = authError ? null : auth?.user?.email;
     if (!email || email === "-") {
       setMessage("No account email is available for password recovery.");
       return;
     }
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(String(email), {
-      redirectTo: `${window.location.origin}/#/login`,
+      redirectTo: "https://www.britiumexpress.com/reset-password",
     });
     setMessage(error ? `Unable to send password recovery: ${error.message}` : "Password recovery email sent.");
     setLoading(false);

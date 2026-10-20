@@ -34,27 +34,32 @@ export default function Dashboard() {
 
   async function load(){
     setLoading(true);
-    const [portal,dailyResult,settlementResult]=await Promise.all([
-      (supabase as any).rpc("be_rider_dashboard_snapshot"),
-      (supabase as any).rpc("be_field_team_delivery_daily_dashboard_v172",{p_work_date:null}),
-      (supabase as any).rpc("be_finance_field_settlement_center_v1",{p_work_date:null}),
-    ]);
-    if(portal.error){
-      setMessage(portal.error.message);
+    try {
+      const [portal,dailyResult,settlementResult]=await Promise.all([
+        (supabase as any).rpc("be_rider_dashboard_snapshot"),
+        (supabase as any).rpc("be_field_team_delivery_daily_dashboard_v172",{p_work_date:null}),
+        (supabase as any).rpc("be_finance_field_settlement_center_v1",{p_work_date:null}),
+      ]);
+      const failures = [
+        { result: portal, fallback: tx("Unable to load Enterprise Portal status.", "Enterprise Portal အခြေအနေကို ဖွင့်၍မရပါ။") },
+        { result: dailyResult, fallback: tx("Unable to load today's delivery summary.", "ယနေ့ ပို့ဆောင်မှုအနှစ်ချုပ်ကို ဖွင့်၍မရပါ။") },
+        { result: settlementResult, fallback: tx("Unable to load today's Finance settlement.", "ယနေ့ Finance Settlement ကို ဖွင့်၍မရပါ။") },
+      ].filter(({ result }) => result.error || result.data?.ok === false);
+      if(!portal.error && portal.data?.ok!==false) setData(portal.data||{});
+      if(!dailyResult.error && dailyResult.data?.ok!==false) setDaily(dailyResult.data||{});
+      if(!settlementResult.error && settlementResult.data?.ok!==false) setSettlements(Array.isArray(settlementResult.data?.rows)?settlementResult.data.rows:[]);
+      if(failures.length){
+        setMessage(failures.map(({ result, fallback }) => result.error?.message || result.data?.error || result.data?.code || fallback).join(" · "));
+      } else {
+        riderFeedback("success");
+        setMessage(tx("Enterprise Portal and today's field settlement are synchronized.","Enterprise Portal နှင့် ယနေ့ Field Settlement အချက်အလက်များ ချိတ်ဆက်ပြီးပါပြီ။"));
+      }
+    } catch(error:any) {
+      setMessage(error?.message || tx("Unable to synchronize Enterprise Portal. Please retry.", "Enterprise Portal နှင့် ချိတ်ဆက်၍မရပါ။ ထပ်မံကြိုးစားပါ။"));
+      riderFeedback("error");
+    } finally {
       setLoading(false);
-      return;
     }
-    setData(portal.data||{});
-    if(!dailyResult.error && dailyResult.data?.ok!==false) setDaily(dailyResult.data||{});
-    else if(dailyResult.error) setMessage(dailyResult.error.message);
-    if(!settlementResult.error && settlementResult.data?.ok!==false) setSettlements(Array.isArray(settlementResult.data?.rows)?settlementResult.data.rows:[]);
-    else if(settlementResult.error) setMessage(settlementResult.error.message);
-    else setMessage(dailyResult.data?.error || tx("Unable to load today's delivery summary.","ယနေ့ ပို့ဆောင်မှုအနှစ်ချုပ်ကို ဖွင့်၍မရပါ။"));
-    if(!dailyResult.error && dailyResult.data?.ok!==false){
-      riderFeedback("success");
-      setMessage(tx("Enterprise Portal and today's field settlement are synchronized.","Enterprise Portal နှင့် ယနေ့ Field Settlement အချက်အလက်များ ချိတ်ဆက်ပြီးပါပြီ။"));
-    }
-    setLoading(false);
   }
   async function signSettlement(row:any){
     const signedName=(signerNames[row.wayplan_id]||"").trim();

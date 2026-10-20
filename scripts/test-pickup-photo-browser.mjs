@@ -79,17 +79,27 @@ try {
     const canvas=document.querySelector('canvas'); const ctx=canvas.getContext('2d');ctx.fillRect(10,10,30,3);
     Object.defineProperty(navigator,'geolocation',{configurable:true,value:{getCurrentPosition:(_ok,error)=>error({code:1})}});
   });
+  await page.locator('select').filter({has:page.locator('option[value="BANK_TRANSFER"]')}).selectOption('QR');
+  await page.getByLabel('Transaction reference',{exact:true}).fill('D2-REF');
+  await page.getByRole('button').filter({hasText:'D2'}).click();
+  await page.getByText('Photo approved',{exact:true}).waitFor();
+  assert.equal(await page.getByLabel('Transaction reference',{exact:true}).inputValue(),'D2-REF','same-stop selection retains entered payment fields');
+  assert.equal(await page.evaluate(()=>{const c=document.querySelector('canvas');return c.getContext('2d').getImageData(10,10,1,1).data[3]>0;}),true,'same-stop selection retains drawn signature');
+  await page.locator('select').filter({has:page.locator('option[value="BANK_TRANSFER"]')}).selectOption('CASH');
   for(let attempt=0;attempt<2;attempt++){
     await page.getByText('Delivered',{exact:true}).click();
     await page.getByText('Yes',{exact:true}).click();
     await page.getByText('Current GPS is required to complete delivery. Allow location permission and try again.',{exact:true}).first().waitFor();
     assert.equal(await page.evaluate(()=>window.__photoFixture.uploads.length),2,'retry reuses unchanged proof AND drawn signature uploads');
   }
+  await page.locator('select').filter({has:page.locator('option[value="BANK_TRANSFER"]')}).selectOption('BANK_TRANSFER');
   await page.getByRole('button').filter({hasText:'D1'}).click();
+  assert.equal(await page.locator('select').filter({has:page.locator('option[value="BANK_TRANSFER"]')}).inputValue(),'CASH','another stop starts with its own payment state');
+  assert.equal(await page.getByLabel('Transaction reference',{exact:true}).count(),0,'another stop cannot inherit the prior bank reference');
   await page.evaluate(()=>{window.__nativePhotoFixture.restored={context:{kind:'delivery-proof',deliveryWayId:'D2',route:'/delivery?deliveryWayId=D2'},file:new File(['restored'],'restored.jpg',{type:'image/jpeg'})};window.dispatchEvent(new Event('britium:native-photo-restored'));});
   assert.equal(await page.getByAltText('Delivery proof to review').count(),0,'restored gallery cannot attach to another stop');
   await page.getByRole('button').filter({hasText:'D2'}).click();
   await page.getByAltText('Delivery proof to review').waitFor();
-  console.log('PASS delivery: camera/gallery scope, late-result rejection, approval, and scoped restoration');
+  console.log('PASS delivery: camera/gallery scope, late-result rejection, approval, same-stop draft retention, payment reset, and scoped restoration');
   await page.close();
 } finally {await browser.close();await server.close();}

@@ -42,6 +42,13 @@ function isUnapprovedError(error: any) {
   return code === "42501" || message.includes("not mapped to an active field-team account");
 }
 
+function isTransientConnectionError(error: any) {
+  const code = String(error?.code || "");
+  // Explicit auth, database and HTTP failures must still remove approval.
+  if (Number(error?.status) >= 400 || (code && !["ETIMEDOUT", "ECONNRESET", "ENETUNREACH", "ERR_NETWORK", "NETWORK_ERR"].includes(code))) return false;
+  return /failed to fetch|networkerror|load failed|timed out/i.test(String(error?.message || error || ""));
+}
+
 function normalizeNetworkMessage(error: any) {
   const raw = String(error?.message || error || "");
   if (/failed to fetch|networkerror|load failed|timed out/i.test(raw)) {
@@ -72,8 +79,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const requestRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(null);
+  const approvedUserIdRef = useRef<string | null>(null);
 
-  const hydrateProfile = useCallback(async (nextSession: any | null, source: string) => {
+  const hydrateProfile = useCallback(async (nextSession: any | null, source: string, background = false) => {
     const requestId = ++requestRef.current;
     const currentUser = nextSession?.user;
 
@@ -86,8 +95,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
 
-    setProfileState("checking");
-    setAuthError(null);
+    if (!background) {
+      setProfileState("checking");
+      setAuthError(null);
+    }
 
     try {
       const result: any = await retry(async () => {
@@ -121,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const synchronizedProfile = await enterpriseProfileOverlay(result?.data || {});
       if (!mountedRef.current || requestId !== requestRef.current) return null;
+      approvedUserIdRef.current = currentUser.id;
       setProfile(synchronizedProfile);
       setProfileState("approved");
       setAuthError(null);
@@ -128,6 +140,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       if (!mountedRef.current || requestId !== requestRef.current) return null;
       console.error(`Rider Enterprise profile hydration failed (${source})`, error);
+      if (background && activeUserIdRef.current === currentUser.id && approvedUserIdRef.current === currentUser.id && isTransientConnectionError(error)) {
+        // A temporary connection loss on app resume must not discard staged
+        // operational evidence. Explicit denial and login failures still block.
+        setAuthError(normalizeNetworkMessage(error));
+        return null;
+      }
       setProfile(null);
       setProfileState("error");
       setAuthError(normalizeNetworkMessage(error));
@@ -156,8 +174,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleAuthEvent = (event: string, nextSession: any | null) => {
       if (!mountedRef.current) return;
 
+      const nextUserId = nextSession?.user?.id || null;
+      const sameUser = activeUserIdRef.current === nextUserId;
+      activeUserIdRef.current = nextUserId;
       setSession(nextSession);
       setUser(nextSession?.user || null);
+
+      if (!sameUser) {
+        requestRef.current += 1;
+        approvedUserIdRef.current = null;
+        setProfile(null);
+        setProfileState("checking");
+      }
 
       if (!nextSession?.user) {
         requestRef.current += 1;
@@ -169,11 +197,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Token refreshes should never throw the whole UI back onto the splash.
-      if (event === "TOKEN_REFRESHED") return;
+      if (event === "TOKEN_REFRESHED" && sameUser) return;
 
-      setLoading(true);
+      // Supabase emits SIGNED_IN again on foreground resume. Keep drafts and
+      // photo evidence mounted while rechecking the same approved identity.
+      const background = sameUser && approvedUserIdRef.current === nextUserId;
+      if (!background) setLoading(true);
+      const scheduledRequest = requestRef.current;
       window.setTimeout(() => {
-        if (mountedRef.current) void hydrateProfile(nextSession, `auth-event:${event}`);
+        if (mountedRef.current && activeUserIdRef.current === nextUserId && requestRef.current === scheduledRequest) {
+          void hydrateProfile(nextSession, `auth-event:${event}`, background);
+        }
       }, 0);
     };
 
@@ -186,6 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mountedRef.current) return;
 
         const nextSession = result?.data?.session || null;
+        activeUserIdRef.current = nextSession?.user?.id || null;
         setSession(nextSession);
         setUser(nextSession?.user || null);
 
@@ -235,6 +270,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authError,
       signOut: async () => {
         requestRef.current += 1;
+        activeUserIdRef.current = null;
+        approvedUserIdRef.current = null;
         try {
           await withTimeout(supabase.auth.signOut(), 5000, "Sign out");
         } finally {

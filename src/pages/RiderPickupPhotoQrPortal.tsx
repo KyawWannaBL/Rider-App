@@ -281,9 +281,10 @@ export default function RiderPickupPhotoQrPortal() {
       p_limit: 300,
     });
 
-    if (error) {
-      console.error(error);
-      setMessage(tx(`Failed to load Pickup Requests: ${error.message}`,`Pickup Request များကို ဖွင့်မရပါ: ${error.message}`));
+    if (error || data?.ok === false) {
+      const reason = error?.message || data?.error || data?.message || "Enterprise did not confirm the pickup list.";
+      console.error(reason);
+      setMessage(tx(`Failed to load Pickup Requests: ${reason}`,`Pickup Request များကို ဖွင့်မရပါ: ${reason}`));
       setLoading(false);
       return;
     }
