@@ -41,6 +41,9 @@ jobs:
           npm install --no-save --package-lock=false @capacitor/cli@7.4.3 @capacitor/android@7.4.3
       - name: Verify and build web application
         run: |
+          node scripts/test-native-bulk-photo.mjs
+          npx playwright-core install --with-deps chromium
+          node scripts/test-bulk-pickup-browser.mjs
           npm run build
           rm -rf dist/downloads
       - name: Configure native Android project
@@ -69,3 +72,4 @@ jobs:
             android/app/build/outputs/apk/debug/app-debug.apk
             picker-permissions.txt
           retention-days: 7
+
