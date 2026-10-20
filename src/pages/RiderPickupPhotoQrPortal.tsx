@@ -40,6 +40,8 @@ type ParcelDraft = {
   review_note?: string;
   reviewed_photo_url?: string;
   previous_photo_url?: string;
+  authoritative_delivery_way_id?: string;
+  authoritative_waybill_no?: string;
   draft_revision?: number;
 };
 
@@ -689,14 +691,15 @@ export default function RiderPickupPhotoQrPortal() {
       pickup_way_id: selectedPickup.pickup_way_id || pickupId,
       line_no: parcel.line_no,
       row_no: parcel.line_no,
-      waybill_no: parcel.waybill_no,
-      delivery_way_id: parcel.delivery_way_id,
+      // Generated display IDs are provisional; only the server allocates new IDs.
+      waybill_no: parcel.authoritative_waybill_no,
+      delivery_way_id: parcel.authoritative_delivery_way_id,
       parcel_weight: parcel.parcel_weight || 0,
       remarks: parcel.remarks || "",
       cargo_photo_url: durablePhotoUrl,
       cargo_photo_data_url: null as string | null,
       cargo_photo_name: parcel.cargo_photo_name || null,
-      temp_qr_code: parcel.temp_qr_code,
+      temp_qr_code: parcel.authoritative_delivery_way_id ? parcel.temp_qr_code : undefined,
     };
 
     try {
@@ -707,6 +710,7 @@ export default function RiderPickupPhotoQrPortal() {
       });
       if (error) throw error;
       if (data?.ok !== true) throw new Error(data?.error || "Enterprise did not confirm the parcel save.");
+      if (!data.delivery_way_id) throw new Error("Enterprise did not return the canonical parcel ID. Refresh before retrying.");
 
       if (activePickupRef.current !== pickupId) return true;
       if (!isCurrentParcelDraft(parcelDraftsRef.current.find(row => row.line_no === parcel.line_no), parcel)) {
@@ -714,7 +718,13 @@ export default function RiderPickupPhotoQrPortal() {
         return false;
       }
       updateParcel(parcel.line_no, {
-        cargo_photo_url: durablePhotoUrl,
+        delivery_way_id: data.delivery_way_id,
+        waybill_no: data.waybill_no || data.delivery_way_id,
+        authoritative_delivery_way_id: data.delivery_way_id,
+        authoritative_waybill_no: data.waybill_no || undefined,
+        temp_qr_code: data.temp_qr_code || parcel.temp_qr_code,
+        parcel_weight: String(data.parcel_weight ?? data.actual_weight_kg ?? parcel.parcel_weight),
+        cargo_photo_url: data.cargo_photo_url || durablePhotoUrl,
         cargo_photo_file: undefined,
         photo_status: data.photo_status || "photo_uploaded",
         saved: true,

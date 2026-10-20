@@ -1,11 +1,13 @@
 const role = new URLSearchParams(location.search).get('role') || 'rider';
 const pickups = ['P1019-TST-001','P1019-ALT-001'].map(pickup_id => ({pickup_id,parcel_count:2,merchant_name:'Synthetic browser fixture',assigned_to_me:true,can_open_workspace:true,can_capture:true,assignment_scope:'ASSIGNED_TO_ME',next_action:'CAPTURE_AND_VERIFY',role}));
+const canonical = new URLSearchParams(location.search).has('canonical');
+if (canonical) pickups.splice(0, pickups.length, ...['P1020-TST-001','P1020-TST-002'].map(pickup_id=>({...pickups[0],pickup_id,parcel_count:1})));
 const recovery = new URLSearchParams(location.search).has('recovery');
 if(recovery) pickups[0].parcel_count=99;
 const storedFixture=recovery?JSON.parse(localStorage.getItem('bulk-recovery-server')||'{}'):{};
 const saved: Record<string,Record<number,any>> = storedFixture.saved||{};
 const objects = new Map<string,File>();
-const state = {role,pickups,saved,uploads:(storedFixture.uploads||[]) as string[],saveCalls:(storedFixture.saveCalls||[]) as number[],uploadFailOnce:[] as number[],saveFailOnce:[] as number[],snapshotRequests:[] as string[],snapshotDelay:0,saveDelay:0,uploadDelay:0};
+const state = {role,pickups,saved,uploads:(storedFixture.uploads||[]) as string[],saveCalls:(storedFixture.saveCalls||[]) as number[],uploadFailOnce:[] as number[],saveFailOnce:[] as number[],snapshotRequests:[] as string[],snapshotDelay:0,saveDelay:0,uploadDelay:0,savePayloads:[] as any[]};
 (window as any).__photoFixture=state;
 const storedObjects:Record<string,{base64:string,type:string}>=storedFixture.objects||{};
 const persist=()=>{if(recovery)localStorage.setItem('bulk-recovery-server',JSON.stringify({saved,uploads:state.uploads,saveCalls:state.saveCalls,objects:storedObjects}));};
@@ -22,11 +24,19 @@ export const supabase = {
     if(name==='be_pickup_parcel_capture_save') {
       const p=args.p_payload;
       state.saveCalls.push(p.line_no);
+      state.savePayloads.push({...p});
       if(state.saveFailOnce.includes(p.line_no)){state.saveFailOnce=state.saveFailOnce.filter(n=>n!==p.line_no);persist();return {data:{ok:false,error:'Synthetic save interrupted for line '+p.line_no},error:null};}
       if(state.saveDelay) await new Promise(r=>setTimeout(r,state.saveDelay));
       saved[p.pickup_id] ||= {};
-      saved[p.pickup_id][p.line_no]={...p,photo_status:'PENDING_REVIEW',saved:true};
-      persist();return {data:{ok:true,photo_status:'PENDING_REVIEW'},error:null};
+      let serverParcel={...p,delivery_way_id:p.delivery_way_id||saved[p.pickup_id][p.line_no]?.delivery_way_id||'D'+p.pickup_id.slice(1).replace(/-[0-9]{3}$/,'')+'-'+String(p.line_no).padStart(3,'0'),photo_status:'PENDING_REVIEW',saved:true};
+      if(canonical){
+        const known=saved[p.pickup_id][p.line_no]?.delivery_way_id;
+        const id=known||p.delivery_way_id||`D1020-TST-${String(Object.values(saved).flatMap(Object.values).length+1).padStart(3,'0')}`;
+        if(Object.entries(saved).some(([pickup,rows])=>pickup!==p.pickup_id&&Object.values(rows).some(row=>row.delivery_way_id===id)))return {data:{ok:false,error:'TRACKING_NO_BELONGS_TO_ANOTHER_PICKUP'},error:null};
+        serverParcel={...serverParcel,delivery_way_id:id,waybill_no:p.waybill_no||null,temp_qr_code:`TQR-${p.pickup_id}-${String(p.line_no).padStart(3,'0')}`};
+      }
+      saved[p.pickup_id][p.line_no]=serverParcel;
+      persist();return {data:{ok:true,...serverParcel},error:null};
     }
     return {data:{ok:true},error:null};
   },

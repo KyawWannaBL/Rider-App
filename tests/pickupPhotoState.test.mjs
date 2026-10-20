@@ -67,3 +67,15 @@ test('a partial snapshot cannot erase recovered evidence from a 99-photo mixed-w
   assert.equal(row.saved,false);
   assert.equal(row.review_note,'verify label');
  });
+
+test('canonical snapshot identifiers override provisional local IDs without discarding unsaved evidence', () => {
+  const local={...blank(1),delivery_way_id:'D1020-M001-001',waybill_no:'W1020-M001-001',temp_qr_code:'TQR-P1020-M001-002-001',parcel_weight:'4',cargo_photo_url:'https://proof/new'};
+  const row=mergeCaptureParcels([blank(1)],[{line_no:1,delivery_way_id:'D1020-M001-015',waybill_no:'W-ESTABLISHED',temp_qr_code:'TQR-SERVER',parcel_weight:2,cargo_photo_url:'https://proof/old'}],[local])[0];
+  assert.equal(row.delivery_way_id,'D1020-M001-015');
+  assert.equal(row.waybill_no,'W-ESTABLISHED');
+  assert.equal(row.temp_qr_code,'TQR-SERVER');
+  assert.equal(row.authoritative_delivery_way_id,'D1020-M001-015');
+  assert.equal(row.authoritative_waybill_no,'W-ESTABLISHED');
+  assert.equal(row.parcel_weight,'4'); assert.equal(row.cargo_photo_url,'https://proof/new');
+  assert.equal(row.saved,false);
+});

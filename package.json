@@ -23,7 +23,8 @@
     "test:pickup-photo-browser": "node scripts/test-pickup-photo-browser.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "test:rider-regressions": "node scripts/test-rider-auth-profile.mjs && node scripts/test-rider-api-sync-state.mjs && node scripts/test-rider-delivery-state.mjs && node scripts/test-rider-release-metadata.mjs",
-    "test:pickup-recovery": "node scripts/test-pickup-draft-store.mjs && node scripts/test-pickup-photo-preparation.mjs && node scripts/test-pickup-bulk-recovery-browser.mjs && node scripts/test-pickup-draft-failures-browser.mjs"
+    "test:pickup-recovery": "node scripts/test-pickup-draft-store.mjs && node scripts/test-pickup-photo-preparation.mjs && node scripts/test-pickup-bulk-recovery-browser.mjs && node scripts/test-pickup-draft-failures-browser.mjs",
+    "test:pickup-canonical": "node scripts/test-pickup-canonical-sql.mjs && node scripts/test-pickup-canonical-browser.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^7.1.0",
@@ -93,6 +94,7 @@
     "@babel/parser": "^7.28.0",
     "@babel/traverse": "^7.28.0",
     "@babel/types": "^7.28.0",
+    "@electric-sql/pglite": "0.5.10",
     "@eslint/js": "^9.9.0",
     "@types/node": "^22.5.5",
     "@types/react": "^18.3.3",
