@@ -1,6 +1,20 @@
 # Google Play production preparation — 21 October 2026 MMT
 
-## Verified Rider release
+## Current Rider production release (Build 127)
+
+- App/package: Britium Express Rider, `com.britiumexpress.rider`.
+- Version `1.0.127`, version code `500127`, includes the bulk-photo recovery changes and canonical cross-app numbering fix.
+- Source: merged [PR 37](https://github.com/KyawWannaBL/Rider-App/pull/37), `efe4e60e1329c095030784ae1008b9c0a1b278ea`.
+- [Signed workflow](https://github.com/KyawWannaBL/Rider-App/actions/runs/39476343457) passed compilation, media-permission and permanent-certificate checks.
+- [Current Rider release artifact](https://github.com/KyawWannaBL/Rider-App/actions/runs/39476343457/artifacts/12287944827) contains `Britium-Express-Rider.aab` for Play submission; expires 19 November 2026 UTC.
+- Permanent certificate is unchanged from Build 126. Use Build 127's AAB rather than the older production draft or Build 126 artifact.
+- Production web deployment and live release manifest are ready. The public Build 127 APK was downloaded and its packaged metadata independently confirmed as Build 127 / version code 500127; the canonical-ID response guard is present in its JavaScript.
+- Downloaded APK SHA-256: `1dc57d2a538e5356aa9ec439aa37d02e056ccaa8b95bda50527f0106011ea9da`.
+- Verification includes the 99-photo mixed-weight recovery case, canonical UI/QR behavior, eight isolated PostgreSQL cases, fourteen photo-state tests, the existing role/replacement browser flows, production build and native PR CI.
+
+Suggested release notes: Improved pickup photo recovery, weight retention, partial-upload retries and photo replacement. Synchronizes canonical parcel identifiers and review evidence between Rider and Enterprise.
+
+## Verified bulk-photo release (Build 126)
 
 - App: Britium Express Rider, `com.britiumexpress.rider`.
 - Release: Build 126, version `1.0.126`, version code `500126`.
@@ -15,7 +29,19 @@
 
 ## Enterprise release coordination
 
-The existing Enterprise Play package is `com.britiumexpress.enterpriseportal`. Enterprise Build 115 (`3.0.115`, version code `300115`) was built successfully from PR 198. A subsequent cross-app evidence refresh/review fix is under verification; use its final signed bundle for the Enterprise production submission once released, rather than submitting an older draft. Preserve the Enterprise internal-testing track as well.
+The Enterprise Play package is `com.britiumexpress.enterpriseportal`. Enterprise Build **116** (`3.0.116`, version code `300116`) was released from merged [PR 199](https://github.com/KyawWannaBL/britium-go-live/pull/199), source `fbbae2244b5c965b737d4ee0b71c392406f3388f`.
+
+- [Signed workflow](https://github.com/KyawWannaBL/britium-go-live/actions/runs/39474365182): successful APK/AAB build and permanent certificate verification.
+- [Enterprise release artifact](https://github.com/KyawWannaBL/britium-go-live/actions/runs/39474365182/artifacts/12287384795): includes `Britium-Express-Enterprise.aab` for Play upload; expires 19 November 2026 UTC.
+- [Enterprise APK](https://github.com/KyawWannaBL/britium-go-live/releases/download/enterprise-portal-latest/Britium-Enterprise-Portal.apk): downloaded checksum `eadfd8d7a505614a298541ee52a570b53b6c609b6fdf95e10dfc550f029456be` matches the published release asset.
+- Certificate SHA-256: `F946F319D4F10D8543AE1E1EA07CB893E27AFE4ACE20CC59DEFC25B282BFDBD3`.
+- Production web deployment is ready. Eighteen new synchronization regressions and the existing tests/build passed. Current Rider photos, weights, review status and IDs override stale cached evidence while operator edits survive refresh. Modern rejected photos are visible in Warehouse with the supported replacement action through the assigned Rider; legacy-only Warehouse uploads remain available. Empty photos cannot be approved; audited reason-only exceptions remain in the existing Data Entry workflow.
+
+Use this current signed bundle rather than the older Enterprise production draft. Preserve the Enterprise internal-testing track as well.
+
+## Deployed canonical numbering fix
+
+Production migration `20261020182912_rider_pickup_canonical_capture_sync` replaces only the existing allocator and pickup-save functions. Post-deployment checks confirmed unchanged function ACLs, security-definer settings and assignment guards. Historical records were not renumbered or cleared. The isolated PostgreSQL suite passed eight cases including older provisional-ID callers, reserved aliases, unregistered historical IDs, safe event updates, namespace exhaustion and ACL preservation. The matching Rider client is tracked in [PR 37](https://github.com/KyawWannaBL/Rider-App/pull/37).
 
 ## Submission status and remaining verification
 
