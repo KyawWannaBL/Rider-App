@@ -2,13 +2,20 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { selectGalleryPhoto } from "./selectGalleryPhoto";
 
-const NativePhotoPicker = registerPlugin<{ pickImage: () => Promise<{ path: string; format: string }> }>("BritiumPhotoPicker");
+const NativePhotoPicker = registerPlugin<{
+  pickImage: () => Promise<{ path: string; format: string }>;
+  pickImages: (options: { limit: number; batchId: string }) => Promise<{ batchId: string; photos: { path: string; format: string }[] }>;
+  resumeImages: (options: { limit: number; batchId: string }) => Promise<{ batchId: string; photos: { path: string; format: string }[] }>;
+  finishBatch: (options: { batchId: string }) => Promise<void>;
+}>("BritiumPhotoPicker");
 
 export type NativePhotoRestoreContext = {
   kind: string;
   route?: string;
   prefix?: string;
   lineNo?: number;
+  lineNos?: number[];
+  batchId?: string;
   pickupId?: string;
   deliveryWayId?: string;
   createdAt?: number;
@@ -25,6 +32,7 @@ type RestoredPluginResult = {
 type RestoredNativePhoto = {
   context: NativePhotoRestoreContext;
   file?: File;
+  files?: File[];
   error?: string;
 };
 
@@ -34,6 +42,33 @@ export const NATIVE_PHOTO_RESTORED_EVENT = "britium:native-photo-restored";
 
 let restoreHandlerInstalled = false;
 let restoredNativePhoto: RestoredNativePhoto | null = null;
+let bulkRestoreInFlight = false;
+
+async function recoverPendingBulkPhoto() {
+  const context = readPendingContext();
+  if (bulkRestoreInFlight || restoredNativePhoto || context?.kind !== "pickup-bulk" || !context.batchId) return;
+  bulkRestoreInFlight = true;
+  try {
+    const result = await NativePhotoPicker.resumeImages({batchId:context.batchId,limit:context.lineNos?.length || 10});
+    // The user may have opened another picker while recovery was running.
+    if (readPendingContext()?.batchId !== context.batchId || result.batchId !== context.batchId) return;
+    const files = await galleryResultsToFiles(result,context.prefix || "pickup-bulk",context.lineNos?.length || 10);
+    if (readPendingContext()?.batchId !== context.batchId) return;
+    restoredNativePhoto = {context,files};
+    writePendingContext(undefined);
+    void NativePhotoPicker.finishBatch({batchId:context.batchId}).catch(() => {});
+    if (context.route) window.location.hash = context.route.startsWith("#") ? context.route : `#${context.route}`;
+    window.dispatchEvent(new CustomEvent(NATIVE_PHOTO_RESTORED_EVENT));
+  } catch (error: any) {
+    if (error?.code === "PHOTO_READ_FAILED" && readPendingContext()?.batchId === context.batchId) {
+      restoredNativePhoto = {context,error:"Unable to recover this photo batch. Please select it again; existing photos were kept."};
+      writePendingContext(undefined);
+      window.dispatchEvent(new CustomEvent(NATIVE_PHOTO_RESTORED_EVENT));
+    }
+    // No selection is cached while the picker is still open. The original
+    // result callback handles that case; failed recovery remains available.
+  } finally { bulkRestoreInFlight = false; }
+}
 
 export function isNativeAndroidApp(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
@@ -159,31 +194,42 @@ export function installNativePhotoRestoreHandler() {
     if (!context?.route) return;
     const targetHash = context.route.startsWith("#") ? context.route : `#${context.route}`;
     if (window.location.hash !== targetHash) window.location.hash = targetHash;
+    void recoverPendingBulkPhoto();
   }).catch((error) => {
     console.warn("Native app resume handler unavailable:", error);
   });
+  void recoverPendingBulkPhoto();
 
   void NativeApp.addListener("appRestoredResult", async (event) => {
-    if (event?.pluginId !== "Camera" || event?.methodName !== "getPhoto") return;
+    const bulk = event?.pluginId === "BritiumPhotoPicker" && event?.methodName === "pickImages";
+    if (!bulk && (event?.pluginId !== "Camera" || event?.methodName !== "getPhoto")) return;
 
     const context = readPendingContext();
     if (!context) return;
+    if (bulk && (event.success === false || event.data?.batchId !== context.batchId)) return;
+    if (!bulk && context.kind === "pickup-bulk") return;
 
     try {
       if (event.success === false) {
         throw new Error(event.error?.message || "Android could not restore the camera result.");
       }
       const prefix = context.prefix || "britium-restored-photo";
-      restoredNativePhoto = {
-        context,
-        file: await cameraResultToFile(event.data, prefix),
-      };
+      if (bulk) {
+        if (context.kind !== "pickup-bulk") return;
+        const files = await galleryResultsToFiles(event.data, prefix, context.lineNos?.length || 10);
+        if (readPendingContext()?.batchId !== context.batchId) return;
+        restoredNativePhoto = { context, files };
+        if (context.batchId) void NativePhotoPicker.finishBatch({batchId:context.batchId}).catch(() => {});
+      } else {
+        restoredNativePhoto = { context, file: await cameraResultToFile(event.data, prefix) };
+      }
       writePendingContext(undefined);
     } catch (error: any) {
       restoredNativePhoto = {
         context,
         error: String(error?.message || error || "Unable to restore camera photo."),
       };
+      if (bulk && readPendingContext()?.batchId === context.batchId) writePendingContext(undefined);
     }
 
     if (context.route && typeof window !== "undefined") {
@@ -321,6 +367,41 @@ export async function chooseNativeGalleryFile(
     return file;
   } catch (error) {
     if (shouldClearPendingAfterError(error)) writePendingContext(undefined);
+    throw error;
+  }
+}
+
+async function galleryResultsToFiles(result: any, prefix: string, limit: number): Promise<File[]> {
+  if (result?.cancelled) throw new Error("Photo selection was cancelled.");
+  if (result?.error) throw Object.assign(new Error(String(result.error)), {code:"PHOTO_READ_FAILED"});
+  if (!Array.isArray(result?.photos) || result.photos.length === 0) throw new Error("No photos were selected.");
+  if (result.photos.length > limit) throw new Error(`Select at most ${limit} photos for the empty parcel slots.`);
+  const files: File[] = [];
+  // Avoid reading all selected files into the WebView at once.
+  for (const photo of result.photos) files.push(await cameraResultToFile(photo, `${prefix}-${files.length + 1}`));
+  return files;
+}
+
+export async function chooseNativeGalleryFiles(prefix: string, context: NativePhotoRestoreContext, limit: number): Promise<File[]> {
+  if (!isNativeAndroidApp()) throw new Error("Native multi-photo selection requires the installed Android app.");
+  if (readPendingContext()) throw new Error("A previous photo selection is still open or recovering. Return to its pickup and wait for recovery before selecting another batch.");
+  const boundedLimit = Math.max(1, Math.min(10, Math.floor(limit)));
+  const batchId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  writePendingContext({ ...context, prefix, batchId });
+  try {
+    const result = await NativePhotoPicker.pickImages({ limit: boundedLimit, batchId });
+    if (result.batchId !== batchId) throw new Error("Photo batch does not match this selection. Existing photos were kept.");
+    const files = await galleryResultsToFiles(result, prefix, boundedLimit);
+    if (readPendingContext()?.batchId !== batchId) throw new Error("Photo selection changed before preparation completed. Existing photos were kept.");
+    writePendingContext(undefined);
+    void NativePhotoPicker.finishBatch({batchId}).catch(() => {});
+    return files;
+  } catch (error: any) {
+    if (readPendingContext()?.batchId === batchId && (shouldClearPendingAfterError(error) || ["PHOTO_READ_FAILED", "PHOTO_SELECTION_LIMIT", "UNAVAILABLE"].includes(error?.code) || /at most|No photos|does not match/i.test(error?.message || ""))) writePendingContext(undefined);
+    if (/unimplemented|not implemented|not available/i.test(String(error?.message || error))) {
+      writePendingContext(undefined);
+      throw new Error("Please upgrade the Rider APK to use reliable bulk photo selection. Existing saved photos are unchanged.");
+    }
     throw error;
   }
 }

@@ -4,6 +4,7 @@ import { supabase } from "../integrations/supabase/client";
 import { useAppState } from "../hooks/useAppState";
 import {
   chooseNativeGalleryFile,
+  chooseNativeGalleryFiles,
   consumeRestoredNativePhoto,
   peekRestoredNativePhoto,
   hasNativePhotoBridge,
@@ -200,39 +201,75 @@ export default function RiderPickupPhotoQrPortal() {
     setMessage("Applied " + weight + " kg to " + targets + " unsaved parcel(s). Confirm actual weights before saving.");
   }
 
-  async function stageContinuousPhotos(files: FileList | null) {
-    if (!files?.length || !selectedPickup?.can_open_workspace || bulkPreparing || actionBusy || photoWorkRef.current || saveWorkRef.current) return;
-    const stagePickupId = activePickupRef.current;
-    const available = parcels.filter((p) => !p.cargo_photo_url && !p.cargo_photo_file && !stagedPhotoFiles.current.has(p.line_no));
+  async function stageContinuousPhotos(files: FileList | File[] | null, pickupOverride?: PickupRow, targetLines?: number[]) {
+    if (!files?.length || !(pickupOverride || selectedPickup)?.can_open_workspace || photoWorkRef.current || saveWorkRef.current) return false;
+    const stagePickup = pickupOverride || selectedPickup;
+    const stagePickupId = safeText(stagePickup?.pickup_id || stagePickup?.pickup_way_id, "");
+    if (!stagePickupId || activePickupRef.current !== stagePickupId) return false;
+    const empty = parcelDraftsRef.current.filter((p) => !p.saved && !p.cargo_photo_url && !p.cargo_photo_file && !stagedPhotoFiles.current.has(p.line_no));
+    const available = targetLines ? targetLines.map(line => empty.find(p => p.line_no === line)) : empty;
+    if (files.length > 10) { setMessage("Select up to 10 photos at a time. Add the next batch after reviewing these photos."); return false; }
+    if (available.slice(0, files.length).some(p => !p)) { setMessage("A selected parcel already has evidence. Existing photos were kept; select the empty slots again."); return false; }
     if (files.length > available.length) {
       setMessage(`Selected ${files.length} photos but only ${available.length} empty parcel slots remain. Nothing staged.`);
-      return;
+      return false;
     }
     photoWorkRef.current = true;
     setBulkPreparing(true);
     let count = 0;
     try {
+      const preparedPhotos: { parcel: ParcelDraft; file: File; preview: string }[] = [];
       for (const original of Array.from(files)) {
-        const parcel = available[count];
+        const parcel = available[count]!;
+        setBulkProgress(`Preparing ${count + 1}/${files.length}: parcel ${parcel.line_no}`);
         const prepared = await compressPickupPhoto(original);
         if (activePickupRef.current !== stagePickupId) return;
         const preview = await readPhotoPreview(prepared);
         if (activePickupRef.current !== stagePickupId) return;
-        stagedPhotoFiles.current.set(parcel.line_no, prepared);
+        preparedPhotos.push({ parcel, file: prepared, preview });
+        count++;
+      }
+      // Commit the prepared batch together. A failed image must not strand a
+      // restored batch with some reserved lines already occupied on retry.
+      if (activePickupRef.current !== stagePickupId) return false;
+      for (const {parcel,file,preview} of preparedPhotos) {
+        stagedPhotoFiles.current.set(parcel.line_no, file);
         editParcel(parcel.line_no, {
-          cargo_photo_file: prepared,
-          cargo_photo_name: prepared.name,
+          cargo_photo_file: file,
+          cargo_photo_name: file.name,
           cargo_photo_data_url: preview,
           saved: false,
           photo_status: "photo_staged",
           photo_error: undefined,
         });
-        count++;
       }
       setMessage(`Staged ${count} photos in parcel order. Review each photo/parcel match, then select Upload All. No photos uploaded yet.`);
+      setBulkProgress(`${count} photos ready for review`);
+      return true;
     } catch (error: any) {
-      setMessage(`Staged ${count} photos. ${error?.message || "Photo preparation failed."} You can select more photos to continue.`);
+      setMessage(`No photos from this batch were staged. ${error?.message || "Photo preparation failed."} Retry the batch; existing photos were kept.`);
+      return false;
     } finally { photoWorkRef.current = false; setBulkPreparing(false); }
+  }
+
+  async function selectBulkPhotos() {
+    const pickup = selectedPickup;
+    if (!pickup?.can_open_workspace || photoWorkRef.current || saveWorkRef.current || actionBusy || bulkPreparing) return;
+    const pickupId = activePickupRef.current;
+    const lineNos = parcelDraftsRef.current.filter(p => !p.saved && !p.cargo_photo_url && !p.cargo_photo_file).slice(0, 10).map(p => p.line_no);
+    if (!lineNos.length) { setMessage("All parcel slots already have photos. Replace an incorrect photo on its own parcel card."); return; }
+    setBulkPreparing(true);
+    setMessage("Select up to 10 photos. You will return to this pickup to review them before uploading.");
+    try {
+      const files = await chooseNativeGalleryFiles("pickup-bulk", {
+        kind: "pickup-bulk", pickupId, lineNos,
+        route: window.location.hash.replace(/^#/, "") || "/pickup-verification",
+      }, lineNos.length);
+      if (activePickupRef.current !== pickupId) { setMessage("Pickup changed. No photos were attached to a different pickup; return to the original pickup and select again."); return; }
+      await stageContinuousPhotos(files, pickup, lineNos);
+    } catch (error: any) {
+      setMessage(error?.message || "Unable to select photos. Existing photos were kept.");
+    } finally { setBulkPreparing(false); }
   }
 
 
@@ -808,6 +845,7 @@ export default function RiderPickupPhotoQrPortal() {
   useEffect(() => {
     let cancelled = false;
     let recovering = false;
+    let recoveryRetry: number | undefined;
 
     async function recoverRestoredPhoto() {
       // Do not consume until the pickup is reloaded and the image is attached.
@@ -815,13 +853,19 @@ export default function RiderPickupPhotoQrPortal() {
       // restoration and pickup RPCs can finish in either order.
       if (recovering || cancelled) return;
       const restored = peekRestoredNativePhoto();
-      if (!restored || restored.context.kind !== "pickup-parcel") return;
+      if (!restored || !["pickup-parcel", "pickup-bulk"].includes(restored.context.kind)) return;
       if (restored.error) {
         setMessage(restored.error);
         consumeRestoredNativePhoto();
         return;
       }
-      if (!restored.file || !restored.context.lineNo || !restored.context.pickupId) return;
+      const bulk = restored.context.kind === "pickup-bulk";
+      if (!restored.context.pickupId || (bulk ? !restored.files?.length : !restored.file || !restored.context.lineNo)) return;
+      if (photoWorkRef.current || saveWorkRef.current) {
+        window.clearTimeout(recoveryRetry);
+        recoveryRetry = window.setTimeout(() => { void recoverRestoredPhoto(); }, 200);
+        return;
+      }
 
       recovering = true;
       try {
@@ -839,7 +883,9 @@ export default function RiderPickupPhotoQrPortal() {
         await selectPickup(pickup);
         if (cancelled) return;
         // onPhotoSelected retains the file in the parcel draft if upload fails.
-        await onPhotoSelected(Number(restored.context.lineNo), restored.file, pickup);
+        if (bulk) {
+          if (!await stageContinuousPhotos(restored.files!, pickup, restored.context.lineNos)) return;
+        } else await onPhotoSelected(Number(restored.context.lineNo), restored.file, pickup);
         consumeRestoredNativePhoto();
       } catch (error: any) {
         if (!cancelled) setMessage(`${error?.message || "Unable to restore the captured photo."} Please retry when connected; the recovered photo is still available.`);
@@ -856,6 +902,7 @@ export default function RiderPickupPhotoQrPortal() {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(recoveryRetry);
       window.removeEventListener(NATIVE_PHOTO_RESTORED_EVENT, onRestored);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1115,11 +1162,14 @@ export default function RiderPickupPhotoQrPortal() {
                       <p className="mt-2 text-xs font-semibold text-slate-600">Normal: 1-3 kg; special: 1-5 kg. Saved parcels remain unchanged. Use the shared weight only when all selected parcels actually weigh the same.</p>
                     </div>
                     <div className="mb-3 rounded-xl border border-emerald-200 bg-white p-3">
-                      <label className="block text-sm font-black text-emerald-900">Continuous photo selection (50+ parcels)</label>
-                      <input type="file" multiple accept="image/*" disabled={!selectedPickup?.can_open_workspace || bulkPreparing || uploadingLine !== null || savingLine !== null || !!actionBusy}
-                        onChange={(event) => { const files = event.currentTarget.files; void stageContinuousPhotos(files); event.currentTarget.value = ""; }}
-                        className="mt-2 block w-full text-sm" />
-                      <p className="mt-2 text-xs font-semibold text-slate-600">Photos are assigned to empty parcel lines in order across all pages. Review the matches before Upload All. Record actual weights: normally 1-3 kg, or 1-5 kg for eligible special customers; exceptions require review.</p>
+                      <label className="block text-sm font-black text-emerald-900">Bulk photo selection (up to 10 at a time)</label>
+                      {isNativeAndroidApp() ? <button type="button" onClick={() => void selectBulkPhotos()}
+                        disabled={!selectedPickup?.can_open_workspace || bulkPreparing || uploadingLine !== null || savingLine !== null || !!actionBusy}
+                        className="mt-2 rounded-xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-40">{tx("Select Multiple Photos", "ဓာတ်ပုံများ ရွေးရန်")}</button> :
+                        <input type="file" multiple accept="image/*" disabled={!selectedPickup?.can_open_workspace || bulkPreparing || uploadingLine !== null || savingLine !== null || !!actionBusy}
+                          onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; void stageContinuousPhotos(files); }}
+                          className="mt-2 block w-full text-sm" />}
+                      <p className="mt-2 text-xs font-semibold text-slate-600">Add photos in batches of up to 10 for larger pickups. Photos fill empty parcel lines in selection order across all pages. Review every match before Approve & Upload All Photos, then Save All Ready Parcels. Record actual parcel weights.</p>
                       {bulkProgress && <p role="status" className="mt-2 font-bold text-blue-700">{bulkProgress}</p>}
                     </div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
