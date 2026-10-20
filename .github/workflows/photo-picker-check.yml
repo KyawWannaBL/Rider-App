@@ -3,7 +3,10 @@ name: Verify Android photo picker
 on:
   pull_request:
     paths:
-      - 'src/lib/nativePhoto.ts'
+      - 'src/**'
+      - 'package.json'
+      - 'scripts/test-rider-*.mjs'
+      - 'tests/**'
       - 'src/lib/selectGalleryPhoto.ts'
       - 'android-assets/photo-picker/**'
       - 'scripts/*photo-picker*'
@@ -44,6 +47,7 @@ jobs:
           node scripts/test-native-bulk-photo.mjs
           npx playwright-core install --with-deps chromium
           node scripts/test-bulk-pickup-browser.mjs
+          node scripts/test-pickup-photo-browser.mjs
           npm run build
           rm -rf dist/downloads
       - name: Configure native Android project

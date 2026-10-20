@@ -110,6 +110,7 @@ export default function DeliveryPage() {
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [activeActions, setActiveActions] = useState<Record<string, boolean>>({});
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const signatureRevision = useRef(0);
   const drawingRef = useRef(false);
   const drawnSignatureRef = useRef<File | null>(null);
   const [form, setForm] = useState({
@@ -187,11 +188,18 @@ export default function DeliveryPage() {
   }
 
   function selectJob(job: any) {
-    selectedDeliveryRef.current = String(job.delivery_way_id || "");
+    const deliveryId = String(job.delivery_way_id || "");
+    const changed = selectedDeliveryRef.current !== deliveryId;
+    selectedDeliveryRef.current = deliveryId;
     setSelected(job);
+    // A status refresh must not discard this stop's staged proof or signature.
+    if (!changed) return;
     setFailureMode(false);
     setSignatureOnBehalf(false);
     setGeofenceRepairAvailable(false);
+    setDeliveryProgress("idle");
+    setDeliveryResult("");
+    setConfirmAction(null);
     resetProofs();
     setForm((current) => ({
       ...current,
@@ -202,6 +210,8 @@ export default function DeliveryPage() {
       remarks: "",
       signature_name: job.recipient_name || job.receiver_name || "",
       failed_reason: "",
+      payment_method: "CASH",
+      reschedule_date: "",
     }));
   }
 
@@ -214,7 +224,10 @@ export default function DeliveryPage() {
       }),
       (supabase as any).rpc("be_field_delivery_failure_reasons_v92"),
     ]);
-    if (jobsResult.error) return setMsg(jobsResult.error.message);
+    if (jobsResult.error || jobsResult.data?.ok === false) {
+      setMsg(jobsResult.error?.message || jobsResult.data?.error || jobsResult.data?.message || tx("Unable to load assigned deliveries.","တာဝန်ပေးထားသော ပို့ဆောင်မှုများကို ဖွင့်မရပါ။"));
+      return;
+    }
 
     const enterpriseReasons = Array.isArray(reasonResult.data?.reasons) ? reasonResult.data.reasons : [];
     if (!reasonResult.error && enterpriseReasons.length) {
@@ -286,7 +299,7 @@ export default function DeliveryPage() {
     else if (action==="gps") ok=await sendGps();
     else if (action==="fix_dropoff") ok=await correctDropoffToCurrentGps();
 
-    if (ok !== false) markActionActive(action);
+    if (ok === true) markActionActive(action);
     return ok;
   }
 
@@ -386,6 +399,7 @@ export default function DeliveryPage() {
     if (!canvas) return;
     event.preventDefault();
     if (busy) return;
+    signatureRevision.current++;
     drawnSignatureRef.current = null;
     drawingRef.current = true;
     const p = canvasPoint(event);
@@ -414,6 +428,7 @@ export default function DeliveryPage() {
   }
 
   function clearSignatureCanvas() {
+    signatureRevision.current++;
     drawnSignatureRef.current = null;
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
@@ -432,13 +447,17 @@ export default function DeliveryPage() {
       if (pixels[i] > 0) { hasInk = true; break; }
     }
     if (!hasInk) return null;
+    const deliveryId = selectedDeliveryRef.current;
+    const revision = signatureRevision.current;
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (deliveryId !== selectedDeliveryRef.current || revision !== signatureRevision.current) return null;
     drawnSignatureRef.current = blob ? new File([blob], "customer-signature.png", { type: "image/png" }) : null;
     return drawnSignatureRef.current;
   }
 
   function chooseSignature(file?: File) {
     if (!file || busy) return;
+    signatureRevision.current++;
     setSignatureFile(file);
     setSignaturePreview(URL.createObjectURL(file));
   }
@@ -566,7 +585,15 @@ export default function DeliveryPage() {
     setDeliveryProgress("validating");
     setDeliveryResult(tx("Checking proof, signature and payment...","ဓာတ်ပုံ၊ လက်မှတ်နှင့် ငွေပေးချေမှုကို စစ်ဆေးနေပါသည်..."));
 
-    const drawnSignature = await signatureCanvasFile();
+    const signatureVersion = signatureRevision.current;
+    let drawnSignature: File | null;
+    try {
+      drawnSignature = await signatureCanvasFile();
+    } catch (error: any) {
+      const message = error?.message || tx("Unable to read the customer signature. Please draw it again.","Customer လက်မှတ်ကို ဖတ်မရပါ။ ပြန်လည်ရေးထိုးပါ။");
+      setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
+    }
+    if (selectedDeliveryRef.current !== String(selected.delivery_way_id || "") || signatureVersion !== signatureRevision.current) return false;
     if (!signatureFile && !drawnSignature) {
       const message = tx(
         "Capture or upload the customer signature before confirming delivery.",
@@ -750,14 +777,14 @@ export default function DeliveryPage() {
   }
 
   async function failDelivery() {
-    if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
-    if (form.failed_reason === "OTHER" && !form.remarks.trim()) return setMsg(tx("Please type the failed reason.", "မအောင်မြင်သည့်အကြောင်းပြချက်ကို ရေးပါ။"));
+    if (!selected) { setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။")); return false; }
+    if (form.failed_reason === "OTHER" && !form.remarks.trim()) { setMsg(tx("Please type the failed reason.", "မအောင်မြင်သည့်အကြောင်းပြချက်ကို ရေးပါ။")); return false; }
     if (form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE") {
-      if (!form.reschedule_date) return setMsg(tx("Choose the customer’s dedicated delivery date.","Customer သတ်မှတ်ထားသော ပို့ဆောင်ရက်ကို ရွေးပါ။"));
+      if (!form.reschedule_date) { setMsg(tx("Choose the customer’s dedicated delivery date.","Customer သတ်မှတ်ထားသော ပို့ဆောင်ရက်ကို ရွေးပါ။")); return false; }
       const today = new Date();
       const selectedDate = new Date(`${form.reschedule_date}T00:00:00`);
       if (selectedDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
-        return setMsg(tx("Dedicated delivery date cannot be in the past.","သတ်မှတ်ပို့ဆောင်ရက်သည် ယခင်ရက် မဖြစ်ရပါ။"));
+        setMsg(tx("Dedicated delivery date cannot be in the past.","သတ်မှတ်ပို့ဆောင်ရက်သည် ယခင်ရက် မဖြစ်ရပါ။")); return false;
       }
       setBusy(true);
       try {
@@ -772,15 +799,16 @@ export default function DeliveryPage() {
         if (data?.ok === false) throw new Error(data?.error || "Unable to reschedule delivery.");
         setMsg(`${selected.delivery_way_id}: rescheduled for ${form.reschedule_date}. It is held from Wayplan assignment until that date.`);
         await load(selected.delivery_way_id);
+        return true;
       } catch (error: any) {
         setMsg(error?.message || "Unable to reschedule delivery.");
+        return false;
       } finally {
         setBusy(false);
       }
-      return;
     }
     const gps = await currentGps();
-    if (!selected) return;
+    if (!selected) return false;
     setBusy(true);
     try {
       const { data, error } = await (supabase as any).rpc("be_rider_wayplan_action", {
@@ -800,26 +828,27 @@ export default function DeliveryPage() {
       if (data?.ok === false) throw new Error(data?.error || "Failed delivery submission failed.");
       setMsg(`${selected.delivery_way_id}: failed delivery saved. Enterprise synchronized Warehouse return queue, Customer Service follow-up, Finance exception review, Operations exception board and RTO tracking where applicable.`);
       await load(selected.delivery_way_id);
+      return true;
     } catch (error: any) {
       setMsg(error?.message || "Failed delivery submission failed.");
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
   async function failAndReturnToWarehouse() {
-    if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
+    if (!selected) { setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။")); return false; }
     if (!failureMode) {
-      return setMsg(tx("Click Failed Delivery first, then choose a failed reason.","ပို့ဆောင်မှုမအောင်မြင် ကို အရင်နှိပ်ပြီး အကြောင်းပြချက်ကို ရွေးပါ။"));
+      setMsg(tx("Click Failed Delivery first, then choose a failed reason.","ပို့ဆောင်မှုမအောင်မြင် ကို အရင်နှိပ်ပြီး အကြောင်းပြချက်ကို ရွေးပါ။")); return false;
     }
     if (!form.failed_reason) {
-      return setMsg(tx("Choose a failed delivery reason.","ပို့ဆောင်မှုမအောင်မြင်ရသည့် အကြောင်းပြချက်ကို ရွေးပါ။"));
+      setMsg(tx("Choose a failed delivery reason.","ပို့ဆောင်မှုမအောင်မြင်ရသည့် အကြောင်းပြချက်ကို ရွေးပါ။")); return false;
     }
 
-    if (form.failed_reason === "OTHER" && !form.remarks.trim()) return setMsg(tx("Please type the failed reason.", "မအောင်မြင်သည့်အကြောင်းပြချက်ကို ရေးပါ။"));
+    if (form.failed_reason === "OTHER" && !form.remarks.trim()) { setMsg(tx("Please type the failed reason.", "မအောင်မြင်သည့်အကြောင်းပြချက်ကို ရေးပါ။")); return false; }
     if (form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE") {
-      await failDelivery();
-      return;
+      return await failDelivery();
     }
 
     const gps=await currentGps();
@@ -847,18 +876,21 @@ export default function DeliveryPage() {
       ));
       setFailureMode(false);
       await load(selected.delivery_way_id);
+      return true;
     } catch(error:any) {
       setMsg(error?.message || "Unable to return parcel to Warehouse.");
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
   async function sendGps() {
-    if (!selected) return setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));
+    if (!selected) { setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။")); return false; }
     const gps = await currentGps();
-    if (!gps.gps_lat) return setMsg(tx("GPS unavailable or permission denied.","GPS မရရှိနိုင်ပါ သို့မဟုတ် ခွင့်ပြုချက် မပေးထားပါ။"));
+    if (!gps.gps_lat) { setMsg(tx("GPS unavailable or permission denied.","GPS မရရှိနိုင်ပါ သို့မဟုတ် ခွင့်ပြုချက် မပေးထားပါ။")); return false; }
     setMsg(`Current GPS: ${gps.gps_lat.toFixed(6)}, ${gps.gps_lng.toFixed(6)}. It will be attached to delivery proof.`);
+    return true;
   }
 
   const activeCount = useMemo(
