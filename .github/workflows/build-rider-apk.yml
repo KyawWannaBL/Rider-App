@@ -83,6 +83,16 @@ jobs:
       - name: Build packaged Rider web application
         run: |
           set -euo pipefail
+          # Stamp this build before Vite copies public metadata into the APK.
+          cat > public/rider-release.json <<EOF
+          {
+            "build": ${GITHUB_RUN_NUMBER},
+            "version": "1.0.${GITHUB_RUN_NUMBER}",
+            "versionCode": $((500000 + GITHUB_RUN_NUMBER)),
+            "apk": "/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk",
+            "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
           npm run build
           # Never package the previous downloadable APK/AAB inside the new APK.
           # Vite copies public/** into dist/**; keeping dist/downloads would recursively
@@ -353,15 +363,6 @@ jobs:
           mkdir -p public/downloads
           cp Britium-Express-Rider.apk public/downloads/Britium-Express-Rider.apk
           cp Britium-Express-Rider.apk "public/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk"
-          cat > public/rider-release.json <<EOF
-          {
-            "build": ${GITHUB_RUN_NUMBER},
-            "version": "1.0.${GITHUB_RUN_NUMBER}",
-            "versionCode": $((500000 + GITHUB_RUN_NUMBER)),
-            "apk": "/downloads/Britium-Express-Rider-Build${GITHUB_RUN_NUMBER}.apk",
-            "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
-          EOF
 
       - name: Upload signed Rider release artifacts
         uses: actions/upload-artifact@v4
