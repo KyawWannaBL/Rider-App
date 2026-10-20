@@ -5,6 +5,9 @@ on:
     paths:
       - 'src/**'
       - 'package.json'
+      - 'package-lock.json'
+      - 'supabase/migrations/**'
+      - 'scripts/fixtures/**'
       - 'scripts/test-rider-*.mjs'
       - 'scripts/test-pickup-*.mjs'
       - 'tests/**'
@@ -47,6 +50,7 @@ jobs:
         run: |
           node scripts/test-native-bulk-photo.mjs
           npx playwright-core install --with-deps chromium
+          npm run test:pickup-canonical
           node scripts/test-bulk-pickup-browser.mjs
           node scripts/test-pickup-photo-browser.mjs
           npm run test:pickup-recovery

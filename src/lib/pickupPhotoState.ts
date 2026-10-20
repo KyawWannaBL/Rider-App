@@ -12,6 +12,9 @@ export type CapturePhotoDraft = {
   review_note?: string;
   reviewed_photo_url?: string;
   draft_revision?: number;
+  // Only populated from a live snapshot/save response; never persisted as IDB authority.
+  authoritative_delivery_way_id?: string;
+  authoritative_waybill_no?: string;
 };
 
 export function isCurrentParcelDraft(current: CapturePhotoDraft | undefined, submitted: CapturePhotoDraft): boolean {
@@ -53,11 +56,20 @@ export function mergeCaptureParcels<T extends CapturePhotoDraft>(generated: T[],
     } : draft;
     const hasDraft = local && (!local.saved || !server || !(Number(server.parcel_weight) > 0 && Boolean(photo))) && Boolean(local.cargo_photo_file || local.cargo_photo_url ||
       local.cargo_photo_data_url || local.parcel_weight || local.remarks);
-    return (hasDraft ? { ...remote, ...local,
+    const merged = (hasDraft ? { ...remote, ...local,
       review_status: server ? status : local.review_status,
       review_note: server ? remote.review_note : local.review_note,
       reviewed_photo_url: server ? photo : local.reviewed_photo_url,
       saved: false,
     } : remote) as T;
+    return {
+      ...merged,
+      // A draft can retain photo/weight edits, but cannot replace server identifiers.
+      ...(server?.delivery_way_id ? { delivery_way_id: server.delivery_way_id } : {}),
+      ...(server ? { waybill_no: server.waybill_no || server.delivery_way_id || (merged as any).waybill_no } : {}),
+      ...(server?.temp_qr_code ? { temp_qr_code: server.temp_qr_code } : {}),
+      authoritative_delivery_way_id: server ? server.delivery_way_id || undefined : local?.authoritative_delivery_way_id,
+      authoritative_waybill_no: server ? server.waybill_no || undefined : local?.authoritative_waybill_no,
+    } as T;
   });
 }
