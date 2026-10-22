@@ -1,5 +1,10 @@
-const fixtureBytes=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j9M0AAAAASUVORK5CYII='),c=>c.charCodeAt(0));
-const fixturePhoto=(file:File)=>new File([fixtureBytes],file.name,{type:file.type||'image/png'});
+const fixturePhoto=(file:File)=>{
+  let hash=2166136261; for(const c of file.name) hash=Math.imul(hash^c.charCodeAt(0),16777619)>>>0;
+  const canvas=document.createElement('canvas'); canvas.width=4; canvas.height=4;
+  const context=canvas.getContext('2d')!; context.fillStyle=`rgb(${hash&255},${(hash>>>8)&255},${(hash>>>16)&255})`; context.fillRect(0,0,4,4);
+  const bytes=Uint8Array.from(atob(canvas.toDataURL('image/png').split(',')[1]),c=>c.charCodeAt(0));
+  return new File([bytes],file.name,{type:file.type||'image/png'});
+};
 export const NATIVE_PHOTO_RESTORED_EVENT = 'britium:native-photo-restored';
 const fixture = {pending:null as null | ((file:File)=>void),context:null as any,restored:null as any};
 (window as any).__nativePhotoFixture = fixture;

@@ -18,6 +18,7 @@ import { mergeCaptureParcels, canReuseUploadedPhoto, needsPhotoReplacement, isCu
 import { confirmPhotoUpload } from "@/lib/proofUploadState";
 import { preparePickupPhoto } from "@/lib/pickupPhotoPreparation";
 import { loadPickupDrafts, upsertPickupDrafts } from "@/lib/pickupDraftStore";
+import { existingPhotoIndex, photoContentHash, remotePhotoHash, repeatedPhotoLines } from "@/lib/pickupPhotoIdentity";
 
 type PickupRow = Record<string, any>;
 
@@ -140,6 +141,7 @@ export default function RiderPickupPhotoQrPortal() {
   const [specialRange, setSpecialRange] = useState(false);
   const [replaceUnsavedWeights, setReplaceUnsavedWeights] = useState(false);
   const stagedPhotoFiles = useRef<Map<number, File>>(new Map());
+  const photoHashCache = useRef(new Map<string, Promise<string>>());
   const activePickupRef = useRef("");
   const photoWorkRef = useRef(false);
   const saveWorkRef = useRef(false);
@@ -231,22 +233,25 @@ export default function RiderPickupPhotoQrPortal() {
     const empty = parcelDraftsRef.current.filter((p) => !p.saved && !p.cargo_photo_url && !p.cargo_photo_file && !stagedPhotoFiles.current.has(p.line_no));
     const available = targetLines ? targetLines.map(line => empty.find(p => p.line_no === line)) : empty;
     if (files.length > 10) { setMessage("Select up to 10 photos at a time. Add the next batch after reviewing these photos."); return false; }
-    if (available.slice(0, files.length).some(p => !p)) { setMessage("A selected parcel already has evidence. Existing photos were kept; select the empty slots again."); return false; }
-    if (files.length > available.length) {
-      setMessage(`Selected ${files.length} photos but only ${available.length} empty parcel slots remain. Nothing staged.`);
-      return false;
-    }
     photoWorkRef.current = true;
     setBulkPreparing(true);
     let count = 0;
+    const duplicates: string[] = [];
     const preparedPhotos: { parcel: ParcelDraft; file: File; preview: string }[] = [];
     const committedPreviews = new Set<string>();
     try {
+      setBulkProgress("Checking existing parcel photos before adding this batch...");
+      const identities = await existingPhotoIndex(parcelDraftsRef.current, url => remotePhotoHash(url, photoHashCache.current));
       for (const original of Array.from(files)) {
-        const parcel = available[count]!;
-        setBulkProgress(`Preparing ${count + 1}/${files.length}: parcel ${parcel.line_no}`);
         const prepared = await compressPickupPhoto(original);
         if (activePickupRef.current !== stagePickupId) return;
+        const hash = await photoContentHash(prepared);
+        const duplicate = identities.get(hash);
+        if (duplicate !== undefined) { duplicates.push(`${original.name}: parcel ${duplicate}`); continue; }
+        const parcel = available[count];
+        if (!parcel) throw new Error("Not enough empty parcel slots for the new photos. Existing photos were kept.");
+        setBulkProgress(`Preparing new photo ${count + 1}: parcel ${parcel.line_no}`);
+        identities.set(hash, parcel.line_no);
         const preview = photoPreview(prepared, stagePickupId, parcel.line_no);
         if (activePickupRef.current !== stagePickupId) return;
         preparedPhotos.push({ parcel, file: prepared, preview });
@@ -260,7 +265,7 @@ export default function RiderPickupPhotoQrPortal() {
         cargo_photo_path: undefined, saved: false, photo_status: "photo_staged", photo_error: undefined,
         draft_revision: (parcel.draft_revision || 0) + 1,
       }));
-      await persistDraftRows(staged, stagePickupId);
+      if (staged.length) await persistDraftRows(staged, stagePickupId);
       if (activePickupRef.current !== stagePickupId) return false;
       for (const parcel of staged) {
         commitPhotoPreview(parcel.cargo_photo_data_url!, stagePickupId, parcel.line_no);
@@ -268,7 +273,7 @@ export default function RiderPickupPhotoQrPortal() {
         stagedPhotoFiles.current.set(parcel.line_no, parcel.cargo_photo_file);
         updateParcel(parcel.line_no, parcel, false);
       }
-      setMessage(`Staged ${count} photos in parcel order. Review each photo/parcel match, then select Upload All. No photos uploaded yet.`);
+      setMessage(`Staged ${count} photos in parcel order.${duplicates.length ? ` Skipped ${duplicates.length} duplicate photo(s): ${duplicates.join("; ")}.` : ""} Review each photo/parcel match, then select Upload All. No photos uploaded yet.`);
       setBulkProgress(`${count} photos ready for review`);
       return true;
     } catch (error: any) {
@@ -601,6 +606,9 @@ export default function RiderPickupPhotoQrPortal() {
     let pendingPreview = "";
     try {
       const prepared = await compressPickupPhoto(file);
+      const identities = await existingPhotoIndex(parcelDraftsRef.current.filter(row => row.line_no !== lineNo), url => remotePhotoHash(url, photoHashCache.current));
+      const duplicate = identities.get(await photoContentHash(prepared));
+      if (duplicate !== undefined) throw new Error(`This photo is already attached to parcel ${duplicate}. Existing photos were kept; choose the correct parcel photo.`);
       const preview = photoPreview(prepared, pickupId, lineNo);
       pendingPreview = preview;
       if (!stillCurrent()) return;
@@ -633,6 +641,7 @@ export default function RiderPickupPhotoQrPortal() {
     updateParcel(parcel.line_no, { photo_status: "photo_uploading", photo_error: undefined, saved: false });
     try {
       const url = await uploadPhotoFile(parcel.line_no, file, pickupId, parcel.delivery_way_id);
+      photoHashCache.current.set(url, photoContentHash(file));
       if (activePickupRef.current !== pickupId) throw new Error("Pickup changed while uploading. Return to the original pickup and retry the same photo.");
       const current = parcelDraftsRef.current.find(row => row.line_no === parcel.line_no);
       if (!isCurrentParcelDraft(current, parcel) || current?.cargo_photo_file !== file) throw new Error("Photo changed during upload. The newer draft has been kept.");
@@ -779,6 +788,9 @@ export default function RiderPickupPhotoQrPortal() {
     }
     setActionBusy("verify");
     try {
+      const duplicates = await repeatedPhotoLines(parcelDraftsRef.current, url => remotePhotoHash(url, photoHashCache.current));
+      if (activePickupRef.current !== pickupId) throw new Error("Pickup changed during photo verification. Return to the original pickup and retry.");
+      if (duplicates.length) throw new Error(`Duplicate parcel photos found at lines ${duplicates.join(", ")}. Replace the incorrect photos on their parcel cards before submitting verification.`);
       const { data, error } = await (supabase as any).rpc("be_field_team_pickup_action", {
         p_payload: { pickup_id: pickupId, action: "verify" },
       });

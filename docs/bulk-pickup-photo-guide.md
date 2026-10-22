@@ -26,6 +26,12 @@ After an Enterprise review, use **Refresh** in the Rider pickup workspace to loa
 
 Open the correct parcel card, use its camera or gallery control, review the new preview, approve/upload it, then save that parcel again. When an uploaded photo already exists, confirm the replacement only after checking the parcel number. A failed replacement keeps the previous photo available. Enterprise review may be required again for the replacement.
 
+## Repeated photo selections
+
+The duplicate-photo update compares image content, including previously saved pickup photos. Re-selecting an image under another filename does not add another parcel. A batch containing 10 selections with two already present adds only eight new photos, without leaving gaps. The result names the existing parcel for each skipped photo. Different images sharing a filename remain allowed.
+
+Before pickup verification, the app also checks older saved photos for duplicates and identifies matching parcel lines. Open those cards, compare them with the actual parcels, and replace the incorrect photo with its missing original. A saved count such as 88/88 does not prove that 88 different parcel photos exist. Existing records and images are preserved; the app does not choose which duplicate line is correct or delete it automatically.
+
 ## Recovering work from an older build
 
 The update cannot reconstruct a photo that the older app never uploaded and lost from memory. Existing server photos remain available. Reselect only the missing originals against their correct parcel numbers, restore their actual weights, upload and save them. Do not change the already saved parcel/photo matches merely to fill a count.

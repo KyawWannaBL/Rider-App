@@ -1,3 +1,4 @@
+import {uniquePhoto} from './fixtures/unique-photo.mjs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {createServer} from 'vite';
@@ -19,7 +20,7 @@ try {
  for(const [index,pickup] of ['P1020-TST-001','P1020-TST-002'].entries()){
   await page.locator('select').first().selectOption(pickup);
   await card.getByText('No cargo photo yet',{exact:true}).waitFor();
-  await card.locator('input[type=file]').nth(1).setInputFiles({name:`proof-${index}.png`,mimeType:'image/png',buffer:png});
+  await card.locator('input[type=file]').nth(1).setInputFiles({name:`proof-${index}.png`,mimeType:'image/png',buffer:uniquePhoto(index)});
   await card.getByRole('button',{name:'Approve Photo & Upload',exact:true}).waitFor();
   await card.locator('input[inputmode=decimal]').fill('2');
   await card.getByRole('button',{name:'Save Photo & Parcel',exact:true}).click();

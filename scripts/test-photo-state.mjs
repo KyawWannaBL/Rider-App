@@ -7,7 +7,7 @@ import ts from 'typescript';
 // CI still includes Node 20. Compile the small pure state modules before node:test.
 const dir=await fs.mkdtemp(path.join(os.tmpdir(),'britium-photo-tests-'));
 try {
-  const names=['pickupPhotoState','deliveryPhotoState','proofUploadState'];
+  const names=['pickupPhotoState','deliveryPhotoState','proofUploadState','pickupPhotoIdentity'];
   for(const name of names){
     const source=await fs.readFile(`src/lib/${name}.ts`,'utf8');
     const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}});

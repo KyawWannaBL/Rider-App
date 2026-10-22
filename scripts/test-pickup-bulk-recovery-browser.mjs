@@ -1,3 +1,4 @@
+import {uniquePhoto} from './fixtures/unique-photo.mjs';
 import assert from 'node:assert/strict';import path from 'node:path';
 import {createServer} from 'vite';import react from '@vitejs/plugin-react-swc';import {chromium} from 'playwright-core';
 const server=await createServer({configFile:false,optimizeDeps:{entries:['tests/browser/index.html']},plugins:[react()],resolve:{alias:[{find:'@/lib/nativePhoto',replacement:path.resolve('tests/browser/mockNativePhoto.ts')},{find:'../integrations/supabase/client',replacement:path.resolve('tests/browser/mockSupabase.ts')},{find:'@',replacement:path.resolve('src')}]},server:{host:'127.0.0.1',port:4187,strictPort:true}});await server.listen();
@@ -9,9 +10,9 @@ try{
  await page.goto('http://127.0.0.1:4187/tests/browser/index.html?recovery=1');await page.locator('[data-parcel-line="1"]').waitFor();
  await page.getByRole('button',{name:'Apply Weight to All Unsaved Parcels',exact:true}).click();
  const bulk=page.locator('input[type=file][multiple]');
- for(let line=1;line<=97;line+=10){const count=Math.min(10,98-line);await bulk.setInputFiles(Array.from({length:count},(_,i)=>({name:`parcel-${line+i}.png`,mimeType:'image/png',buffer:png})));await page.waitForFunction(()=>!document.querySelector('input[type=file][multiple]').disabled);await page.getByText(`Staged ${count} photos in parcel order.`,{exact:false}).waitFor();}
+ for(let line=1;line<=97;line+=10){const count=Math.min(10,98-line);await bulk.setInputFiles(Array.from({length:count},(_,i)=>({name:`parcel-${line+i}.png`,mimeType:'image/png',buffer:uniquePhoto(line+i)})));await page.waitForFunction(()=>!document.querySelector('input[type=file][multiple]').disabled);await page.getByText(`Staged ${count} photos in parcel order.`,{exact:false}).waitFor();}
  for(let i=0;i<4;i++)await page.getByRole('button',{name:'Next',exact:true}).click();
- for(const line of [98,99]){const card=page.locator(`[data-parcel-line="${line}"]`);await card.locator('input[type=file]').nth(1).setInputFiles({name:`parcel-${line}.png`,mimeType:'image/png',buffer:png});await card.getByRole('button',{name:'Approve Photo & Upload',exact:true}).waitFor();await card.locator('input[inputmode=decimal]').fill('4');}
+ for(const line of [98,99]){const card=page.locator(`[data-parcel-line="${line}"]`);await card.locator('input[type=file]').nth(1).setInputFiles({name:`parcel-${line}.png`,mimeType:'image/png',buffer:uniquePhoto(line)});await card.getByRole('button',{name:'Approve Photo & Upload',exact:true}).waitFor();await card.locator('input[inputmode=decimal]').fill('4');}
  await page.reload();await page.locator('[data-parcel-line="1"]').waitFor();
  async function assertAllEvidence(){let weights=[];for(let p=0;p<5;p++){const cards=page.locator('[data-parcel-line]');for(let i=0;i<await cards.count();i++){const card=cards.nth(i);assert.ok(await card.getByAltText(/^Cargo parcel /).count(),'Every selected photo must survive reload');weights.push(await card.locator('input[inputmode=decimal]').inputValue());}if(p<4)await page.getByRole('button',{name:'Next',exact:true}).click();}assert.deepEqual(weights,[...Array(97).fill('2'),'4','4']);for(let p=0;p<4;p++)await page.getByRole('button',{name:'Previous',exact:true}).click();}
  await assertAllEvidence();console.log('PASS 99 photos + 97×2kg / 2×4kg survive full reload before upload');
