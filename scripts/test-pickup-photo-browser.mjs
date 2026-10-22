@@ -1,3 +1,4 @@
+import {uniquePhoto} from './fixtures/unique-photo.mjs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {createServer} from 'vite';
@@ -22,7 +23,7 @@ try {
     const first=page.locator('[data-parcel-line="1"]'), second=page.locator('[data-parcel-line="2"]');
     await first.waitFor();
     for(const [i,card] of [first,second].entries()){
-      await card.locator('input[type=file]').nth(1).setInputFiles({name:`proof-${i}.png`,mimeType:'image/png',buffer:png});
+      await card.locator('input[type=file]').nth(1).setInputFiles({name:`proof-${i}.png`,mimeType:'image/png',buffer:uniquePhoto(i)});
       await card.getByRole('button',{name:'Approve Photo & Upload',exact:true}).waitFor();
       await card.locator('input[inputmode=decimal]').fill('2');
     }
