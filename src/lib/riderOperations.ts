@@ -1,4 +1,4 @@
-import { recordedPaymentSummary } from "./deliveryPayments";
+import { pendingCashToDeposit, recordedPaymentSummary } from "./deliveryPayments";
 import { supabase } from "@/integrations/supabase/client";
 import type {
   Dispatch,
@@ -255,9 +255,7 @@ export async function loadRiderSettlement(): Promise<{ settlement: Settlement; r
   const deliveryFees = lines.reduce((s, x) => s + x.deliveryFee, 0);
   const riderCommission = lines.reduce((s, x) => s + x.riderCommission, 0);
   const totalVariance = lines.reduce((s, x) => s + x.variance, 0);
-  const cashToDeposit = rows.reduce((sum: number, row: any, index: number) => {
-    return sum + recordedPaymentSummary(row).cash;
-  }, 0);
+  const cashToDeposit = rows.reduce((sum: number, row: any) => sum + pendingCashToDeposit(row), 0);
 
   const aggregateStatus: SettlementStatus =
     lines.length > 0 && lines.every((line) => line.status === "DEPOSITED") ? "DEPOSITED" :

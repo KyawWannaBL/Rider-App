@@ -55,3 +55,16 @@ test('handover queue reported allocations and amounts retain the original split'
   assert.equal(api.initialPaymentRows(row,100)[1].method,'KBZ_PAY');
   assert.deepEqual(api.initialPaymentRows({authoritative_cod_collected:100},100),[]);
 });
+test('cash to deposit includes only unsettled cash and preserves settled collection history',()=>{
+  assert.equal(typeof api.pendingCashToDeposit,'function');
+  const mixed={cod_collected:100,payment_allocations:[{method:'CASH',amount:30,reference:''},{method:'WAVE_PAY',amount:70,reference:'W'}]};
+  assert.equal(api.pendingCashToDeposit({...mixed,cod_settlement_status:'PENDING'}),30);
+  for(const status of ['SETTLED','CLEARED','FINANCE_SETTLED','DEPOSITED',' settled ']) {
+    const row={...mixed,cod_settlement_status:status};
+    assert.equal(api.pendingCashToDeposit(row),0,`${status} must not request another deposit`);
+    assert.equal(api.recordedPaymentSummary(row).cash,30,'collection history remains unchanged');
+    assert.equal(api.recordedPaymentSummary(row).method,'MIXED');
+  }
+  assert.equal(api.pendingCashToDeposit({cod_collected:100,cod_settlement_status:'PENDING',payment_mode:'MIXED'}),0,'unknown breakdown is not cash');
+  assert.equal(api.pendingCashToDeposit({cod_collected:100,cod_settlement_status:'SUBMITTED',payment_mode:'CASH'}),100,'cash awaits Finance clearance');
+});

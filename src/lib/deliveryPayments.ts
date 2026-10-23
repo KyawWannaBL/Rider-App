@@ -66,6 +66,11 @@ export function recordedPaymentSummary(row: any): {method: PaymentMethod | 'MIXE
   const method = String(row?.payment_method || row?.payment_mode || '').toUpperCase();
   return PAYMENT_METHODS.includes(method as PaymentMethod) ? {method: method as PaymentMethod, cash: method === 'CASH' ? collected : 0} : {method: 'UNKNOWN', cash: 0};
 }
+export function pendingCashToDeposit(row: any): number {
+  const status = String(row?.cod_settlement_status || '').trim().toUpperCase();
+  if (['SETTLED', 'CLEARED', 'FINANCE_SETTLED', 'DEPOSITED'].includes(status)) return 0;
+  return recordedPaymentSummary(row).cash;
+}
 function draftKey(scope: PaymentScope) {
   if (!scope.actor || !scope.wayplan || !scope.delivery) throw new Error('Sign in and select a delivery before saving payments.');
   return `britium.delivery.payments.v1:${JSON.stringify([scope.actor, scope.wayplan, scope.delivery])}`;
