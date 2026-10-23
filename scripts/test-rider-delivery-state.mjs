@@ -154,3 +154,19 @@ test('same-stop DELIVERED refresh shows authoritative split instead of a stale d
   assert.deepEqual(rows,[{method:'CASH',amount:'40',reference:''},{method:'WAVE_PAY',amount:'60',reference:'W-1'}]);
   assert.equal(uncertain,false);assert.equal(resets,0);
 });
+test('uncertain refresh resolves committed delivery from assigned handover queue without replaying confirmation',async()=>{
+  const calls=[];let refreshed,uncertain=true;
+  const selected={delivery_way_id:'D-A',wayplan_id:'W-A',receiver_name:'Original'};
+  const delivered={...selected,stop_status:'DELIVERED',payment_allocations:[{method:'CASH',amount:40,reference:''},{method:'QR',amount:60,reference:'Q-1'}]};
+  const env={selected,setBusy:()=>{},setMsg:()=>{},jobsFromResponse:production('jobsFromResponse',{}),selectJob:job=>refreshed=job,setPaymentUncertain:v=>uncertain=v,clearPaymentDraft:()=>{},localStorage:{},paymentScope:()=>({}),supabase:{rpc:async(name)=>{calls.push(name);return {data:{jobs:name==='be_field_team_cod_handover_queue_v1'?[delivered]:[]}};}}};
+  assert.equal(await production('refreshDeliveryStatus',env)(),true);
+  assert.deepEqual(calls,['be_rider_delivery_wayplan_jobs_v187','be_field_team_cod_handover_queue_v1']);
+  assert.equal(refreshed.stop_status,'DELIVERED');assert.deepEqual(refreshed.payment_allocations,delivered.payment_allocations);assert.equal(uncertain,false);
+});
+test('uncertain refresh stays blocked when neither assigned read proves delivery',async()=>{
+  for(const fallback of [[],[{delivery_way_id:'D-A',wayplan_id:'W-OTHER',stop_status:'DELIVERED'}],[{delivery_way_id:'D-A',wayplan_id:'W-A',stop_status:'ARRIVED_AT_CUSTOMER'}]]) {
+    let refreshed=false,uncertain=true,message='';
+    const env={selected:{delivery_way_id:'D-A',wayplan_id:'W-A'},setBusy:()=>{},setMsg:v=>message=v,jobsFromResponse:production('jobsFromResponse',{}),selectJob:()=>refreshed=true,setPaymentUncertain:v=>uncertain=v,supabase:{rpc:async(name)=>({data:{jobs:name==='be_field_team_cod_handover_queue_v1'?fallback:[]}})}};
+    assert.equal(await production('refreshDeliveryStatus',env)(),false);assert.equal(refreshed,false);assert.equal(uncertain,true);assert.match(message,/Operations/);
+  }
+});

@@ -136,6 +136,36 @@ export default function DeliveryPage() {
     setPaymentRows(draft?.rows ?? initialPaymentRows(job, Number(job.calculated_cod_amount ?? job.cod_amount ?? 0)));
     setPaymentUncertain(draft?.submission === "uncertain");
   }
+  async function refreshDeliveryStatus() {
+    if (!selected) return false;
+    setBusy(true);
+    try {
+      const {data, error} = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {p_rider_code: null, p_limit: 200});
+      if (error || data?.ok === false) throw new Error(error?.message || data?.error || "Status refresh failed.");
+      const sameStop = (item: any) => item.delivery_way_id === selected.delivery_way_id && item.wayplan_id === selected.wayplan_id;
+      let job = jobsFromResponse(data).find(sameStop);
+      if (!job) {
+        // Completed stops leave the active list. Resolve a committed confirmation
+        // through the assigned Finance queue without repeating the mutation.
+        const {data: handover, error: handoverError} = await (supabase as any).rpc("be_field_team_cod_handover_queue_v1", {p_limit: 300});
+        if (handoverError || handover?.ok === false) throw new Error(handoverError?.message || handover?.error || "Status refresh failed.");
+        const recorded = jobsFromResponse(handover).find((item: any) => sameStop(item) && String(item.stop_status || item.rider_status || "").toUpperCase() === "DELIVERED");
+        if (!recorded) throw new Error("Delivery not found in refreshed jobs or completed handovers. Contact Operations before retrying.");
+        job = {...selected, ...recorded};
+      }
+      const latest = String(job.stop_status || job.rider_status || "").toUpperCase();
+      if (["DELIVERED", "HELPER_COMPLETED_PENDING_DRIVER"].includes(latest)) clearPaymentDraft(localStorage, paymentScope());
+      else if (["RIDER_ACCEPTED", "DELIVERY_ACCEPTED", "ACCEPTED_FOR_DELIVERY", "OUT_FOR_DELIVERY", "ARRIVED_AT_CUSTOMER"].includes(latest)) writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "editing"});
+      else throw new Error("Delivery status requires Operations review before retrying.");
+      selectJob(job);
+      setPaymentUncertain(false);
+      setMsg("Status refreshed. Use the saved payment details; do not collect payment again.");
+      return true;
+    } catch (error: any) {
+      setMsg(error?.message || "Status refresh failed.");
+      return false;
+    } finally { setBusy(false); }
+  }
   function changePayments(rows: PaymentRow[]) {
     setPaymentRows(rows);
     try { writePaymentDraft(localStorage, paymentScope(), {rows, submission: paymentUncertain ? "uncertain" : "editing"}); }
@@ -1144,23 +1174,7 @@ export default function DeliveryPage() {
                   {requiredCod === 0 && <p className="mt-2 text-sm">{tx("No collection is required. No payment rows will be recorded.", "ငွေကောက်ခံရန် မလိုအပ်ပါ။")}</p>}
                   {paymentUncertain && <div role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-bold">
                     {tx("Previous confirmation is unresolved. Check the latest status before retrying; do not collect again.", "ယခင်အတည်ပြုမှု အခြေအနေကို ပြန်စစ်ပါ။ ငွေထပ်မကောက်ခံပါနှင့်။")}
-                    <button type="button" disabled={busy} className="mt-2 block rounded-xl border p-3" onClick={async () => {
-                      setBusy(true);
-                      try {
-                        const {data, error} = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {p_rider_code: null, p_limit: 200});
-                        if (error || data?.ok === false) throw new Error(error?.message || data?.error || "Status refresh failed.");
-                        const job = jobsFromResponse(data).find((item: any) => item.delivery_way_id === selected.delivery_way_id && item.wayplan_id === selected.wayplan_id);
-                        if (!job) throw new Error("Delivery not found in refreshed jobs. Contact Operations before retrying.");
-                        selectJob(job);
-                        const latest = String(job.stop_status || job.rider_status || "").toUpperCase();
-                        if (["DELIVERED", "HELPER_COMPLETED_PENDING_DRIVER"].includes(latest)) clearPaymentDraft(localStorage, paymentScope());
-                        else if (["RIDER_ACCEPTED", "DELIVERY_ACCEPTED", "ACCEPTED_FOR_DELIVERY", "OUT_FOR_DELIVERY", "ARRIVED_AT_CUSTOMER"].includes(latest)) writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "editing"});
-                        else throw new Error("Delivery status requires Operations review before retrying.");
-                        setPaymentUncertain(false);
-                        setMsg("Status refreshed. Use the saved payment details; do not collect payment again.");
-                      } catch (error: any) { setMsg(error?.message || "Status refresh failed."); }
-                      finally { setBusy(false); }
-                    }}>{tx("Refresh delivery status", "ပို့ဆောင်မှုအခြေအနေ ပြန်စစ်မည်")}</button>
+                    <button type="button" disabled={busy} className="mt-2 block rounded-xl border p-3" onClick={refreshDeliveryStatus}>{tx("Refresh delivery status", "ပို့ဆောင်မှုအခြေအနေ ပြန်စစ်မည်")}</button>
                   </div>}
                 </section>
 
