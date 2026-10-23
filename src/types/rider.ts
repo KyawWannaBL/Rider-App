@@ -128,7 +128,7 @@ export interface SettlementLine {
   deliveryFee: number;
   riderCommission: number;
   variance: number;
-  collectionMethod: "CASH" | "QR" | "BANK_TRANSFER";
+  collectionMethod: import("@/lib/deliveryPayments").PaymentMethod | "MIXED" | "UNKNOWN";
   collectedAt?: string;
   status: SettlementStatus;
 }

@@ -30,14 +30,14 @@ test('Pickup snapshot application errors retain staged parcels and show the erro
 
 test('refreshing the same delivery retains staged evidence and entered fields',()=>{
   let resets=0,form={receiver_name:'Edited name',payment_method:'QR',transaction_reference:'REF-1'};
-  production('selectJob',{selectedDeliveryRef:{current:'D-A'},setSelected:()=>{},resetProofs:()=>resets++,setFailureMode:()=>{},setSignatureOnBehalf:()=>{},setGeofenceRepairAvailable:()=>{},setForm:f=>form=f(form)} )({delivery_way_id:'D-A',recipient_name:'Server name'});
+  production('selectJob',{activeRole:'rider',selectedScopeRef:{current:JSON.stringify({actor:'U-A',wayplan:'W-A',delivery:'D-A'})},paymentScope:job=>({actor:'U-A',wayplan:'W-A',delivery:job.delivery_way_id}),selectedDeliveryRef:{current:'D-A'},setSelected:()=>{},resetProofs:()=>resets++,setFailureMode:()=>{},setSignatureOnBehalf:()=>{},setGeofenceRepairAvailable:()=>{},setForm:f=>form=f(form)} )({delivery_way_id:'D-A',recipient_name:'Server name'});
   assert.equal(resets,0,'Refreshing an unchanged delivery must not erase its proof/signature');
   assert.equal(form.receiver_name,'Edited name');assert.equal(form.transaction_reference,'REF-1');
 });
 test('a different delivery clears payment, postponement and completion state',()=>{
   let form={payment_method:'BANK_TRANSFER',reschedule_date:'2026-12-31'},progress='success',result='D-A delivered',confirmation='return';
-  production('selectJob',{selectedDeliveryRef:{current:'D-A'},setSelected:()=>{},resetProofs:()=>{},setFailureMode:()=>{},setSignatureOnBehalf:()=>{},setGeofenceRepairAvailable:()=>{},setForm:f=>form=f(form),setDeliveryProgress:v=>progress=v,setDeliveryResult:v=>result=v,setConfirmAction:v=>confirmation=v})({delivery_way_id:'D-B'});
-  assert.equal(form.payment_method,'CASH');assert.equal(form.reschedule_date,'');
+  production('selectJob',{activeRole:'rider',selectedScopeRef:{current:JSON.stringify({actor:'U-A',wayplan:'W-A',delivery:'D-A'})},paymentScope:job=>({actor:'U-A',wayplan:'W-A',delivery:job.delivery_way_id}),selectedDeliveryRef:{current:'D-A'},setSelected:()=>{},initializePayments:()=>{},resetProofs:()=>{},setFailureMode:()=>{},setSignatureOnBehalf:()=>{},setGeofenceRepairAvailable:()=>{},setForm:f=>form=f(form),setDeliveryProgress:v=>progress=v,setDeliveryResult:v=>result=v,setConfirmAction:v=>confirmation=v})({delivery_way_id:'D-B'});
+  assert.equal(form.reschedule_date,'');
   assert.equal(progress,'idle');assert.equal(result,'');assert.equal(confirmation,null);
 });
 test('unconfirmed or failed actions never receive a success indicator',async()=>{
@@ -85,4 +85,72 @@ test('changing the signature during validation aborts the captured upload',async
   const pending=production('performDelivery',{selected:{delivery_way_id:'D-A',wayplan_id:'W-A'},selectedDeliveryRef:{current:'D-A'},signatureRevision,canDeliver:true,helperPreparedForDriver:false,form:{receiver_name:'Receiver',cod_collected:'0',signature_name:'Receiver'},approvedProofFile:{},signatureFile:{name:'old-signature.png'},signatureCanvasFile:()=>new Promise(resolve=>finish=resolve),requiredCod:0,electronicPayment:false,setBusy:()=>{},upload:async()=>{uploads++;return 'url';},setDeliveryProgress:()=>{},setDeliveryResult:()=>{},setMsg:()=>{},tx})();
   signatureRevision.current++;finish(null);
   assert.equal(await pending,false);assert.equal(uploads,0,'must not upload the stale captured signature');
+});
+
+const paymentCode=ts.transpileModule(fs.readFileSync('src/lib/deliveryPayments.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+const paymentApi=await import(`data:text/javascript;base64,${Buffer.from(paymentCode).toString('base64')}`);
+function deliveryEnvironment(overrides={}) {
+  const entries=new Map();
+  return {tx,selected:{delivery_way_id:'D-A',wayplan_id:'W-A'},selectedDeliveryRef:{current:'D-A'},canDeliver:true,helperPreparedForDriver:false,activeRole:'rider',
+    form:{receiver_name:'Receiver',receiver_phone:'',signature_name:'Receiver',remarks:''},approvedProofFile:{name:'proof.jpg'},signatureFile:{name:'signature.png'},signatureRevision:{current:0},signatureCanvasFile:async()=>null,
+    paymentRows:[{method:'CASH',amount:'30',reference:''},{method:'WAVE_PAY',amount:'70',reference:'W-123'}],paymentUncertain:false,requiredCod:100,
+    paymentScope:()=>({actor:'U-A',wayplan:'W-A',delivery:'D-A'}),localStorage:{getItem:k=>entries.get(k)||null,setItem:(k,v)=>entries.set(k,v),removeItem:k=>entries.delete(k)},...paymentApi,
+    setBusy:()=>{},setPaymentUncertain:()=>{},setMsg:()=>{},setDeliveryResult:()=>{},setDeliveryProgress:()=>{},upload:async()=>'/proof',currentGps:async()=>({gps_lat:16.8,gps_lng:96.1}),markActionActive:()=>{},resetProofs:()=>{},load:async()=>{},setGeofenceRepairAvailable:()=>{},...overrides};
+}
+test('actual delivery mutation sends split allocations, preserving proof and GPS',async()=>{
+  let sent;
+  const env=deliveryEnvironment({supabase:{rpc:async(name,args)=>{sent={name,...args.p_payload};return {data:{ok:true,mobile_status:'DELIVERED'}};}}});
+  assert.equal(await production('performDelivery',env)(),true);
+  assert.equal(sent.name,'be_field_team_confirm_delivery_v146');
+  assert.equal(sent.payment_method,'MIXED');assert.equal(sent.payment_mode,'MIXED');
+  assert.deepEqual(JSON.parse(JSON.stringify(sent.payment_allocations)),[{method:'CASH',amount:30,reference:''},{method:'WAVE_PAY',amount:70,reference:'W-123'}]);
+  assert.equal(sent.cod_collected_amount,100);assert.equal(sent.gps_lat,16.8);assert.equal(sent.signature_url,'/proof');
+  assert.equal(paymentApi.readPaymentDraft(env.localStorage,env.paymentScope()),null);
+});
+test('invalid splits stop delivery before uploads and mutations',async()=>{
+  let uploads=0,mutations=0;
+  const env=deliveryEnvironment({paymentRows:[{method:'CASH',amount:'99',reference:''}],upload:async()=>{uploads++;},supabase:{rpc:async()=>{mutations++;}}});
+  assert.equal(await production('performDelivery',env)(),false);assert.equal(uploads,0);assert.equal(mutations,0);
+});
+test('uncertain network response retains scoped split draft and blocks blind resubmission',async()=>{
+  const env=deliveryEnvironment({supabase:{rpc:async()=>{throw new Error('Network disconnected');}}});
+  assert.equal(await production('performDelivery',env)(),false);
+  const draft=paymentApi.readPaymentDraft(env.localStorage,env.paymentScope());assert.equal(draft.submission,'uncertain');assert.deepEqual(draft.rows,env.paymentRows);
+  let mutations=0;
+  assert.equal(await production('performDelivery',{...env,paymentUncertain:true,supabase:{rpc:async()=>{mutations++;}}})(),false);assert.equal(mutations,0);
+});
+
+function selectionEnvironment(scope, previousScope, overrides={}) {
+  return {selectedDeliveryRef:{current:scope.delivery},selectedScopeRef:{current:JSON.stringify(previousScope)},paymentScope:()=>scope,activeRole:'rider',
+    setSelected:()=>{},initializePayments:()=>{},resetProofs:()=>{},setFailureMode:()=>{},setSignatureOnBehalf:()=>{},setGeofenceRepairAvailable:()=>{},setForm:()=>{},setDeliveryProgress:()=>{},setDeliveryResult:()=>{},setConfirmAction:()=>{},...overrides};
+}
+test('same parcel moved to another wayplan reinitializes payment scope and staged evidence',()=>{
+  let initialized=0,resets=0;
+  const scope={actor:'U-A',wayplan:'W-B',delivery:'D-A'};
+  production('selectJob',selectionEnvironment(scope,{...scope,wayplan:'W-A'},{initializePayments:()=>initialized++,resetProofs:()=>resets++}))({delivery_way_id:'D-A',wayplan_id:'W-B'});
+  assert.equal(initialized,1);assert.equal(resets,1);
+});
+test('same parcel under a different actor cannot retain the former actor payment draft',()=>{
+  let initialized=0;
+  const scope={actor:'U-B',wayplan:'W-A',delivery:'D-A'};
+  production('selectJob',selectionEnvironment(scope,{...scope,actor:'U-A'},{initializePayments:()=>initialized++}))({delivery_way_id:'D-A',wayplan_id:'W-A'});
+  assert.equal(initialized,1);
+});
+test('Driver same-stop refresh replaces stale local cash with authoritative Helper split without clearing proofs',()=>{
+  let rows=[{method:'CASH',amount:'100',reference:''}],uncertain=true,resets=0;
+  const scope={actor:'DRIVER',wayplan:'W-A',delivery:'D-A'};
+  const job={delivery_way_id:'D-A',wayplan_id:'W-A',rider_status:'HELPER_COMPLETED_PENDING_DRIVER',cod_amount:100,metadata:{payment_allocations:[{method:'CASH',amount:25,reference:''},{method:'KBZ_PAY',amount:75,reference:'K-1'}]}};
+  const initialize=production('initializePayments',{activeRole:'driver',paymentScope:()=>scope,localStorage:{},readPaymentDraft:()=>({rows,submission:'uncertain'}),initialPaymentRows:paymentApi.initialPaymentRows,setPaymentRows:v=>rows=v,setPaymentUncertain:v=>uncertain=v});
+  production('selectJob',selectionEnvironment(scope,scope,{activeRole:'driver',initializePayments:initialize,resetProofs:()=>resets++}))(job);
+  assert.deepEqual(rows,[{method:'CASH',amount:'25',reference:''},{method:'KBZ_PAY',amount:'75',reference:'K-1'}]);
+  assert.equal(uncertain,false);assert.equal(resets,0);
+});
+test('same-stop DELIVERED refresh shows authoritative split instead of a stale draft and retains proofs',()=>{
+  let rows=[{method:'CASH',amount:'100',reference:''}],uncertain=true,resets=0;
+  const scope={actor:'RIDER',wayplan:'W-A',delivery:'D-A'};
+  const job={delivery_way_id:'D-A',wayplan_id:'W-A',stop_status:'DELIVERED',cod_amount:100,payment_allocations:[{method:'CASH',amount:40,reference:''},{method:'WAVE_PAY',amount:60,reference:'W-1'}]};
+  const initialize=production('initializePayments',{activeRole:'rider',paymentScope:()=>scope,localStorage:{},readPaymentDraft:()=>({rows,submission:'uncertain'}),initialPaymentRows:paymentApi.initialPaymentRows,setPaymentRows:v=>rows=v,setPaymentUncertain:v=>uncertain=v});
+  production('selectJob',selectionEnvironment(scope,scope,{initializePayments:initialize,resetProofs:()=>resets++}))(job);
+  assert.deepEqual(rows,[{method:'CASH',amount:'40',reference:''},{method:'WAVE_PAY',amount:'60',reference:'W-1'}]);
+  assert.equal(uncertain,false);assert.equal(resets,0);
 });

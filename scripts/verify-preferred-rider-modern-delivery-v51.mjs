@@ -3,6 +3,7 @@ import path from "node:path";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const delivery = fs.readFileSync(path.join(root, "src/pages/DeliveryPage.tsx"), "utf8");
+const payments = fs.readFileSync(path.join(root, "src/lib/deliveryPayments.ts"), "utf8");
 const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
 
 const checks = [
@@ -12,7 +13,7 @@ const checks = [
   ["uses strict wayplan action RPC", /be_rider_wayplan_action/],
   ["requires arrived-at-customer before delivery", /ARRIVED_AT_CUSTOMER/],
   ["supports CASH", /CASH/],
-  ["supports PREPAID", /PREPAID/],
+  ["supports zero collection prepaid deliveries", /requiredCod === 0/],
   ["supports QR payment", /QR/],
   ["supports bank transfer", /BANK_TRANSFER/],
   ["supports mobile wallet", /MOBILE_WALLET/],
@@ -28,7 +29,7 @@ const checks = [
   ["supports failed delivery", /failed_reason|CUSTOMER_UNREACHABLE/],
 ];
 
-const failures = checks.filter(([, pattern]) => !pattern.test(delivery + "\n" + app)).map(([name]) => name);
+const failures = checks.filter(([, pattern]) => !pattern.test(delivery + "\n" + app + "\n" + payments)).map(([name]) => name);
 
 if (/be_rider_delivery_dropoff_save/.test(delivery)) {
   failures.push("legacy delivery save RPC is still the primary delivery workflow");
