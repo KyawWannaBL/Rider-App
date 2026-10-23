@@ -6,7 +6,7 @@ import { isNativeAndroidApp, takeNativePhotoFile, chooseNativeGalleryFile, consu
 import { deliveryPhotoScope, isCurrentDeliveryPhoto } from "../lib/deliveryPhotoState";
 import { confirmPhotoUpload } from "../lib/proofUploadState";
 
-const PAYMENT_METHODS = ["CASH", "PREPAID", "QR", "BANK_TRANSFER", "MOBILE_WALLET"];
+import { PAYMENT_METHODS, buildPaymentPayload, paymentTotals, initialPaymentRows, readPaymentDraft, writePaymentDraft, clearPaymentDraft, type PaymentRow } from "../lib/deliveryPayments";
 const PROOF_MAX_BYTES = 950 * 1024;
 const UPLOAD_TIMEOUT_MS = 120_000;
 import { classifyFailureReason } from "../lib/failureCategories";
@@ -85,11 +85,12 @@ async function currentGps() {
 }
 
 export default function DeliveryPage() {
-  const { language, activeRole } = useAppState();
+  const { language, activeRole, currentUser } = useAppState();
   const tx = (en:string,my:string) => language === "my" ? my : en;
   const [pickups, setPickups] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const selectedDeliveryRef = useRef("");
+  const selectedScopeRef = useRef("");
   const photoRevision = useRef(0);
   const restoredProofRef = useRef<ReturnType<typeof consumeRestoredNativePhoto>>(null);
   const uploadPaths = useRef(new WeakMap<File, Map<string, string>>());
@@ -117,9 +118,6 @@ export default function DeliveryPage() {
     receiver_name: "",
     receiver_phone: "",
     remarks: "",
-    payment_method: "CASH",
-    transaction_reference: "",
-    cod_collected: "",
     failed_reason: "",
     signature_name: "",
     reschedule_date: "",
@@ -127,13 +125,61 @@ export default function DeliveryPage() {
   const [failureReasons, setFailureReasons] = useState<any[]>(FALLBACK_FAILED_REASONS);
   const [msg, setMsg] = useState(language === "my" ? "ပို့ဆောင်ရေးအလုပ်များကို ဖွင့်နေသည်..." : "Loading delivery jobs...");
 
+  const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);
+  const [paymentUncertain, setPaymentUncertain] = useState(false);
+  const paymentScope = (job = selected) => ({ actor: currentUser?.id || "", wayplan: String(job?.wayplan_id || ""), delivery: String(job?.delivery_way_id || "") });
+  function initializePayments(job: any) {
+    const helperPrepared = activeRole === "driver" && String(job.rider_status || job.stop_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
+    const delivered = [job.stop_status, job.rider_status].some(status => String(status || "").toUpperCase() === "DELIVERED");
+    // Completed collections and Driver review display the server record.
+    const draft = helperPrepared || delivered ? null : readPaymentDraft(localStorage, paymentScope(job));
+    setPaymentRows(draft?.rows ?? initialPaymentRows(job, Number(job.calculated_cod_amount ?? job.cod_amount ?? 0)));
+    setPaymentUncertain(draft?.submission === "uncertain");
+  }
+  async function refreshDeliveryStatus() {
+    if (!selected) return false;
+    setBusy(true);
+    try {
+      const {data, error} = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {p_rider_code: null, p_limit: 200});
+      if (error || data?.ok === false) throw new Error(error?.message || data?.error || "Status refresh failed.");
+      const sameStop = (item: any) => item.delivery_way_id === selected.delivery_way_id && item.wayplan_id === selected.wayplan_id;
+      let job = jobsFromResponse(data).find(sameStop);
+      if (!job) {
+        // Completed stops leave the active list. Resolve a committed confirmation
+        // through the assigned Finance queue without repeating the mutation.
+        const {data: handover, error: handoverError} = await (supabase as any).rpc("be_field_team_cod_handover_queue_v1", {p_limit: 300});
+        if (handoverError || handover?.ok === false) throw new Error(handoverError?.message || handover?.error || "Status refresh failed.");
+        const recorded = jobsFromResponse(handover).find((item: any) => sameStop(item) && String(item.stop_status || item.rider_status || "").toUpperCase() === "DELIVERED");
+        if (!recorded) throw new Error("Delivery not found in refreshed jobs or completed handovers. Contact Operations before retrying.");
+        job = {...selected, ...recorded};
+      }
+      const latest = String(job.stop_status || job.rider_status || "").toUpperCase();
+      if (["DELIVERED", "HELPER_COMPLETED_PENDING_DRIVER"].includes(latest)) clearPaymentDraft(localStorage, paymentScope());
+      else if (["RIDER_ACCEPTED", "DELIVERY_ACCEPTED", "ACCEPTED_FOR_DELIVERY", "OUT_FOR_DELIVERY", "ARRIVED_AT_CUSTOMER"].includes(latest)) writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "editing"});
+      else throw new Error("Delivery status requires Operations review before retrying.");
+      selectJob(job);
+      setPaymentUncertain(false);
+      setMsg("Status refreshed. Use the saved payment details; do not collect payment again.");
+      return true;
+    } catch (error: any) {
+      setMsg(error?.message || "Status refresh failed.");
+      return false;
+    } finally { setBusy(false); }
+  }
+  function changePayments(rows: PaymentRow[]) {
+    setPaymentRows(rows);
+    try { writePaymentDraft(localStorage, paymentScope(), {rows, submission: paymentUncertain ? "uncertain" : "editing"}); }
+    catch { setMsg(tx("Payment draft could not be saved on this device. Keep this screen open and retry when storage is available.", "ငွေပေးချေမှုမူကြမ်း သိမ်းမရပါ။ ဤမျက်နှာပြင်ကို ဖွင့်ထားပါ။")); }
+  }
+
   const requiredCod = Number(selected?.calculated_cod_amount ?? selected?.cod_amount ?? 0);
   const status = String(selected?.stop_status || selected?.rider_status || "").toUpperCase();
-  const electronicPayment = ["QR", "BANK_TRANSFER", "MOBILE_WALLET"].includes(form.payment_method);
+  const paymentSummary = paymentTotals(paymentRows);
   const canDeliver = ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY","OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER"].includes(status);
   const helperPreparedForDriver =
     activeRole === "driver" &&
     String(selected?.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
+  const paymentReadOnly = busy || !canDeliver || helperPreparedForDriver;
 
   async function approveAllHelperDeliveries() {
     if (activeRole !== "driver" || busy) return;
@@ -189,10 +235,15 @@ export default function DeliveryPage() {
 
   function selectJob(job: any) {
     const deliveryId = String(job.delivery_way_id || "");
-    const changed = selectedDeliveryRef.current !== deliveryId;
+    const scopeKey = JSON.stringify(paymentScope(job));
+    const changed = selectedScopeRef.current !== scopeKey;
     selectedDeliveryRef.current = deliveryId;
+    selectedScopeRef.current = scopeKey;
     setSelected(job);
-    // A status refresh must not discard this stop's staged proof or signature.
+    const helperPrepared = activeRole === "driver" && String(job.rider_status || job.stop_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
+    const delivered = [job.stop_status, job.rider_status].some(status => String(status || "").toUpperCase() === "DELIVERED");
+    if (changed || helperPrepared || delivered) initializePayments(job);
+    // A refresh of the same actor/Wayplan/parcel retains proof and signature.
     if (!changed) return;
     setFailureMode(false);
     setSignatureOnBehalf(false);
@@ -205,12 +256,9 @@ export default function DeliveryPage() {
       ...current,
       receiver_name: job.receiver_name || job.recipient_name || "",
       receiver_phone: job.receiver_phone || job.recipient_phone || "",
-      cod_collected: String(job.calculated_cod_amount ?? job.cod_amount ?? 0),
-      transaction_reference: "",
       remarks: "",
       signature_name: job.recipient_name || job.receiver_name || "",
       failed_reason: "",
-      payment_method: "CASH",
       reschedule_date: "",
     }));
   }
@@ -247,7 +295,7 @@ export default function DeliveryPage() {
       list[0] ||
       null;
     if (next) selectJob(next);
-    else { selectedDeliveryRef.current = ""; resetProofs(); setSelected(null); }
+    else { selectedDeliveryRef.current = ""; selectedScopeRef.current = ""; resetProofs(); setSelected(null); }
     setMsg(tx(`Loaded ${list.length} assigned delivery stop(s).`,`တာဝန်ပေးထားသော ပို့ဆောင်မှတ်တိုင် ${list.length} ခု ဖွင့်ပြီးပါပြီ။`));
   }
 
@@ -602,11 +650,13 @@ export default function DeliveryPage() {
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
     }
 
-    if (Number(form.cod_collected || requiredCod || 0) !== requiredCod) {
-      setForm((current) => ({ ...current, cod_collected: String(requiredCod) }));
-    }
-    if (electronicPayment && !form.transaction_reference.trim()) {
-      const message = tx("Transaction reference is required for electronic payment.","အီလက်ထရွန်နစ်ငွေပေးချေမှုအတွက် ငွေလွှဲအမှတ် လိုအပ်ပါသည်။");
+    let paymentPayload: ReturnType<typeof buildPaymentPayload>;
+    try {
+      if (paymentUncertain) throw new Error("A previous delivery request may have reached the server. Refresh the delivery status before retrying. Do not collect payment again.");
+      paymentPayload = buildPaymentPayload(paymentRows, requiredCod);
+      writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "editing"});
+    } catch (error: any) {
+      const message = error?.message || "Payment validation failed.";
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
     }
 
@@ -646,6 +696,9 @@ export default function DeliveryPage() {
         "ပို့ဆောင်ပြီး အတည်ပြုပြီး Warehouse, Finance နှင့် Operations သို့ ချိတ်ဆက်နေပါသည်..."
       ));
 
+      // Persist before the mutation: an interrupted connection must not silently replay a collection.
+      writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "uncertain"});
+      setPaymentUncertain(true);
       const { data, error } = await (supabase as any).rpc("be_field_team_confirm_delivery_v146", {
         p_payload: {
           wayplan_id: selected.wayplan_id,
@@ -655,9 +708,7 @@ export default function DeliveryPage() {
           proof_url,
           signature_url: signature_path,
           signature_payload,
-          payment_method: form.payment_method,
-          transaction_reference: form.transaction_reference.trim() || null,
-          cod_collected_amount: requiredCod,
+          ...paymentPayload,
           remark: form.remarks.trim() || null,
           ...gps,
         },
@@ -665,10 +716,16 @@ export default function DeliveryPage() {
 
       if (error) throw error;
       if (data?.ok === false) {
+        writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "editing"});
+        setPaymentUncertain(false);
         const stage = data?.failed_stage ? ` [${data.failed_stage}]` : "";
         throw new Error((data?.message || data?.error || "Delivery confirmation failed.") + stage);
       }
       const mobileStatus = String(data?.mobile_status || "").toUpperCase();
+      if (mobileStatus === "DELIVERED" || (activeRole === "helper" && mobileStatus === "PENDING_DRIVER_CONFIRMATION")) {
+        clearPaymentDraft(localStorage, paymentScope());
+        setPaymentUncertain(false);
+      }
       if (activeRole === "helper" && mobileStatus === "PENDING_DRIVER_CONFIRMATION") {
         const successMessage = tx(
           `${selected.delivery_way_id}: Delivery checks completed. Waiting for assigned Driver to press Delivered and confirm.`,
@@ -899,6 +956,11 @@ export default function DeliveryPage() {
   );
 
   useEffect(() => {
+    // Account/role changes can occur without remounting the delivery screen.
+    if (selected) selectJob(selected);
+  }, [currentUser?.id, activeRole]);
+
+  useEffect(() => {
     const hashQuery = window.location.hash.includes("?") ? window.location.hash.split("?")[1] : "";
     const preferred = new URLSearchParams(hashQuery).get("deliveryWayId") || undefined;
     load(preferred);
@@ -1085,33 +1147,36 @@ export default function DeliveryPage() {
                   </label>
                 </div>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <label className="font-bold">
-                    {tx("Payment method","ငွေပေးချေမှုနည်းလမ်း")}
-                    <select className="mt-1 w-full rounded-2xl border p-3" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
-                      {PAYMENT_METHODS.map((method) => <option key={method} value={method}>{method.replace(/_/g, " ")}</option>)}
-                    </select>
-                  </label>
-                  <label className="font-bold">
-                    {tx("COD collected","ကောက်ခံပြီး COD")}
-                    <input
-                      className="mt-1 w-full cursor-not-allowed rounded-2xl border bg-slate-100 p-3 font-black text-slate-800"
-                      inputMode="decimal"
-                      value={String(requiredCod)}
-                      readOnly
-                      aria-readonly="true"
-                    />
-                    <span className="mt-1 block text-xs font-bold text-slate-500">
-                      {tx("Synchronized automatically from Data Entry calculated amount.","Data Entry တွက်ချက်ထားသည့် ငွေပမာဏမှ အလိုအလျောက် Synchronize လုပ်ထားပါသည်။")}
-                    </span>
-                  </label>
-                  {electronicPayment && (
-                    <label className="font-bold md:col-span-2">
-                      {tx("Transaction reference","ငွေလွှဲအမှတ်")}
-                      <input className="mt-1 w-full rounded-2xl border p-3" value={form.transaction_reference} onChange={(e) => setForm({ ...form, transaction_reference: e.target.value })} />
+                <section className="mt-4 rounded-2xl border p-4" aria-label="Collection payments">
+                  <h3 className="font-black">{tx("Collection payments", "ကောက်ခံငွေ ပေးချေမှုများ")}</h3>
+                  <p className="mt-1 text-sm font-bold">{tx("Expected collection", "ကောက်ခံရမည့်ငွေ")}: {requiredCod.toLocaleString(undefined, {maximumFractionDigits: 2})} MMK</p>
+                  {paymentRows.map((row, index) => <div key={index} className="mt-3 grid gap-2 rounded-xl border bg-slate-50 p-3 sm:grid-cols-2">
+                    <label className="font-bold">{tx("Payment method", "ငွေပေးချေမှုနည်းလမ်း")}
+                      <select aria-label={`Payment ${index + 1} method`} disabled={paymentReadOnly} className="mt-1 w-full rounded-xl border p-3" value={row.method} onChange={e => changePayments(paymentRows.map((item, i) => i === index ? {...item, method: e.target.value} : item))}>
+                        {!PAYMENT_METHODS.includes(row.method as any) && <option value={row.method}>{row.method || "Choose method"}</option>}
+                        {PAYMENT_METHODS.map(method => <option key={method} value={method}>{method.replace(/_/g, " ")}</option>)}
+                      </select>
                     </label>
-                  )}
-                </div>
+                    <label className="font-bold">{tx("Amount (MMK)", "ငွေပမာဏ (ကျပ်)")}
+                      <input aria-label={`Payment ${index + 1} amount`} disabled={paymentReadOnly} className="mt-1 w-full rounded-xl border p-3" inputMode="decimal" value={row.amount} onChange={e => changePayments(paymentRows.map((item, i) => i === index ? {...item, amount: e.target.value} : item))} />
+                    </label>
+                    {row.method !== "CASH" && <label className="font-bold sm:col-span-2">{tx("Transaction reference (required)", "ငွေလွှဲအမှတ် (လိုအပ်သည်)")}
+                      <input aria-label={`Payment ${index + 1} reference`} disabled={paymentReadOnly} className="mt-1 w-full rounded-xl border p-3" value={row.reference} onChange={e => changePayments(paymentRows.map((item, i) => i === index ? {...item, reference: e.target.value} : item))} />
+                    </label>}
+                    <button type="button" disabled={paymentReadOnly} className="rounded-xl border p-3 font-bold text-red-700 disabled:opacity-50" onClick={() => changePayments(paymentRows.filter((_, i) => i !== index))}>{tx("Remove payment", "ငွေပေးချေမှု ဖယ်ရှားမည်")}</button>
+                  </div>)}
+                  <button type="button" disabled={paymentReadOnly || requiredCod === 0} className="mt-3 rounded-xl border border-blue-300 p-3 font-bold text-blue-700 disabled:opacity-50" onClick={() => changePayments([...paymentRows, {method: "CASH", amount: "", reference: ""}])}>{tx("Add payment", "ငွေပေးချေမှု ထပ်ထည့်မည်")}</button>
+                  <div className="mt-3 grid gap-2 text-sm font-black sm:grid-cols-3">
+                    <span>{tx("Cash", "ငွေသား")}: {paymentSummary.cash.toLocaleString(undefined, {maximumFractionDigits: 2})} MMK</span>
+                    <span>{tx("Digital", "ဒီဂျစ်တယ်")}: {paymentSummary.digital.toLocaleString(undefined, {maximumFractionDigits: 2})} MMK</span>
+                    <span>{tx("Total", "စုစုပေါင်း")}: {paymentSummary.total.toLocaleString(undefined, {maximumFractionDigits: 2})} MMK</span>
+                  </div>
+                  {requiredCod === 0 && <p className="mt-2 text-sm">{tx("No collection is required. No payment rows will be recorded.", "ငွေကောက်ခံရန် မလိုအပ်ပါ။")}</p>}
+                  {paymentUncertain && <div role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-bold">
+                    {tx("Previous confirmation is unresolved. Check the latest status before retrying; do not collect again.", "ယခင်အတည်ပြုမှု အခြေအနေကို ပြန်စစ်ပါ။ ငွေထပ်မကောက်ခံပါနှင့်။")}
+                    <button type="button" disabled={busy} className="mt-2 block rounded-xl border p-3" onClick={refreshDeliveryStatus}>{tx("Refresh delivery status", "ပို့ဆောင်မှုအခြေအနေ ပြန်စစ်မည်")}</button>
+                  </div>}
+                </section>
 
                 <section className="mt-5 rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-4">
                   <h3 className="text-lg font-black">{tx("Completion / Exception Control","ပို့ဆောင်ပြီး / မအောင်မြင် ထိန်းချုပ်မှု")}</h3>

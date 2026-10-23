@@ -1,3 +1,4 @@
+import { pendingCashToDeposit, recordedPaymentSummary } from "./deliveryPayments";
 import { supabase } from "@/integrations/supabase/client";
 import type {
   Dispatch,
@@ -243,8 +244,7 @@ export async function loadRiderSettlement(): Promise<{ settlement: Settlement; r
       deliveryFee: n(row?.delivery_fee ?? row?.data_entry_delivery_fee),
       riderCommission: commission,
       variance: collected - expected,
-      collectionMethod: String(row?.payment_mode || "CASH").toUpperCase() === "QR" ? "QR" :
-        String(row?.payment_mode || "").toUpperCase() === "BANK_TRANSFER" ? "BANK_TRANSFER" : "CASH",
+      collectionMethod: recordedPaymentSummary(row).method,
       collectedAt: row?.cod_collected_at || row?.delivered_at || undefined,
       status: settlementStatus(row?.cod_settlement_status),
     };
@@ -255,10 +255,7 @@ export async function loadRiderSettlement(): Promise<{ settlement: Settlement; r
   const deliveryFees = lines.reduce((s, x) => s + x.deliveryFee, 0);
   const riderCommission = lines.reduce((s, x) => s + x.riderCommission, 0);
   const totalVariance = lines.reduce((s, x) => s + x.variance, 0);
-  const cashToDeposit = rows.reduce((sum: number, row: any, index: number) => {
-    const method = lines[index]?.collectionMethod;
-    return sum + (method === "CASH" ? lines[index].collectedCod : 0);
-  }, 0);
+  const cashToDeposit = rows.reduce((sum: number, row: any) => sum + pendingCashToDeposit(row), 0);
 
   const aggregateStatus: SettlementStatus =
     lines.length > 0 && lines.every((line) => line.status === "DEPOSITED") ? "DEPOSITED" :

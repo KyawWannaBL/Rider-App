@@ -3,7 +3,7 @@ import type { Settlement, SettlementLine } from "@/types/rider";
 import { MobileCard } from "@/components/rider/MobileUI";
 
 function money(value: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(value || 0));
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(Number(value || 0));
 }
 
 export function CODSettlementScreen({
@@ -13,6 +13,7 @@ export function CODSettlementScreen({
   settlement: Settlement;
   onSelectLine?: (line: SettlementLine) => void;
 }) {
+  const unclassified = settlement.lines.filter(line => line.collectionMethod === "UNKNOWN");
   const balanced = Math.abs(settlement.summary.totalVariance) < 0.01;
 
   return (
@@ -31,6 +32,10 @@ export function CODSettlementScreen({
           <DarkMetric label="Collected" value={`${money(settlement.summary.collectedCod)} MMK`} />
         </div>
       </section>
+
+      {unclassified.length > 0 && <p role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">
+        {unclassified.length} collection(s) have no verified payment breakdown. Their amounts are excluded from Cash to Deposit pending Finance review.
+      </p>}
 
       <MobileCard className="border-0 p-4 shadow-[0_14px_36px_rgba(15,23,42,.07)]">
         <div className="flex items-center gap-3">
@@ -77,7 +82,7 @@ export function CODSettlementScreen({
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-black">{line.deliveryWayId}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">Expected {money(line.expectedCod)} MMK</p>
+                  <p className="mt-0.5 text-xs text-slate-500">Expected {money(line.expectedCod)} MMK · {line.collectionMethod.replace(/_/g, " ")}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-black">{money(line.collectedCod)}</p>

@@ -14,7 +14,7 @@ const persist=()=>{if(recovery)localStorage.setItem('bulk-recovery-server',JSON.
 export const supabase = {
   auth:{getUser:async()=>({data:{user:{id:'synthetic-worker'}},error:null}),getSession:async()=>({data:{session:{user:{id:'synthetic-worker'}}},error:null})},
   rpc:async(name:string,args:any)=>{
-    if(name==='be_rider_delivery_wayplan_jobs_v187') return {data:{jobs:['D1','D2'].map(delivery_way_id=>({delivery_way_id,wayplan_id:'W1',receiver_name:'Synthetic receiver',stop_status:'ARRIVED_AT_CUSTOMER'}))},error:null};
+    if(name==='be_rider_delivery_wayplan_jobs_v187') return {data:{jobs:['D1','D2'].map(delivery_way_id=>({delivery_way_id,wayplan_id:'W1',receiver_name:'Synthetic receiver',cod_amount:100,stop_status:'ARRIVED_AT_CUSTOMER'}))},error:null};
     if(name==='be_field_pickup_request_options_v187') return {data:{ok:true,requests:pickups,counts:{assigned_to_me:2}},error:null};
     if(name==='be_pickup_parcel_capture_snapshot') {
       state.snapshotRequests.push(args.p_pickup_id);
