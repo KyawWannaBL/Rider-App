@@ -73,7 +73,7 @@ export function pendingCashToDeposit(row: any): number {
 }
 function draftKey(scope: PaymentScope) {
   if (!scope.actor || !scope.wayplan || !scope.delivery) throw new Error('Sign in and select a delivery before saving payments.');
-  return `britium.delivery.payments.v1:${JSON.stringify([scope.actor, scope.wayplan, scope.delivery])}`;
+  return `britium.delivery.payments.v1:2026-11-01:${JSON.stringify([scope.actor, scope.wayplan, scope.delivery])}`;
 }
 export function readPaymentDraft(storage: Storage, scope: PaymentScope): PaymentDraft | null {
   try {

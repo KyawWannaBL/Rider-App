@@ -21,7 +21,7 @@ export type PickupDraft = {
   draft_revision?: number;
 };
 
-const DATABASE = 'britium-pickup-drafts';
+const DATABASE = 'britium-pickup-drafts:2026-11-01';
 const STORE = 'parcels';
 const textFields = ['waybill_no', 'delivery_way_id', 'temp_qr_code', 'parcel_weight',
   'remarks', 'cargo_photo_name', 'cargo_photo_url', 'cargo_photo_path', 'photo_status',

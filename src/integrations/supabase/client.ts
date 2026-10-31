@@ -13,7 +13,7 @@ const SUPABASE_ANON_KEY =
 // authorization remains authoritative on the backend.
 export const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { "x-britium-data-epoch": "2026-10-20" } },
+      global: { headers: { "x-britium-data-epoch": "2026-11-01" } },
     })
   : null;
 
