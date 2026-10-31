@@ -36,7 +36,7 @@ type RestoredNativePhoto = {
   error?: string;
 };
 
-const PENDING_PHOTO_KEY = "britium.rider.native-photo.pending.v1";
+const PENDING_PHOTO_KEY = "britium.rider.native-photo.pending.v1:2026-11-01";
 const PENDING_PHOTO_MAX_AGE_MS = 15 * 60 * 1000;
 export const NATIVE_PHOTO_RESTORED_EVENT = "britium:native-photo-restored";
 

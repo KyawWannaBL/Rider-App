@@ -334,7 +334,7 @@ export default function RiderPickupPhotoQrPortal() {
     if (draftUserRef.current && draftUserRef.current !== userId) { setLoading(false); setMessage("Account changed. Reopen pickup verification before continuing."); return; }
     draftUserRef.current = userId;
     let remembered = "";
-    try { remembered = localStorage.getItem(`britium.pickup.last:${draftUserRef.current}`) || ""; } catch { /* Remembering the last pickup is optional; IndexedDB holds the drafts. */ }
+    try { remembered = localStorage.getItem(`britium.pickup.last:2026-11-01:${draftUserRef.current}`) || ""; } catch { /* Remembering the last pickup is optional; IndexedDB holds the drafts. */ }
     const requested = selectedPickup?.pickup_id || params.pickupId || search || remembered;
     const requestedRow = rows.find((row) => row.pickup_id === requested || row.pickup_way_id === requested);
     const first =
@@ -421,7 +421,7 @@ export default function RiderPickupPhotoQrPortal() {
     parcelDraftsRef.current = merged;
     setParcels(merged);
     setParcelPage(page => Math.min(page, Math.max(1, Math.ceil(merged.length / pageSize))));
-    try { if (draftUserRef.current) localStorage.setItem(`britium.pickup.last:${draftUserRef.current}`, pickupId); } catch { /* Remembering the last pickup is optional; IndexedDB holds the drafts. */ }
+    try { if (draftUserRef.current) localStorage.setItem(`britium.pickup.last:2026-11-01:${draftUserRef.current}`, pickupId); } catch { /* Remembering the last pickup is optional; IndexedDB holds the drafts. */ }
   }
 
   async function refreshPickupAfterAction(pickupId: string) {
