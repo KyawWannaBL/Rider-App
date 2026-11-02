@@ -1192,7 +1192,7 @@ export default function DeliveryPage() {
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <button
                       type="button"
-                      onClick={() => requestConfirm("delivered")}
+                      onClick={() => requestConfirm(!canDeliver && !helperPreparedForDriver ? "accept" : "delivered")}
                       disabled={busy}
                       className={`${actionClass("delivered","bg-emerald-600")} disabled:cursor-wait disabled:opacity-60`}
                     >
