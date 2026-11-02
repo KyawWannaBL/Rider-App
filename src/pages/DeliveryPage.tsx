@@ -735,11 +735,11 @@ export default function DeliveryPage() {
         throw new Error((data?.message || data?.error || "Delivery confirmation failed.") + stage);
       }
       const mobileStatus = String(data?.mobile_status || "").toUpperCase();
-      if (mobileStatus === "DELIVERED" || (activeRole === "helper" && mobileStatus === "PENDING_DRIVER_CONFIRMATION")) {
+      if (mobileStatus === "DELIVERED" || mobileStatus === "PENDING_DRIVER_CONFIRMATION") {
         clearPaymentDraft(localStorage, paymentScope());
         setPaymentUncertain(false);
       }
-      if (activeRole === "helper" && mobileStatus === "PENDING_DRIVER_CONFIRMATION") {
+      if mobileStatus === "PENDING_DRIVER_CONFIRMATION" {
         const successMessage = tx(
           `${selected.delivery_way_id}: Delivery checks completed. Waiting for assigned Driver to press Delivered and confirm.`,
           `${selected.delivery_way_id}: Helper လုပ်ဆောင်ချက်များ ပြီးစီးပါပြီ။ Assigned Driver မှ Delivered ကိုနှိပ်၍ အတည်ပြုရန်သာ ကျန်ပါသည်။`
