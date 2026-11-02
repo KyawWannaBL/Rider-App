@@ -127,7 +127,15 @@ export default function DeliveryPage() {
 
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);
   const [paymentUncertain, setPaymentUncertain] = useState(false);
-  const paymentScope = (job = selected) => ({ actor: currentUser?.id || "", wayplan: String(job?.wayplan_id || ""), delivery: String(job?.delivery_way_id || "") });
+  const [authenticatedPaymentActor, setAuthenticatedPaymentActor] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    void supabase.auth.getUser().then(({ data }) => {
+      if (mounted) setAuthenticatedPaymentActor(data.user?.id || "");
+    });
+    return () => { mounted = false; };
+  }, []);
+  const paymentScope = (job = selected) => ({ actor: authenticatedPaymentActor || currentUser?.id || "", wayplan: String(job?.wayplan_id || ""), delivery: String(job?.delivery_way_id || "") });
   function initializePayments(job: any) {
     const helperPrepared = activeRole === "driver" && String(job.rider_status || job.stop_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
     const delivered = [job.stop_status, job.rider_status].some(status => String(status || "").toUpperCase() === "DELIVERED");
@@ -168,7 +176,12 @@ export default function DeliveryPage() {
   }
   function changePayments(rows: PaymentRow[]) {
     setPaymentRows(rows);
-    try { writePaymentDraft(localStorage, paymentScope(), {rows, submission: paymentUncertain ? "uncertain" : "editing"}); }
+    const scope = paymentScope();
+    if (!scope.actor || !scope.wayplan || !scope.delivery) {
+      setMsg(tx("Payment entered. Reopen this assigned delivery after signing in to save its draft.", "ငွေပမာဏ ဖြည့်ပြီးပါပြီ။ Draft သိမ်းရန် အကောင့်ဝင်ပြီး သက်ဆိုင်ရာ delivery ကို ပြန်ဖွင့်ပါ။"));
+      return;
+    }
+    try { writePaymentDraft(localStorage, scope, {rows, submission: paymentUncertain ? "uncertain" : "editing"}); }
     catch { setMsg(tx("Payment draft could not be saved on this device. Keep this screen open and retry when storage is available.", "ငွေပေးချေမှုမူကြမ်း သိမ်းမရပါ။ ဤမျက်နှာပြင်ကို ဖွင့်ထားပါ။")); }
   }
 
