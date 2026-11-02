@@ -1181,6 +1181,12 @@ export default function DeliveryPage() {
                 <section className="mt-5 rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-4">
                   <h3 className="text-lg font-black">{tx("Completion / Exception Control","ပို့ဆောင်ပြီး / မအောင်မြင် ထိန်းချုပ်မှု")}</h3>
                   <p className="mt-1 text-xs font-bold text-slate-500">{tx("Successful delivery and failed-delivery return are separate paths.","ပို့ဆောင်အောင်မြင်မှုနှင့် မအောင်မြင်၍ Warehouse ပြန်ပို့မှုကို သီးခြားလုပ်ငန်းစဉ်ဖြင့် ဆောင်ရွက်ပါ။")}</p>
+                  {!canDeliver && !helperPreparedForDriver && selected && (
+                    <div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">
+                      <p>{tx(`Delivery cannot complete while the current parcel status is ${status || "UNKNOWN"}. Accept this parcel first, then return to delivery verification.`, `လက်ရှိ ပါဆယ်အခြေအနေ ${status || "UNKNOWN"} ဖြစ်နေသဖြင့် ပို့ဆောင်ပြီးအတည်ပြု၍မရသေးပါ။ ပါဆယ်လက်ခံခြင်းကို အရင်အတည်ပြုပါ။`)}</p>
+                      <button type="button" disabled={busy} onClick={() => requestConfirm("accept")} className="mt-2 rounded-xl bg-slate-900 px-4 py-3 font-black text-white disabled:opacity-50">{tx("Accept parcel", "ပါဆယ်လက်ခံရန်")}</button>
+                    </div>
+                  )
 
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <button
