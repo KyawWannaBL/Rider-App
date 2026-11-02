@@ -48,6 +48,8 @@ export function DropoffPinEditor({
       ? { latitude: original.latitude, longitude: original.longitude }
       : null,
   );
+  const [latitudeText, setLatitudeText] = useState(pin ? String(pin.latitude) : "");
+  const [longitudeText, setLongitudeText] = useState(pin ? String(pin.longitude) : "");
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [message, setMessage] = useState(
@@ -58,9 +60,32 @@ export function DropoffPinEditor({
 
   useEffect(() => {
     if (original && validCoordinate(original.latitude) && validCoordinate(original.longitude)) {
-      setPin({ latitude: original.latitude, longitude: original.longitude });
+      const next = { latitude: original.latitude, longitude: original.longitude };
+      setPin(next);
+      setLatitudeText(String(next.latitude));
+      setLongitudeText(String(next.longitude));
     }
   }, [original?.latitude, original?.longitude]);
+
+  function selectPin(next: Pin) {
+    setPin(next);
+    setLatitudeText(String(next.latitude));
+    setLongitudeText(String(next.longitude));
+  }
+
+  function applyTypedCoordinates(): boolean {
+    const latitude = Number(latitudeText.trim());
+    const longitude = Number(longitudeText.trim());
+    if (!latitudeText.trim() || !longitudeText.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 || (latitude === 0 && longitude === 0)) {
+      setMessage("Enter valid latitude (-90 to 90) and longitude (-180 to 180).");
+      return false;
+    }
+    selectPin({latitude, longitude});
+    setMessage("Typed coordinates applied to the map. Press Save Drop-off Pin to save.");
+    return true;
+  }
+
+  const typedCoordinatesChanged = !!pin && (latitudeText.trim() !== String(pin.latitude) || longitudeText.trim() !== String(pin.longitude));
 
   function useCurrentLocation() {
     if (!navigator.geolocation) {
@@ -78,7 +103,7 @@ export function DropoffPinEditor({
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
         };
-        setPin(next);
+        selectPin(next);
         setLocating(false);
         setMessage(
           `Current location selected. GPS accuracy is about ±${Math.round(position.coords.accuracy)} m. Fine-adjust the pin if needed, then save.`,
@@ -101,8 +126,8 @@ export function DropoffPinEditor({
   }
 
   async function save() {
-    if (!pin) {
-      setMessage("Choose the drop-off point first.");
+    if (!pin || typedCoordinatesChanged) {
+      setMessage(typedCoordinatesChanged ? "Apply the typed coordinates to the map before saving." : "Choose the drop-off point first.");
       return;
     }
 
@@ -129,7 +154,7 @@ export function DropoffPinEditor({
       setMessage("Use current location first, then fine-adjust the pin.");
       return;
     }
-    setPin((current) => (current ? offsetCoordinate(current, northMeters, eastMeters) : current));
+    selectPin(offsetCoordinate(pin, northMeters, eastMeters));
     setMessage("Pin adjusted. Review the map and press Save Drop-off Pin.");
   }
 
@@ -157,7 +182,7 @@ export function DropoffPinEditor({
           <InteractivePinMap
             point={pin}
             onPointChange={(next) => {
-              setPin((current) => ({ ...next, accuracy: current?.accuracy }));
+              selectPin({ ...next, accuracy: pin?.accuracy });
               setMessage("Pin moved on the map. Review the exact gate/entrance and save.");
             }}
             interactive
@@ -178,6 +203,19 @@ export function DropoffPinEditor({
       </div>
 
       <div className="space-y-4 p-4">
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3">
+          <p className="mb-2 text-sm font-black text-slate-900">Enter exact drop-off coordinates</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="text-xs font-bold text-slate-700">Latitude
+              <input type="text" inputMode="decimal" value={latitudeText} onChange={(event) => setLatitudeText(event.target.value)} placeholder="16.955153496279294" aria-label="Drop-off latitude" className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 font-mono text-sm text-slate-900" />
+            </label>
+            <label className="text-xs font-bold text-slate-700">Longitude
+              <input type="text" inputMode="decimal" value={longitudeText} onChange={(event) => setLongitudeText(event.target.value)} placeholder="96.08224576636435" aria-label="Drop-off longitude" className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 font-mono text-sm text-slate-900" />
+            </label>
+          </div>
+          <button type="button" onClick={applyTypedCoordinates} className="mt-3 min-h-12 w-full rounded-xl bg-blue-900 px-4 font-black text-white">Apply Coordinates to Map</button>
+          <p className="mt-2 text-xs text-slate-600">Apply first, verify the map pin, then press Save Drop-off Pin. No GPS permission is needed for manual coordinates.</p>
+        </div>
         <button
           type="button"
           onClick={useCurrentLocation}
@@ -213,7 +251,7 @@ export function DropoffPinEditor({
                 type="button"
                 onClick={() => {
                   if (original) {
-                    setPin({ latitude: original.latitude, longitude: original.longitude });
+                    selectPin({ latitude: original.latitude, longitude: original.longitude });
                     setMessage("Pin reset to the saved delivery location.");
                   }
                 }}
@@ -246,7 +284,7 @@ export function DropoffPinEditor({
 
           <button
             type="button"
-            disabled={!pin || saving}
+            disabled={!pin || saving || typedCoordinatesChanged}
             onClick={() => void save()}
             className="v142-button-sheen v142-jelly flex min-h-13 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#d4af37] to-[#f4d66d] px-4 font-black text-slate-950 shadow-[0_14px_32px_rgba(212,175,55,.18)] disabled:opacity-40"
           >
