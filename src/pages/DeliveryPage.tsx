@@ -993,9 +993,10 @@ export default function DeliveryPage() {
             <button type="button" onClick={() => void approveAllHelperDeliveries()}
               disabled={busy || !pickups.some((job: any) => String(job.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER")}
               className="mt-3 w-full rounded-2xl bg-indigo-700 px-4 py-3 font-black text-white disabled:opacity-50">
-              {tx("End of Day — Accept All Helper Verifications", "နေ့ကုန်တွင် Helper အတည်ပြုချက်အားလုံးကို လက်ခံမည်")}
+              {tx(`Step 1: Confirm All ${pickups.filter((job: any) => String(job.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER").length} Helper-Completed Deliveries (One Confirmation)`, `အဆင့် ၁ — Helper ပြီးစီးထားသော ပို့ဆောင်မှု ${pickups.filter((job: any) => String(job.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER").length} ခုလုံးကို တစ်ကြိမ်တည်း အတည်ပြုမည်`)}
             </button>
           )}
+          {activeRole === "driver" && <p className="mt-2 text-sm font-semibold text-slate-700">{tx("Driver: After the Helper finishes every stop, confirm all completed deliveries once. Then both Driver and Helper can use Finish Assignments. Unfinished stops and failed confirmations remain blocked; no second COD collection.", "Driver: Helper က ပို့ဆောင်မှုအားလုံး စစ်ဆေးပြီးမှ တစ်ကြိမ်တည်း အတည်ပြုပါ။ ထို့နောက် Driver နှင့် Helper နှစ်ဦးစလုံး Finish Assignments နှိပ်နိုင်ပါသည်။ မပြီးသေးသောပို့ဆောင်မှုများကို မကျော်နိုင်ပါ။ ငွေထပ်မကောက်ခံပါနှင့်။")}</p>}
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
             <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{pickups.length} assigned</span>
             <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-900">{activeCount} active</span>
