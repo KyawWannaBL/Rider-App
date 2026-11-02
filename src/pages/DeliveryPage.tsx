@@ -188,7 +188,8 @@ export default function DeliveryPage() {
   const requiredCod = Number(selected?.calculated_cod_amount ?? selected?.cod_amount ?? 0);
   const status = String(selected?.stop_status || selected?.rider_status || "").toUpperCase();
   const paymentSummary = paymentTotals(paymentRows);
-  const canDeliver = ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY","OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER"].includes(status);
+  const selectedPendingDriver = String(selected?.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
+  const canDeliver = !selectedPendingDriver && ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY","OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER"].includes(status);
   const helperPreparedForDriver =
     activeRole === "driver" &&
     String(selected?.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
@@ -583,6 +584,10 @@ export default function DeliveryPage() {
     if (!selected) {
       const message = tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။");
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
+    }
+    if (selectedPendingDriver && activeRole !== "driver") {
+      const message = tx("Helper verification already recorded. Continue to the next stop; the Driver confirms all stops once at the end.", "Helper မှတ်တမ်းတင်ပြီးပါပြီ။ နောက်မှတ်တိုင်သို့ ဆက်သွားပါ။ Driver သည် အလုပ်အားလုံးပြီးမှ တစ်ကြိမ်တည်း အတည်ပြုပါမည်။");
+      setMsg(message); setDeliveryResult(message); setDeliveryProgress("success"); return true;
     }
     if (!canDeliver && !helperPreparedForDriver) {
       const message = tx(
@@ -1196,7 +1201,10 @@ export default function DeliveryPage() {
                 <section className="mt-5 rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-4">
                   <h3 className="text-lg font-black">{tx("Completion / Exception Control","ပို့ဆောင်ပြီး / မအောင်မြင် ထိန်းချုပ်မှု")}</h3>
                   <p className="mt-1 text-xs font-bold text-slate-500">{tx("Successful delivery and failed-delivery return are separate paths.","ပို့ဆောင်အောင်မြင်မှုနှင့် မအောင်မြင်၍ Warehouse ပြန်ပို့မှုကို သီးခြားလုပ်ငန်းစဉ်ဖြင့် ဆောင်ရွက်ပါ။")}</p>
-                  {!canDeliver && !helperPreparedForDriver && selected && (
+                  {selectedPendingDriver && activeRole !== "driver" && (
+                    <div role="status" className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm font-bold text-emerald-950">{tx("Helper verification saved. Continue to the next delivery stop. No Driver approval is needed until the end of the assignment.", "Helper အတည်ပြုမှု သိမ်းပြီးပါပြီ။ နောက်မှတ်တိုင်သို့ ဆက်သွားပါ။ Driver က အလုပ်အားလုံးပြီးမှ တစ်ကြိမ်တည်း အတည်ပြုပါမည်။")}</div>
+                  )}
+                  {!selectedPendingDriver && !canDeliver && !helperPreparedForDriver && selected && (
                     <div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">
                       <p>{tx(`Delivery cannot complete while the current parcel status is ${status || "UNKNOWN"}. Accept this parcel first, then return to delivery verification.`, `လက်ရှိ ပါဆယ်အခြေအနေ ${status || "UNKNOWN"} ဖြစ်နေသဖြင့် ပို့ဆောင်ပြီးအတည်ပြု၍မရသေးပါ။ ပါဆယ်လက်ခံခြင်းကို အရင်အတည်ပြုပါ။`)}</p>
                       <button type="button" disabled={busy} onClick={() => requestConfirm("accept")} className="mt-2 rounded-xl bg-slate-900 px-4 py-3 font-black text-white disabled:opacity-50">{tx("Accept parcel", "ပါဆယ်လက်ခံရန်")}</button>
@@ -1207,7 +1215,7 @@ export default function DeliveryPage() {
                     <button
                       type="button"
                       onClick={() => requestConfirm(helperPreparedForDriver ? "delivered" : !canDeliver ? "accept" : ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY"].includes(status) ? "start" : status === "OUT_FOR_DELIVERY" ? "arrive" : "delivered")}
-                      disabled={busy}
+                      disabled={busy || (selectedPendingDriver && activeRole !== "driver")}
                       className={`${actionClass("delivered","bg-emerald-600")} disabled:cursor-wait disabled:opacity-60`}
                     >
                       {busy && ["validating","uploading","gps","confirming"].includes(deliveryProgress)
