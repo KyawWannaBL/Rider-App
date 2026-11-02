@@ -585,7 +585,7 @@ export default function DeliveryPage() {
       const message = tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။");
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
     }
-    if (selectedPendingDriver && activeRole !== "driver") {
+    if (String(selected?.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER" && activeRole !== "driver") {
       const message = tx("Helper verification already recorded. Continue to the next stop; the Driver confirms all stops once at the end.", "Helper မှတ်တမ်းတင်ပြီးပါပြီ။ နောက်မှတ်တိုင်သို့ ဆက်သွားပါ။ Driver သည် အလုပ်အားလုံးပြီးမှ တစ်ကြိမ်တည်း အတည်ပြုပါမည်။");
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("success"); return true;
     }
