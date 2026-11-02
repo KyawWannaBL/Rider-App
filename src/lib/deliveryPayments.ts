@@ -47,7 +47,7 @@ function allocations(row: any): any[] | null {
 }
 export function initialPaymentRows(row: any, expected: number): PaymentRow[] {
   const saved = allocations(row);
-  if (saved) return saved.map(item => ({method: String(item.method || ''), amount: String(item.amount ?? ''), reference: String(item.reference || '')}));
+  if (saved?.length) return saved.map(item => ({method: String(item.method || ''), amount: String(item.amount ?? ''), reference: String(item.reference || '')}));
   const method = String(row?.payment_method || row?.payment_mode || '').toUpperCase();
   if (PAYMENT_METHODS.includes(method as PaymentMethod) && expected > 0)
     return [{method, amount: String(expected), reference: String(row?.transaction_reference || '')}];
