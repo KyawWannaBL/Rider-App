@@ -1186,7 +1186,7 @@ export default function DeliveryPage() {
                       <p>{tx(`Delivery cannot complete while the current parcel status is ${status || "UNKNOWN"}. Accept this parcel first, then return to delivery verification.`, `လက်ရှိ ပါဆယ်အခြေအနေ ${status || "UNKNOWN"} ဖြစ်နေသဖြင့် ပို့ဆောင်ပြီးအတည်ပြု၍မရသေးပါ။ ပါဆယ်လက်ခံခြင်းကို အရင်အတည်ပြုပါ။`)}</p>
                       <button type="button" disabled={busy} onClick={() => requestConfirm("accept")} className="mt-2 rounded-xl bg-slate-900 px-4 py-3 font-black text-white disabled:opacity-50">{tx("Accept parcel", "ပါဆယ်လက်ခံရန်")}</button>
                     </div>
-                  )
+                  )}
 
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <button
