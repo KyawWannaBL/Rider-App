@@ -1018,6 +1018,7 @@ export default function DeliveryPage() {
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
             <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{pickups.length} assigned</span>
             <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-900">{activeCount} active</span>
+             <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900">✓ {pickups.filter((p:any)=>["DELIVERED","DELIVERY_COMPLETED","POD_VERIFIED","HELPER_COMPLETED_PENDING_DRIVER"].includes(String(p.rider_status || p.stop_status || "").toUpperCase())).length} {tx("completed / Helper verified","ပြီးစီး / Helper အတည်ပြုပြီး")}</span>
           </div>
           <div className="mt-3 rounded-2xl bg-blue-50 p-3 font-bold text-blue-900">{msg}</div>
         </section>
@@ -1037,7 +1038,7 @@ export default function DeliveryPage() {
                   <p className="font-black">{p.recipient_name || p.receiver_name || "-"}</p>
                   <p className="text-sm text-slate-500">{p.address || p.township || "-"}</p>
                   <div className="mt-2 flex items-center justify-between text-xs font-bold">
-                    <span>{String(p.stop_status || p.rider_status || "PENDING").replace(/_/g, " ")}</span>
+                    <span className={`rounded-full px-2 py-1 ${["DELIVERED","DELIVERY_COMPLETED","POD_VERIFIED"].includes(String(p.rider_status || p.stop_status || "").toUpperCase()) ? "bg-emerald-600 text-white" : String(p.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER" ? "bg-emerald-100 text-emerald-900" : "bg-slate-100 text-slate-700"}`}>{["DELIVERED","DELIVERY_COMPLETED","POD_VERIFIED"].includes(String(p.rider_status || p.stop_status || "").toUpperCase()) ? `✓ ${tx("Completed","ပြီးစီး")}` : String(p.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER" ? `✓ ${tx("Helper done","Helper ပြီးစီး")}` : String(p.rider_status || p.stop_status || "PENDING").replace(/_/g, " ")}</span>
                     <span>{Number(p.cod_amount || 0).toLocaleString()} Ks</span>
                   </div>
                 </button>
@@ -1065,10 +1066,18 @@ export default function DeliveryPage() {
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-blue-900">{status || "PENDING"}</span>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <button type="button" onClick={() => requestConfirm("accept")} className={actionClass("accept","bg-slate-900")}>{tx("Accept","လက်ခံရန်")}</button>
-                    <button type="button" onClick={() => requestConfirm("start")} className={actionClass("start","bg-blue-700")}>{tx("Start Delivery","ပို့ဆောင်မှု စတင်ရန်")}</button>
-                    <button type="button" onClick={() => requestConfirm("arrive")} className={actionClass("arrive","bg-indigo-700")}>{tx("Arrived at Customer","Customer နေရာသို့ ရောက်ရှိပြီ")}</button>
+                  <div className="flex flex-col gap-3">
+                    {selectedPendingDriver || ["DELIVERED","DELIVERY_COMPLETED","POD_VERIFIED"].includes(status) ? (
+                      <div role="status" className="rounded-2xl bg-emerald-100 p-4 font-black text-emerald-900">✓ {tx(selectedPendingDriver ? "Helper verification complete — continue to next stop; Driver confirms at assignment end." : "Delivery completed.",selectedPendingDriver ? "Helper အတည်ပြုပြီးပါပြီ။ နောက်မှတ်တိုင်သို့ ဆက်သွားပါ။ Driver မှ အဆုံးတွင် တစ်ကြိမ်တည်း အတည်ပြုပါမည်။" : "ပို့ဆောင်မှု ပြီးစီးပါပြီ။")}</div>
+                    ) : status === "ARRIVED_AT_CUSTOMER" || actionActive("arrive") ? (
+                      <div role="status" className="rounded-2xl bg-emerald-600 p-4 text-center font-black text-white">✓ {tx("Customer arrival confirmed","Customer နေရာသို့ ရောက်ရှိပြီး ✓")}</div>
+                    ) : status === "OUT_FOR_DELIVERY" || actionActive("start") ? (
+                      <button type="button" disabled={busy} onClick={() => requestConfirm("arrive")} className={actionClass("arrive","bg-indigo-700")}>{tx("Arrived at Customer","Customer နေရာသို့ ရောက်ရှိပြီ")}</button>
+                    ) : ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY"].includes(status) || actionActive("accept") ? (
+                      <button type="button" disabled={busy} onClick={() => requestConfirm("start")} className={actionClass("start","bg-blue-700")}>{tx("Start Delivery","ပို့ဆောင်မှု စတင်ရန်")}</button>
+                    ) : (
+                      <button type="button" disabled={busy} onClick={() => requestConfirm("accept")} className={actionClass("accept","bg-slate-900")}>{tx("Accept","လက်ခံရန်")}</button>
+                    )}
                   </div>
                 </section>
 
