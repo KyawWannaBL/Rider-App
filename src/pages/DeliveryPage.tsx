@@ -1193,7 +1193,7 @@ export default function DeliveryPage() {
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <button
                       type="button"
-                      onClick={() => requestConfirm(!canDeliver && !helperPreparedForDriver ? "accept" : "delivered")}
+                      onClick={() => requestConfirm(helperPreparedForDriver ? "delivered" : !canDeliver ? "accept" : ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY"].includes(status) ? "start" : status === "OUT_FOR_DELIVERY" ? "arrive" : "delivered")}
                       disabled={busy}
                       className={`${actionClass("delivered","bg-emerald-600")} disabled:cursor-wait disabled:opacity-60`}
                     >
@@ -1201,7 +1201,13 @@ export default function DeliveryPage() {
                         ? tx("Processing...","လုပ်ဆောင်နေသည်...")
                         : helperPreparedForDriver
                           ? tx("Accept Helper Done / Delivered","Helper ပြီးစီးမှု အတည်ပြု / ပို့ဆောင်ပြီး")
-                          : activeRole === "helper"
+                          : !canDeliver
+                            ? tx("Step 1 — Accept Parcel", "အဆင့် ၁ — ပါဆယ်လက်ခံရန်")
+                            : ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY"].includes(status)
+                            ? tx("Step 2 — Start Delivery", "အဆင့် ၂ — ပို့ဆောင်မှုစတင်ရန်")
+                            : status === "OUT_FOR_DELIVERY"
+                            ? tx("Step 3 — Record Customer Arrival (GPS)", "အဆင့် ၃ — Customer ရောက်ရှိကြောင်း GPS မှတ်ရန်")
+                            : activeRole === "helper"
                             ? tx("Complete & Send to Driver","ပြီးစီးပြီး Driver သို့ အတည်ပြုရန်ပို့မည်")
                             : tx("Delivered","ပို့ဆောင်ပြီး")}
                     </button>
