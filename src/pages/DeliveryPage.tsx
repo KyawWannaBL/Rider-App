@@ -4,6 +4,7 @@ import { useAppState } from "../hooks/useAppState";
 import { isNativeAndroidApp, takeNativePhotoFile, chooseNativeGalleryFile, consumeRestoredNativePhoto, NATIVE_PHOTO_RESTORED_EVENT } from "../lib/nativePhoto";
 
 import { deliveryPhotoScope, isCurrentDeliveryPhoto } from "../lib/deliveryPhotoState";
+import { FinishAssignmentsButton } from "../components/shared/FinishAssignmentsButton";
 import { confirmPhotoUpload } from "../lib/proofUploadState";
 
 import { PAYMENT_METHODS, buildPaymentPayload, paymentTotals, initialPaymentRows, readPaymentDraft, writePaymentDraft, clearPaymentDraft, type PaymentRow } from "../lib/deliveryPayments";
@@ -194,6 +195,7 @@ export default function DeliveryPage() {
     activeRole === "driver" &&
     String(selected?.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
   const paymentReadOnly = busy || !canDeliver || helperPreparedForDriver;
+  const driverPendingReviews = pickups.filter((job: any) => String(job.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER");
 
   async function approveAllHelperDeliveries() {
     if (activeRole !== "driver" || busy) return;
@@ -1021,6 +1023,7 @@ export default function DeliveryPage() {
              <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900">✓ {pickups.filter((p:any)=>["DELIVERED","DELIVERY_COMPLETED","POD_VERIFIED","HELPER_COMPLETED_PENDING_DRIVER"].includes(String(p.rider_status || p.stop_status || "").toUpperCase())).length} {tx("completed / Helper verified","ပြီးစီး / Helper အတည်ပြုပြီး")}</span>
           </div>
           <div className="mt-3 rounded-2xl bg-blue-50 p-3 font-bold text-blue-900">{msg}</div>
+          {activeRole === "driver" && <div className="mt-4"><FinishAssignmentsButton onFinished={() => load(selected?.delivery_way_id)} /></div>}
         </section>
 
         <div className="grid gap-4 lg:grid-cols-[330px_1fr]">
@@ -1058,6 +1061,17 @@ export default function DeliveryPage() {
                   <div className="md:col-span-2"><b>Address:</b> {selected.address || "-"}</div>
                 </div>
 
+                {activeRole === "driver" && <section className="mt-4 rounded-2xl border-2 border-indigo-300 bg-indigo-50 p-4" aria-label="Driver final approval">
+                  <h3 className="text-lg font-black text-indigo-950">{tx("Driver: Final Delivery Review","Driver — ပို့ဆောင်မှု နောက်ဆုံးအတည်ပြုချက်")}</h3>
+                  <p className="mt-1 text-sm font-semibold text-indigo-900">{tx(`${driverPendingReviews.length} Helper-completed stop(s) awaiting Driver confirmation. No second COD collection is needed.`, `Helper ပြီးစီးထားပြီး Driver အတည်ပြုရန် ${driverPendingReviews.length} ခု ကျန်ရှိပါသည်။ ငွေထပ်မကောက်ပါနှင့်။`)}</p>
+                  <button type="button" disabled={busy || driverPendingReviews.length === 0} onClick={() => void approveAllHelperDeliveries()} className="mt-3 w-full rounded-2xl bg-indigo-700 p-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-50">{busy ? tx("Confirming…","အတည်ပြုနေသည်…") : tx(`Confirm All ${driverPendingReviews.length} Helper-Completed Stops`,`Helper ပြီးစီးထားသော ${driverPendingReviews.length} ခုလုံး အတည်ပြုမည်`)}</button>
+                  <p className="mt-2 text-xs text-indigo-800">{tx("Once every stop has reached its final status, use Finish Assignments below. Open stops cannot be bypassed.","မှတ်တိုင်အားလုံး အပြီးသတ် status ရောက်ပြီးမှ အောက်ရှိ Finish Assignments ကိုနှိပ်ပါ။ မပြီးသေးသောမှတ်တိုင်များကို ကျော်၍မရပါ။")}</p>
+                </section>}
+                <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4" aria-label="Parcel weight review">
+                  <h3 className="font-black text-amber-950">{tx("Parcel weight / financial verification","ပါဆယ်အလေးချိန်နှင့် ငွေစာရင်းစစ်ဆေးခြင်း")}</h3>
+                  <p className="mt-1 text-sm font-semibold text-amber-900">{tx("Registered weight:", "စာရင်းသွင်းထားသည့် အလေးချိန်:")} {Number(selected.weight_kg ?? selected.actual_weight_kg ?? 0) > 0 ? `${Number(selected.weight_kg ?? selected.actual_weight_kg)} kg` : tx("Not provided in delivery data — ask Data Entry/Finance to verify the actual parcel weight.","Delivery data တွင် မပါရှိပါ — အမှန်တကယ်အလေးချိန်ကို Data Entry / Finance နှင့် စစ်ဆေးပါ။")}</p>
+                  <p className="mt-1 text-xs font-semibold text-amber-800">{tx("If the weight or expected COD is incorrect, request an audited correction in Enterprise Portal before financial closure. Do not change the collected cash amount or submit duplicate payment.","အလေးချိန် သို့မဟုတ် COD မှားနေပါက Finance/Data Entry မှ audit ပါသော correction ပြုလုပ်ရန် တောင်းဆိုပါ။ ငွေထပ်မကောက်ခံပါနှင့်။")}</p>
+                </section>}
                 <section className="mt-4 rounded-[26px] border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50/50 p-4 shadow-sm">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div>
