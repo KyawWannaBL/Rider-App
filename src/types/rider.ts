@@ -6,6 +6,7 @@ export type WaybillStatus =
   | "EN_ROUTE"
   | "ARRIVED"
   | "DELIVERED"
+  | "PENDING_DRIVER_CONFIRMATION"
   | "FAILED"
   | "RETURN_PENDING"
   | "RETURN_SCANNED"
