@@ -97,7 +97,8 @@ export function DropoffPinEditor({
       setMessage("This browser does not offer GPS location. Enable device location services or apply coordinates manually.");
       return;
     }
-    if (document.permissionsPolicy && !document.permissionsPolicy.allowsFeature("geolocation")) {
+    const locationPolicy = (document as Document & { permissionsPolicy?: { allowsFeature: (feature: string) => boolean } }).permissionsPolicy;
+    if (locationPolicy && !locationPolicy.allowsFeature("geolocation")) {
       setMessage("This browser page blocks GPS access. Open the Rider App directly rather than inside another app or embedded window.");
       return;
     }
