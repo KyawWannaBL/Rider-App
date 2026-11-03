@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, MapPinned, Route as RouteIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { AssignedDropsMap } from "@/components/shared/AssignedDropsMap";
 import type { Dispatch, Waybill } from "@/types/rider";
 
 type Office = { branch_code: string; branch_name: string; lat: number; lng: number };
@@ -30,7 +31,7 @@ export function RiderRouteOverview({ dispatch, waybills }: { dispatch: Dispatch;
   const [offices, setOffices] = useState<Office[]>(REFERENCE_OFFICES);
   const [selectedOffice, setSelectedOffice] = useState("");
   const [officeMessage, setOfficeMessage] = useState("");
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +96,13 @@ export function RiderRouteOverview({ dispatch, waybills }: { dispatch: Dispatch;
       <span>{expanded ? "Hide" : "View"}</span>
     </button>
     {expanded && <div className="mt-3 space-y-3">
+      <AssignedDropsMap
+        office={selected ? { label: selected.branch_name, latitude: selected.lat, longitude: selected.lng } : null}
+        stops={mapped.map(stop => ({
+          id: stop.waybill.id, latitude: stop.lat, longitude: stop.lng,
+          sequence: stop.sequence, label: stop.waybill.deliveryWayId,
+        }))}
+      />
       <p className="text-xs font-semibold leading-5 text-slate-600">
         Follow the Supervisor-approved stop order. Choose the departure head office or branch to see directions from that office. Viewing the map does not reassign stops.
       </p>
@@ -107,7 +115,7 @@ export function RiderRouteOverview({ dispatch, waybills }: { dispatch: Dispatch;
       </label>
       {officeMessage && <p className="text-xs font-semibold text-amber-700">{officeMessage}</p>}
       {ordered.length !== mapped.length && <p className="rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-900">
-        {ordered.length - mapped.length} stop(s) have no precise coordinates. Complete their pins before opening the full route map.
+        {ordered.length - mapped.length} stop(s) have no precise coordinates. Complete their pins to display every drop on the map.
       </p>}
       {segments.map((segment, index) => <a key={index} href={segment.url} target="_blank" rel="noopener noreferrer"
         className="flex min-h-12 items-center justify-between rounded-xl bg-blue-900 px-4 text-sm font-black text-white">

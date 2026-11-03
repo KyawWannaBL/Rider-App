@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { AssignedDropsMap } from "@/components/shared/AssignedDropsMap";
 
 type Stop = { wayId:string; sequence:number; address:string; lat:number|null; lng:number|null };
 const OFFICES = [
@@ -20,7 +21,7 @@ function mapUrl(origin:string,stops:Stop[]) {
 }
 
 export function FieldTeamRouteOverview() {
-  const [open,setOpen]=useState(false);
+  const [open,setOpen]=useState(true);
   const [plans,setPlans]=useState<Record<string,Stop[]>>({});
   const [planId,setPlanId]=useState("");
   const [officeCode,setOfficeCode]=useState("");
@@ -86,6 +87,13 @@ export function FieldTeamRouteOverview() {
       Full Assigned Route Map · {open?"Hide":"View"}
     </button>
     {open&&<div className="mt-3 space-y-3 text-sm">
+      <AssignedDropsMap
+        office={office ? { label: office.label, latitude: office.lat, longitude: office.lng } : null}
+        stops={stops.filter(stop => stop.lat !== null && stop.lng !== null).map(stop => ({
+          id: stop.wayId, latitude: stop.lat as number, longitude: stop.lng as number,
+          sequence: stop.sequence, label: stop.wayId,
+        }))}
+      />
       <p className="text-xs text-slate-600">Supervisor-approved stop sequence. Viewing directions does not change assignments or dispatch.</p>
       {loading&&<p>Loading assigned route…</p>}
       {error&&<p className="rounded-xl bg-amber-50 p-3 font-semibold text-amber-900">{error}</p>}
@@ -102,7 +110,7 @@ export function FieldTeamRouteOverview() {
       </label>
       <p className="text-xs text-amber-800">Office reference coordinates must be confirmed before travel; the app does not infer your departure office.</p>
       {!complete&&stops.length>0&&<p className="rounded-xl bg-amber-50 p-3 font-semibold text-amber-900">
-        {stops.filter(s=>s.lat===null||s.lng===null).length} stop(s) have no precise pin. Complete locations before opening the full map.
+        {stops.filter(s=>s.lat===null||s.lng===null).length} stop(s) have no precise pin. Complete missing locations to display every drop on the map.
       </p>}
       {segments.map(part=><a key={part.from} href={part.url} target="_blank" rel="noopener noreferrer"
         className="block min-h-12 rounded-xl bg-blue-900 p-3 font-black text-white">
