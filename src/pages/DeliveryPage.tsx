@@ -143,6 +143,8 @@ export default function DeliveryPage() {
     setWeightReviewMessage("");
   }, [selected?.delivery_way_id]);
   const [failureMode, setFailureMode] = useState(false);
+  const failureSubmissionRef=useRef(false);
+  const failureOperationRef=useRef<{way:string;reason:string;key:string}|null>(null);
   const [deliveryProgress, setDeliveryProgress] = useState<"idle"|"validating"|"uploading"|"gps"|"confirming"|"success"|"error">("idle");
   const [deliveryResult, setDeliveryResult] = useState("");
   const [geofenceRepairAvailable, setGeofenceRepairAvailable] = useState(false);
@@ -1078,50 +1080,76 @@ export default function DeliveryPage() {
 
   async function failAndReturnToWarehouse() {
     if (!selected) { setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။")); return false; }
+    if (busy || failureSubmissionRef.current) return false;
     if (!failureMode) {
-      setMsg(tx("Click Failed Delivery first, then choose a failed reason.","ပို့ဆောင်မှုမအောင်မြင် ကို အရင်နှိပ်ပြီး အကြောင်းပြချက်ကို ရွေးပါ။")); return false;
+      setMsg(tx("Open Failed Delivery and choose the reason first.","ပို့ဆောင်မှုမအောင်မြင် ကိုဖွင့်ပြီး အကြောင်းပြချက်ကို ရွေးပါ။")); return false;
     }
-    if (!form.failed_reason) {
+    const reason=String(form.failed_reason||"").trim().toUpperCase();
+    if (!reason) {
       setMsg(tx("Choose a failed delivery reason.","ပို့ဆောင်မှုမအောင်မြင်ရသည့် အကြောင်းပြချက်ကို ရွေးပါ။")); return false;
     }
-
-    if (form.failed_reason === "OTHER" && !form.remarks.trim()) { setMsg(tx("Please type the failed reason.", "မအောင်မြင်သည့်အကြောင်းပြချက်ကို ရေးပါ။")); return false; }
-    if (form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE") {
-      return await failDelivery();
+    if ((reason==="OTHER" || reason==="PHONE_OFF" || reason==="PHONE_OUT_OF_COVERAGE" || reason==="NO_ANSWER")
+      && form.remarks.trim().length<3) {
+      setMsg(tx("Enter the supporting failure details (at least 3 characters).","မအောင်မြင်ရသည့် အသေးစိတ်အကြောင်းပြချက် ရေးပါ။"));return false;
     }
-
-    const gps=await currentGps();
+    if (reason==="CUSTOMER_REQUESTED_RESCHEDULE")return await failDelivery();
+    if (classifyFailureReason(reason)==="DIRECT_RTO") {
+      setMsg(tx("This is a Direct RTO reason. Contact Customer Service/Supervisor for evidence review; this screen cannot finalize RTO.",
+        "ချက်ချင်း RTO အမျိုးအစားဖြစ်ပါသည်။ Customer Service/Supervisor က သက်သေစစ်ဆေးအတည်ပြုရန် လိုအပ်သည်။"));return false;
+    }
+    const wayplanId=String(selected.wayplan_id||"");
+    const deliveryWayId=String(selected.delivery_way_id||"");
+    const failStatuses=["FAILED_DELIVERY","DELIVERY_FAILED","RETURN_TO_WAREHOUSE","RTO"];
+    failureSubmissionRef.current=true;
     setBusy(true);
     try {
-      const failedResult=await (supabase as any).rpc("be_field_team_delivery_action_v77", {
-        p_payload: {
-          wayplan_id:selected.wayplan_id,
-          delivery_way_id:selected.delivery_way_id,
-          action:"exception",
-          exception_reason:form.failed_reason,
-          exception_code:form.failed_reason,
-          failed_reason:form.failed_reason,
-          remark:form.remarks.trim() || null,
-          remarks:form.remarks.trim() || null,
-          ...gps,
-        },
+      // A response timeout may hide a committed failure. Always inspect the
+      // saved assigned stop before attempting a new failure event.
+      const existing=await readScopedDeliveryStatus(wayplanId,deliveryWayId);
+      if(failStatuses.includes(String(existing.stop_status||"").toUpperCase())){
+        setFailureMode(false);
+        setMsg(deliveryWayId+": failure was already saved. Warehouse return scan is the next custody step.");
+        return true;
+      }
+      const gps=await currentGps(); // Failure reporting must not depend on GPS permission.
+      const result=await (supabase as any).rpc("be_rider_wayplan_action",{
+        p_payload:{
+          wayplan_id:wayplanId,delivery_way_id:deliveryWayId,action:"failed",
+          failed_reason:reason,exception_code:reason,exception_reason:reason,
+          remark:form.remarks.trim()||null,remarks:form.remarks.trim()||null,
+          idempotency_key:failureOperationRef.current?.way===deliveryWayId &&
+            failureOperationRef.current?.reason===reason
+             ?failureOperationRef.current.key
+             :(()=>{const key=globalThis.crypto?.randomUUID?.()||("fail-"+Date.now()+"-"+Math.random().toString(36).slice(2));
+               failureOperationRef.current={way:deliveryWayId,reason,key};return key})(),
+          ...gps
+        }
       });
-      if (failedResult.error) throw failedResult.error;
-      if (failedResult.data?.ok===false) throw new Error(failedResult.data?.error || "Failed delivery submission failed.");
-
-      setMsg(tx(
-        `${selected.delivery_way_id}: failed delivery recorded. Warehouse Return Scan is now the next physical step.`,
-        `${selected.delivery_way_id}: ပို့ဆောင်မှုမအောင်မြင်ကြောင်း မှတ်တမ်းတင်ပြီးပါပြီ။ နောက်တစ်ဆင့်မှာ Warehouse Return Scan လုပ်ရန်ဖြစ်ပါသည်။`
-      ));
+      if(result.error||result.data?.ok!==true)throw new Error(result.error?.message||result.data?.error||"Failed delivery was not accepted.");
+      const verified=await readScopedDeliveryStatus(wayplanId,deliveryWayId);
+      if(!failStatuses.includes(String(verified.stop_status||"").toUpperCase())){
+        setMsg(tx("Failure was submitted, but its saved status is unconfirmed. Verify status before retrying.",
+          "Way Failed ပေးပို့ပြီးဖြစ်သော်လည်း အခြေအနေ အတည်မပြုနိုင်သေးပါ။ ထပ်မလုပ်မီ စစ်ဆေးပါ။"));
+        return false;
+      }
+      failureOperationRef.current=null;
       setFailureMode(false);
-      await load(selected.delivery_way_id);
+      setMsg(tx(deliveryWayId+": failure recorded. Warehouse Return Scan is required before any new dispatch.",
+        deliveryWayId+": ပို့ဆောင်မှုမအောင်မြင်ကြောင်း မှတ်တမ်းတင်ပြီးပါပြီ။ Warehouse Return Scan ပြုလုပ်ရန် လိုအပ်သည်။"));
       return true;
-    } catch(error:any) {
-      setMsg(error?.message || "Unable to return parcel to Warehouse.");
+    }catch(error:any){
+      // Never blindly repeat a failed-way mutation after a network timeout.
+      try {
+        const verified=await readScopedDeliveryStatus(wayplanId,deliveryWayId);
+        if(failStatuses.includes(String(verified.stop_status||"").toUpperCase())){
+          setFailureMode(false);failureOperationRef.current=null;
+          setMsg(deliveryWayId+": failure was saved despite the interrupted response. Do not repeat.");
+          return true;
+        }
+      }catch(_statusError){/* Show original error. Existing operation ID remains available for a safe retry. */}
+      setMsg((error?.message||"Unable to record failed delivery.")+" — Check saved status before retrying.");
       return false;
-    } finally {
-      setBusy(false);
-    }
+    }finally{failureSubmissionRef.current=false;setBusy(false)}
   }
 
   async function sendGps() {
@@ -1509,7 +1537,12 @@ export default function DeliveryPage() {
 
 
 
-                  {failureMode && form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
+                  {failureMode && classifyFailureReason(form.failed_reason)==="DIRECT_RTO" &&
+                    <p role="alert" className="mt-3 rounded-xl border border-amber-400 bg-amber-50 p-3 font-bold text-amber-950">
+                      {tx("Direct RTO requires Supervisor/CS evidence review. Do not use ordinary Failed Delivery to bypass RTO authorization.",
+                          "ချက်ချင်း RTO လုပ်ရန် Supervisor/CS မှ သက်သေစစ်ဆေးအတည်ပြုရန် လိုအပ်သည်။")}
+                    </p>}
+                                    {failureMode && form.failed_reason === "CUSTOMER_REQUESTED_RESCHEDULE" && (
                     <label className="mt-3 block rounded-2xl border bg-white p-3 font-bold">
                       {tx("Dedicated delivery date","သတ်မှတ်ပို့ဆောင်ရက်")}
                       <input type="date" className="mt-1 w-full rounded-xl border p-2" value={form.reschedule_date} onChange={(e) => setForm({ ...form, reschedule_date: e.target.value })} />
@@ -1526,8 +1559,9 @@ export default function DeliveryPage() {
                     </button>
                     <button
                       type="button"
+                      disabled={busy||!failureMode||!form.failed_reason}
                       onClick={() => requestConfirm("return")}
-                      className={actionClass("return","bg-orange-600")}
+                      className={actionClass("return","bg-orange-600")+" disabled:cursor-not-allowed disabled:opacity-50"}
                     >
                       {tx("Return to Warehouse","Warehouse သို့ ပြန်ပို့ရန်")}
                     </button>
