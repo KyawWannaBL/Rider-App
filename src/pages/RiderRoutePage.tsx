@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw, Route as RouteIcon } from "lucide-react";
 import { ActiveRouteScreen } from "@/components/rider/ActiveRouteScreen";
+import { DeliveryMissionPanel } from "@/components/rider/DeliveryMissionPanel";
 import { RiderRouteOverview } from "@/components/rider/RiderRouteOverview";
 import { RiderNotification } from "@/components/rider/RiderNotification";
 import { loadRiderRoute, openNavigation } from "@/lib/riderOperations";
@@ -11,6 +12,7 @@ export default function RiderRoutePage() {
   const [dispatch, setDispatch] = useState<Dispatch | null>(null);
   const [waybills, setWaybills] = useState<Waybill[]>([]);
   const [selectedId, setSelectedId] = useState("");
+  const [showStopDetails, setShowStopDetails] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [notification, setNotification] = useState<any>(null);
@@ -98,51 +100,44 @@ export default function RiderRoutePage() {
         />
       )}
 
-      <div className="border-b border-blue-200 bg-blue-950 px-4 py-3 text-white">
-        <div className="mx-auto max-w-lg">
-          <h1 className="text-lg font-black">Delivery Route Map</h1>
-          <p className="text-xs font-semibold text-blue-100">Assigned drop-off pins and approved Wayplan sequence</p>
+      <div className="border-b border-blue-200 bg-blue-950 px-4 py-4 text-white">
+        <div className="mx-auto max-w-7xl">
+          <p className="text-[10px] font-black uppercase tracking-[.22em] text-blue-200">BRITIUM EXPRESS · FIELD OPERATIONS</p>
+          <h1 className="mt-1 text-2xl font-black">Delivery Mission Control</h1>
+          <p className="mt-1 text-xs font-semibold text-blue-100">Assigned route map, customer contact and secure delivery actions in one workspace</p>
         </div>
       </div>
-      <RiderRouteOverview dispatch={dispatch} waybills={waybills} />
-      <div className="border-b border-slate-200 bg-white px-4 py-3">
-        <div className="mx-auto flex max-w-lg items-center gap-2 overflow-x-auto">
-          {waybills.map((waybill) => (
-            <button
-              type="button"
-              key={waybill.id}
-              onClick={() => setSelectedId(waybill.id)}
-              className={[
-                "shrink-0 rounded-2xl px-4 py-3 text-left text-xs font-black transition",
-                waybill.id === selected.id
-                  ? "bg-blue-700 text-white"
-                  : "border border-slate-200 bg-white text-slate-700",
-              ].join(" ")}
-            >
-              <span className="block">#{waybill.sequenceNo || "-"}</span>
-              <span className="mt-1 block font-mono">{waybill.deliveryWayId}</span>
+      {message && <div className="mx-auto max-w-7xl px-4 py-2 text-xs font-bold text-blue-900" role="status">{message}</div>}
+      <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-4 px-3 py-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.9fr)] lg:px-5">
+        <div className="min-w-0 space-y-4">
+          <RiderRouteOverview dispatch={dispatch} waybills={waybills} />
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+            <button type="button" className="w-full px-4 py-3 text-left font-black text-slate-900"
+              onClick={() => setShowStopDetails(value => !value)}>
+              {showStopDetails ? "Hide detailed stop information −" : "Show selected stop details and pin editor +"}
             </button>
-          ))}
+            {showStopDetails && <ActiveRouteScreen
+              dispatch={dispatch}
+              waybill={selected}
+              onNavigate={openNavigation}
+              onOpenDelivery={openDelivery}
+              onPinSaved={() => {
+                setMessage("Drop-off pin saved. Route coordinates refreshed.");
+                void load();
+              }}
+            />}
+          </div>
         </div>
+        <DeliveryMissionPanel
+          waybills={waybills}
+          selected={selected}
+          onSelect={waybill => setSelectedId(waybill.id)}
+          onNavigate={openNavigation}
+          onVerify={openDelivery}
+          onRefresh={() => void load()}
+          loading={loading}
+        />
       </div>
-
-      {message && (
-        <div className="bg-blue-50 px-4 py-2 text-center text-xs font-bold text-blue-900">
-          {message}
-        </div>
-      )}
-
-
-      <ActiveRouteScreen
-        dispatch={dispatch}
-        waybill={selected}
-        onNavigate={openNavigation}
-        onOpenDelivery={openDelivery}
-        onPinSaved={() => {
-          setMessage("Drop-off pin saved. Route coordinates refreshed.");
-          void load();
-        }}
-      />
     </>
   );
 }

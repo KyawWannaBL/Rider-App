@@ -80,7 +80,7 @@ export function AssignedDropsMap({ office, stops }: { office?: DropMapOffice | n
       <h3 className="flex items-center gap-2 text-sm font-black text-slate-950"><MapPin className="h-4 w-4 text-blue-700" /> Delivery drops on map</h3>
       <span className="text-xs font-bold text-slate-600">{validStops.length} of {stops.length} pinned</span>
     </div>
-    <div ref={element} className="relative h-[360px] w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-200" role="img" aria-label={`Map showing ${validStops.length} numbered delivery drops`}>
+    <div ref={element} className="relative h-[55vh] min-h-[400px] max-h-[720px] w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 lg:h-[620px]" role="img" aria-label={`Map showing ${validStops.length} numbered delivery drops`}>
       {tiles.map(tile => <img key={tile.key} src={tile.url} alt="" draggable={false} className="pointer-events-none absolute h-64 w-64 max-w-none select-none" style={{ left: tile.left, top: tile.top }} />)}
       <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${size.width} ${size.height}`}>
         {officePoint && points.length > 0 && <line x1={officePoint.x} y1={officePoint.y} x2={points[0].xy.x} y2={points[0].xy.y} stroke="#2563eb" strokeWidth="3" strokeDasharray="6 6" />}
