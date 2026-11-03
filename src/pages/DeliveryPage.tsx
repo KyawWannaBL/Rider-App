@@ -74,15 +74,44 @@ function safeName(file: File) {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 }
 
+// Non-arrival flows retain the existing optional GPS semantics (e.g. failed
+// delivery and rescheduling). Only customer arrival requires strict fresh GPS.
 async function currentGps() {
   if (!navigator.geolocation) return {};
-  return await new Promise<any>((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ gps_lat: pos.coords.latitude, gps_lng: pos.coords.longitude, gps_accuracy_m: pos.coords.accuracy }),
-      () => resolve({}),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 15000 },
-    );
-  });
+  try {
+    const pos = await new Promise<GeolocationPosition>((resolve,reject) =>
+      navigator.geolocation.getCurrentPosition(resolve,reject,
+        {enableHighAccuracy:true,timeout:8000,maximumAge:15000}));
+    return {gps_lat:pos.coords.latitude,gps_lng:pos.coords.longitude,gps_accuracy_m:pos.coords.accuracy};
+  } catch { return {}; }
+}
+async function freshArrivalGps() {
+  if (!navigator.geolocation) throw new Error("GPS is not available on this device. Open the Rider App over HTTPS and enable Location.");
+  const acquire = (options: PositionOptions) => new Promise<GeolocationPosition>((resolve, reject) =>
+    navigator.geolocation.getCurrentPosition(resolve, reject, options));
+  let position: GeolocationPosition;
+  try {
+    // Cold GPS starts frequently exceed 8 seconds on Android. Do not use a
+    // 15-second-old position to attest physical arrival at the customer.
+    position = await acquire({enableHighAccuracy:true,timeout:20000,maximumAge:0});
+  } catch (initial: any) {
+    if (initial?.code === 1) {
+      throw new Error("Location permission denied. Enable precise Location permission in device/browser settings and retry.");
+    }
+    try {
+      position = await acquire({enableHighAccuracy:false,timeout:12000,maximumAge:0});
+    } catch (retry: any) {
+      if (retry?.code === 1) throw new Error("Location permission denied. Enable Location permission and retry.");
+      throw new Error("Current GPS could not be acquired. Move to an open area, enable precise Location, and retry. Delivery and payment have not been submitted.");
+    }
+  }
+  const {latitude,longitude,accuracy}=position.coords;
+  if (!Number.isFinite(latitude)||!Number.isFinite(longitude)||
+      latitude < 9||latitude > 29||longitude < 92||longitude > 102||
+      !Number.isFinite(accuracy)||accuracy > 250) {
+    throw new Error("GPS accuracy is insufficient for customer arrival. Move to an open area and retry; do not mark delivery complete.");
+  }
+  return {gps_lat:latitude,gps_lng:longitude,gps_accuracy_m:accuracy};
 }
 
 export default function DeliveryPage() {
@@ -935,9 +964,15 @@ export default function DeliveryPage() {
 
   async function arriveAtCustomer() {
     if (!selected) { setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။")); return false; }
-    const gps = await currentGps();
-    if (!gps.gps_lat || !gps.gps_lng) { setMsg(tx("GPS permission is required to record arrival.","ရောက်ရှိမှုမှတ်တမ်းတင်ရန် GPS ခွင့်ပြုချက် လိုအပ်ပါသည်။")); return false; }
-    return await act("arrived", gps);
+    setMsg(tx("Acquiring fresh customer-arrival GPS. Please keep the Rider App open.","Customer နေရာရောက်ရှိမှု GPS အသစ် ရယူနေပါသည်။ App ကို ဖွင့်ထားပါ။"));
+    try {
+      const gps = await freshArrivalGps();
+      if (!gps.gps_lat || !gps.gps_lng) throw new Error("Precise GPS unavailable.");
+      return await act("arrived", gps);
+    } catch (error: any) {
+      setMsg(error?.message || tx("Unable to verify customer arrival GPS.","Customer နေရာ GPS အတည်ပြုမရပါ။"));
+      return false;
+    }
   }
 
   async function correctDropoffToCurrentGps() {
@@ -1235,9 +1270,12 @@ export default function DeliveryPage() {
                         <button type="button" disabled={busy||statusRefreshUncertain||selectedPendingDriver}
                         onClick={()=>requestConfirm(step.key)}
                         className={"rounded-lg px-4 py-2 font-bold text-white disabled:opacity-50 "+(step.ready?"bg-blue-700":"bg-slate-500")}>
-                          {step.ready?tx("Proceed","ဆက်လုပ်ရန်"):tx("Check prerequisite","လိုအပ်ချက်စစ်မည်")}
+                          {step.ready?step.key==="arrive"?tx("Confirm GPS arrival","GPS ဖြင့် ရောက်ရှိမှု အတည်ပြုမည်"):tx("Proceed","ဆက်လုပ်ရန်"):tx("Check prerequisite","လိုအပ်ချက်စစ်မည်")}
                         </button>}
                     </div>)}
+                    {actionActive("start")&&!actionActive("arrive")&&<p className="rounded-xl border border-blue-200 bg-white p-3 text-sm font-semibold text-blue-900">
+                      {tx("GPS arrival uses a fresh location reading. If the customer is outside the planned map pin, verify the correct drop-off location with Operations; do not confirm a false arrival.", "Customer ရောက်ရှိမှုအတွက် လက်ရှိ GPS ကို အသစ်ရယူပါမည်။ Map Pin မမှန်ပါက Operations နှင့် စစ်ဆေးပါ။")}
+                    </p>}
                     {selectedPendingDriver&&<p className="rounded-xl bg-emerald-100 p-3 font-bold text-emerald-900">
                       {tx("Helper verification complete. Assigned Driver must confirm; do not recollect COD.","Helper အတည်ပြုပြီးပါပြီ။ Driver မှ အတည်ပြုရမည်။ COD ထပ်မကောက်ပါနှင့်။")}
                     </p>}
