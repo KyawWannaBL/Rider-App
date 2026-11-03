@@ -119,6 +119,7 @@ export default function DeliveryPage() {
   const [geofenceRepairAvailable, setGeofenceRepairAvailable] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [activeActions, setActiveActions] = useState<Record<string, boolean>>({});
+  const [statusRefreshUncertain,setStatusRefreshUncertain] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureRevision = useRef(0);
   const drawingRef = useRef(false);
@@ -340,6 +341,7 @@ export default function DeliveryPage() {
     selectedDeliveryRef.current = deliveryId;
     selectedScopeRef.current = scopeKey;
     setSelected(job);
+    setStatusRefreshUncertain(false);
     const helperPrepared = activeRole === "driver" && String(job.rider_status || job.stop_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
     const delivered = [job.stop_status, job.rider_status].some(status => String(status || "").toUpperCase() === "DELIVERED");
     if (changed || helperPrepared || delivered) initializePayments(job);
@@ -635,28 +637,67 @@ export default function DeliveryPage() {
     return path;
   }
 
+  async function readScopedDeliveryStatus(wayplanId:string,deliveryWayId:string,showMessage=false) {
+    const {data,error}=await (supabase as any).rpc("be_rider_delivery_stop_status_v217",{
+      p_wayplan_id:wayplanId,p_delivery_way_id:deliveryWayId
+    });
+    if(error||data?.ok!==true)throw new Error(error?.message||data?.error||"Delivery status refresh unavailable");
+    const patch={stop_status:data.stop_status,rider_status:data.rider_status,updated_at:data.updated_at};
+    setPickups(current=>current.map(job=>(job.wayplan_id===wayplanId&&job.delivery_way_id===deliveryWayId)?{...job,...patch}:job));
+    setSelected(current=>(current?.wayplan_id===wayplanId&&current?.delivery_way_id===deliveryWayId)?{...current,...patch}:current);
+    if(showMessage)setMsg(tx("Current status confirmed by Supabase: ","Supabase မှ စစ်ဆေးပြီး လက်ရှိအခြေအနေ: ")+String(data.stop_status||"UNKNOWN"));
+    setStatusRefreshUncertain(false);
+    return data;
+  }
+
   async function act(action: string, extra: any = {}) {
-    if (!selected) { setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။")); return false; }
+    if(!selected){setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။"));return false;}
+    if(statusRefreshUncertain){setMsg(tx("Refresh current stop status before retrying a timed-out action.","အချိန်ကျော်သွားသော လုပ်ဆောင်ချက်ကို ပြန်မလုပ်မီ Stop အခြေအနေကို စစ်ဆေးပါ။"));return false;}
+    const wayplanId=String(selected.wayplan_id||"");
+    const deliveryWayId=String(selected.delivery_way_id||"");
+    const before=String(selected.stop_status||selected.rider_status||"").toUpperCase();
+    const expected=action==="start_delivery"?["OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER","DELIVERED"]:
+      action==="arrived"?["ARRIVED_AT_CUSTOMER","DELIVERED"]:
+      action==="accept"?["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY","OUT_FOR_DELIVERY","ARRIVED_AT_CUSTOMER","DELIVERED"]:[];
     setBusy(true);
     try {
-      const payload = {
-        wayplan_id: selected.wayplan_id,
-        delivery_way_id: selected.delivery_way_id,
-        action,
-        ...extra,
-      };
-      const { data, error } = await (supabase as any).rpc("be_rider_wayplan_action", { p_payload: payload });
-      if (error) throw error;
-      if (data?.ok === false) throw new Error(data?.error || "Rider action failed.");
-      setMsg(`${selected.delivery_way_id}: ${data?.status || action} saved.`);
-      await load(selected.delivery_way_id);
+      const {data,error}=await (supabase as any).rpc("be_rider_wayplan_action",{
+        p_payload:{wayplan_id:wayplanId,delivery_way_id:deliveryWayId,action,...extra}
+      });
+      if(error||data?.ok===false)throw error||new Error(data?.error||"Rider action failed.");
+      // A full Wayplan-list refresh can time out after a successful action.
+      // Read only the assigned stop, then reveal the next step from persisted state.
+      const verified=await readScopedDeliveryStatus(wayplanId,deliveryWayId);
+      const actual=String(verified.stop_status||verified.rider_status||"").toUpperCase();
+      if(expected.length&&!expected.includes(actual)){
+        setStatusRefreshUncertain(true);
+        setMsg(tx("Action returned but the new status is not verified. Refresh status before retrying. ",
+          "လုပ်ဆောင်ချက် ပြန်လာသော်လည်း အခြေအနေအသစ် မစစ်ဆေးရသေးပါ။ ပြန်မလုပ်မီ စစ်ဆေးပါ။ ")+actual);
+        return false;
+      }
+      setMsg(deliveryWayId+": "+actual+" confirmed by backend. Continue to the next field step.");
       return true;
-    } catch (error: any) {
-      setMsg(error?.message || "Unable to save Rider action.");
-      return false;
-    } finally {
-      setBusy(false);
-    }
+    }catch(error:any){
+      // Timeout is not proof that the mutation rolled back. Check the persisted stop
+      // without replaying the mutation or collecting money a second time.
+      try{
+        const verified=await readScopedDeliveryStatus(wayplanId,deliveryWayId);
+        const actual=String(verified.stop_status||verified.rider_status||"").toUpperCase();
+        if(expected.includes(actual)&&!expected.includes(before)){
+          setMsg(deliveryWayId+": "+actual+" persisted despite the interrupted response. Do not repeat the action.");
+          return true;
+        }
+        setStatusRefreshUncertain(true);
+        setMsg(tx("Delivery action could not be confirmed. Refresh stop status before retrying. ",
+          "လုပ်ဆောင်ချက် အတည်မပြုနိုင်ပါ။ ပြန်မလုပ်မီ Stop အခြေအနေကို စစ်ဆေးပါ။ ")+(error?.message||""));
+        return false;
+      }catch(statusError:any){
+        setStatusRefreshUncertain(true);
+        setMsg(tx("Delivery status unavailable after request. Do not repeat the action until Supabase status is checked. ",
+          "Request ပြီးနောက် အခြေအနေ မရရှိပါ။ Supabase ကို စစ်ဆေးပြီးမှ ပြန်လုပ်ပါ။ ")+(error?.message||statusError?.message||""));
+        return false;
+      }
+    }finally{setBusy(false);}
   }
 
   async function deliver() {
@@ -1183,17 +1224,29 @@ export default function DeliveryPage() {
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-blue-900">{status || "PENDING"}</span>
                   </div>
                   <div className="flex flex-col gap-3">
-                    {selectedPendingDriver || ["DELIVERED","DELIVERY_COMPLETED","POD_VERIFIED"].includes(status) ? (
-                      <div role="status" className="rounded-2xl bg-emerald-100 p-4 font-black text-emerald-900">✓ {tx(selectedPendingDriver ? "Helper verification complete — continue to next stop; Driver confirms at assignment end." : "Delivery completed.",selectedPendingDriver ? "Helper အတည်ပြုပြီးပါပြီ။ နောက်မှတ်တိုင်သို့ ဆက်သွားပါ။ Driver မှ အဆုံးတွင် တစ်ကြိမ်တည်း အတည်ပြုပါမည်။" : "ပို့ဆောင်မှု ပြီးစီးပါပြီ။")}</div>
-                    ) : status === "ARRIVED_AT_CUSTOMER" || actionActive("arrive") ? (
-                      <div role="status" className="rounded-2xl bg-emerald-600 p-4 text-center font-black text-white">✓ {tx("Customer arrival confirmed","Customer နေရာသို့ ရောက်ရှိပြီး ✓")}</div>
-                    ) : status === "OUT_FOR_DELIVERY" || actionActive("start") ? (
-                      <button type="button" disabled={busy} onClick={() => requestConfirm("arrive")} className={actionClass("arrive","bg-indigo-700")}>{tx("Arrived at Customer","Customer နေရာသို့ ရောက်ရှိပြီ")}</button>
-                    ) : ["RIDER_ACCEPTED","DELIVERY_ACCEPTED","ACCEPTED_FOR_DELIVERY"].includes(status) || actionActive("accept") ? (
-                      <button type="button" disabled={busy} onClick={() => requestConfirm("start")} className={actionClass("start","bg-blue-700")}>{tx("Start Delivery","ပို့ဆောင်မှု စတင်ရန်")}</button>
-                    ) : (
-                      <button type="button" disabled={busy} onClick={() => requestConfirm("accept")} className={actionClass("accept","bg-slate-900")}>{tx("Accept","လက်ခံရန်")}</button>
-                    )}
+                    {[
+                      {index:1,key:"accept",label:tx("Accept Parcel","ပါဆယ် လက်ခံရန်"),completed:actionActive("accept"),ready:!actionActive("accept")},
+                      {index:2,key:"start",label:tx("Start Delivery","ပို့ဆောင်မှု စတင်ရန်"),completed:actionActive("start"),ready:actionActive("accept")&&!actionActive("start")},
+                      {index:3,key:"arrive",label:tx("Arrived at Customer (GPS)","Customer နေရာသို့ ရောက်ရှိပြီ (GPS)"),completed:actionActive("arrive"),ready:actionActive("start")&&!actionActive("arrive")},
+                    ].map(step=><div key={step.key} className="flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-white p-3">
+                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-black text-blue-950">{tx("Step ","အဆင့် ")}{step.index}</span>
+                      <span className="min-w-0 flex-1 font-black text-blue-950">{step.label}</span>
+                      {step.completed?<span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-900">✓ {tx("Completed","ပြီးစီး")}</span>:
+                        <button type="button" disabled={busy||statusRefreshUncertain||selectedPendingDriver}
+                        onClick={()=>requestConfirm(step.key)}
+                        className={"rounded-lg px-4 py-2 font-bold text-white disabled:opacity-50 "+(step.ready?"bg-blue-700":"bg-slate-500")}>
+                          {step.ready?tx("Proceed","ဆက်လုပ်ရန်"):tx("Check prerequisite","လိုအပ်ချက်စစ်မည်")}
+                        </button>}
+                    </div>)}
+                    {selectedPendingDriver&&<p className="rounded-xl bg-emerald-100 p-3 font-bold text-emerald-900">
+                      {tx("Helper verification complete. Assigned Driver must confirm; do not recollect COD.","Helper အတည်ပြုပြီးပါပြီ။ Driver မှ အတည်ပြုရမည်။ COD ထပ်မကောက်ပါနှင့်။")}
+                    </p>}
+                    {statusRefreshUncertain&&<div role="alert" className="rounded-xl border border-amber-400 bg-amber-50 p-3 text-amber-950">
+                      <p className="font-bold">{tx("Action status uncertain after timeout. Do not retry before checking the saved status.","Timeout ပြီးနောက် လုပ်ဆောင်ချက် အခြေအနေ မသေချာပါ။ မှတ်တမ်းစစ်ပြီးမှ ပြန်လုပ်ပါ။")}</p>
+                      <button type="button" disabled={busy} onClick={()=>{if(selected)void readScopedDeliveryStatus(selected.wayplan_id,selected.delivery_way_id,true).catch((e:any)=>setMsg(e.message));}}
+                        className="mt-2 rounded-lg bg-amber-700 px-4 py-2 font-bold text-white">{tx("Verify Saved Status","သိမ်းထားသော အခြေအနေကို စစ်ဆေးရန်")}</button>
+                    </div>}
+
                   </div>
                 </section>
 
