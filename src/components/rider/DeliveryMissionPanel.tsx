@@ -1,5 +1,6 @@
 import { ArrowRight, CheckCircle2, Clock3, MapPin, Navigation, Phone, RefreshCw, ScanLine, Wallet } from "lucide-react";
 import type { Waybill } from "@/types/rider";
+import { validDeliveryPin } from "@/lib/googleDeliveryNavigation";
 
 const terminal = new Set(["DELIVERED", "FAILED", "RETURN_PENDING", "RETURN_SCANNED", "RTO", "PENDING_DRIVER_CONFIRMATION"]);
 const currency = (amount:number) => new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(amount || 0);
@@ -24,7 +25,7 @@ export function DeliveryMissionPanel({
   const verificationLocked=selected.status==="PENDING_DRIVER_CONFIRMATION" || selected.status==="DELIVERED";
   const selectedNumber=selected.sequenceNo || ordered.indexOf(selected)+1;
   const hasPhone=Boolean(selected.customer.phone?.trim());
-  const hasLocation=Boolean(selected.customer.location && Number.isFinite(selected.customer.location.latitude) && Number.isFinite(selected.customer.location.longitude));
+  const hasLocation=validDeliveryPin(selected.customer.location);
   return <aside className="space-y-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_12px_36px_rgba(15,23,42,.06)]" aria-label="Delivery mission controls">
     <div className="flex items-start justify-between gap-3">
       <div>
