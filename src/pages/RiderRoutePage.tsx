@@ -98,6 +98,13 @@ export default function RiderRoutePage() {
         />
       )}
 
+      <div className="border-b border-blue-200 bg-blue-950 px-4 py-3 text-white">
+        <div className="mx-auto max-w-lg">
+          <h1 className="text-lg font-black">Delivery Route Map</h1>
+          <p className="text-xs font-semibold text-blue-100">Assigned drop-off pins and approved Wayplan sequence</p>
+        </div>
+      </div>
+      <RiderRouteOverview dispatch={dispatch} waybills={waybills} />
       <div className="border-b border-slate-200 bg-white px-4 py-3">
         <div className="mx-auto flex max-w-lg items-center gap-2 overflow-x-auto">
           {waybills.map((waybill) => (
@@ -125,7 +132,7 @@ export default function RiderRoutePage() {
         </div>
       )}
 
-      <RiderRouteOverview dispatch={dispatch} waybills={waybills} />
+
       <ActiveRouteScreen
         dispatch={dispatch}
         waybill={selected}
