@@ -10,7 +10,7 @@ export function DeliveryMissionPanel({
   waybills:Waybill[];
   selected:Waybill;
   onSelect:(waybill:Waybill)=>void;
-  onNavigate:(waybill:Waybill)=>void;
+  onNavigate:(waybill:Waybill,mode?: "directions" | "start")=>void;
   onVerify:(waybill:Waybill)=>void;
   onRefresh:()=>void;
   loading:boolean;
@@ -69,11 +69,15 @@ export function DeliveryMissionPanel({
         <div className="rounded-xl bg-white p-3"><p className="font-semibold text-slate-500">Drop-off pin</p><strong className={`mt-1 flex items-center gap-1 text-sm ${hasLocation?"text-emerald-700":"text-amber-700"}`}><MapPin className="h-4 w-4"/>{hasLocation?"Ready":"Needs review"}</strong></div>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={()=>onNavigate(selected)} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-900 px-2 text-xs font-black text-white"><Navigation className="h-4 w-4"/> Navigate</button>
+        <button type="button" onClick={()=>onNavigate(selected,"directions")} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white px-2 text-xs font-black text-blue-950"><MapPin className="h-4 w-4"/> Directions</button>
+        <button type="button" onClick={()=>onNavigate(selected,"start")} disabled={!hasLocation} title={!hasLocation ? "Save a precise drop-off pin before starting navigation" : "Start Google Maps navigation"} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-900 px-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50"><Navigation className="h-4 w-4"/> Start</button>
+      </div>
+      <div className="grid grid-cols-1 gap-2">
         {hasPhone
           ? <a href={`tel:${selected.customer.phone}`} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-2 text-xs font-black text-slate-900"><Phone className="h-4 w-4"/> Call customer</a>
           : <span className="flex min-h-12 items-center justify-center rounded-xl border bg-slate-100 text-xs font-semibold text-slate-500">No phone provided</span>}
       </div>
+      {!hasLocation && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Start requires a saved GPS drop-off pin. Directions can use the written address for review.</p>}
       <button type="button" onClick={()=>onVerify(selected)}
         className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 text-sm font-black text-white">
         <ScanLine className="h-5 w-5"/> {selected.status==="PENDING_DRIVER_CONFIRMATION" ? "Open Driver Approval (No Recollection)" : selected.status==="DELIVERED" ? "View Completed Delivery" : "Open Delivery Verification"} <ArrowRight className="h-4 w-4"/>
