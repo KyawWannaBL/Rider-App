@@ -20,16 +20,20 @@ function iso(value: unknown) {
   return typeof value === "string" && value ? value : new Date().toISOString();
 }
 
-function statusFromRow(row: any): WaybillStatus {
-  const value = String(row?.stop_status || row?.rider_status || "ASSIGNED").toUpperCase();
-  if (["RIDER_ACCEPTED", "DELIVERY_ACCEPTED", "ACCEPTED_FOR_DELIVERY"].includes(value)) return "ACCEPTED";
-  if (["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(value)) return "EN_ROUTE";
-  if (["ARRIVED_AT_CUSTOMER", "ARRIVED"].includes(value)) return "ARRIVED";
-  if (["DELIVERED", "DELIVERY_COMPLETED", "POD_VERIFIED"].includes(value)) return "DELIVERED";
-  if (["FAILED_DELIVERY", "DELIVERY_FAILED", "ATTEMPTED_FAILED"].includes(value)) return "FAILED";
-  if (["RETURN_TO_WAREHOUSE", "AWAITING_RETURN_SCAN"].includes(value)) return "RETURN_PENDING";
-  if (["RETURN_SCANNED", "RETURNED_TO_WAREHOUSE"].includes(value)) return "RETURN_SCANNED";
-  if (value === "RTO") return "RTO";
+export function statusFromRow(row: any): WaybillStatus {
+  const stop = String(row?.stop_status || "").toUpperCase();
+  const rider = String(row?.rider_status || "").toUpperCase();
+  // Helper proof/payment is already submitted. Only the assigned Driver may confirm it.
+  if (rider === "HELPER_COMPLETED_PENDING_DRIVER") return "PENDING_DRIVER_CONFIRMATION";
+  const values = [stop, rider].filter(Boolean);
+  if (values.some(value => ["DELIVERED", "DELIVERY_COMPLETED", "POD_VERIFIED"].includes(value))) return "DELIVERED";
+  if (values.some(value => ["RETURN_SCANNED", "RETURNED_TO_WAREHOUSE"].includes(value))) return "RETURN_SCANNED";
+  if (values.some(value => value === "RTO")) return "RTO";
+  if (values.some(value => ["RETURN_TO_WAREHOUSE", "AWAITING_RETURN_SCAN"].includes(value))) return "RETURN_PENDING";
+  if (values.some(value => ["FAILED_DELIVERY", "DELIVERY_FAILED", "ATTEMPTED_FAILED"].includes(value))) return "FAILED";
+  if (values.some(value => ["ARRIVED_AT_CUSTOMER", "ARRIVED"].includes(value))) return "ARRIVED";
+  if (values.some(value => ["OUT_FOR_DELIVERY", "IN_TRANSIT", "EN_ROUTE"].includes(value))) return "EN_ROUTE";
+  if (values.some(value => ["RIDER_ACCEPTED", "DELIVERY_ACCEPTED", "ACCEPTED_FOR_DELIVERY", "ACCEPTED"].includes(value))) return "ACCEPTED";
   return "ASSIGNED";
 }
 
