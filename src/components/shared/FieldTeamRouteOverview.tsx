@@ -38,7 +38,7 @@ export function FieldTeamRouteOverview() {
         const ids=[...new Set(jobs.map(row=>String(row.delivery_way_id||"").toUpperCase()).filter(Boolean))];
         const locations=new Map<string,any>();
         if(ids.length){
-          const loc=await (supabase as any).rpc("be_delivery_location_batch_v10",{p_delivery_way_ids:ids});
+          const loc=await (supabase as any).rpc("be_field_assigned_delivery_locations_v1",{p_delivery_way_ids:ids});
           if(!loc.error&&Array.isArray(loc.data)) {
             for(const row of loc.data)locations.set(String(row.delivery_way_id||"").toUpperCase(),row);
           }

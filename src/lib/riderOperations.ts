@@ -124,7 +124,7 @@ export async function loadRiderRoute(): Promise<{ dispatch: Dispatch | null; way
 
   if (rows.length) {
     const deliveryWayIds = rows.map((row: any) => String(row?.delivery_way_id || "")).filter(Boolean);
-    const { data: locations, error: locationError } = await (supabase as any).rpc("be_delivery_location_batch_v10", {
+    const { data: locations, error: locationError } = await (supabase as any).rpc("be_field_assigned_delivery_locations_v1", {
       p_delivery_way_ids: deliveryWayIds,
     });
 
