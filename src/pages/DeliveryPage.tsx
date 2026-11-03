@@ -205,6 +205,46 @@ export default function DeliveryPage() {
   const paymentReadOnly = busy || !canDeliver || helperPreparedForDriver;
   const driverPendingReviews = pickups.filter((job: any) => String(job.rider_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER");
 
+  async function confirmSelectedHelperDelivery() {
+    if (!selectedPendingDriver || !selected?.wayplan_id || !selected?.delivery_way_id || busy) return;
+    const wayId = String(selected.delivery_way_id);
+    if (!window.confirm(tx(
+      `Confirm Helper-completed delivery ${wayId} as its assigned Driver? Existing proof and payment will be reused; do not collect again.`,
+      `${wayId} အတွက် Helper ပြီးစီးထားသည့် ပို့ဆောင်မှုကို Driver အဖြစ် အတည်ပြုမည်လား။ ငွေထပ်မကောက်ပါနှင့်။`
+    ))) return;
+    setBusy(true);
+    setDeliveryProgress("confirming");
+    setDeliveryResult("");
+    try {
+      // Server RPC independently verifies the authenticated assigned Driver.
+      // Never infer authorization from the UI's activeRole toggle.
+      const { data, error } = await (supabase as any).rpc("be_driver_confirm_team_delivery_v176", {
+        p_payload: { wayplan_id: selected.wayplan_id, delivery_way_id: wayId }
+      });
+      if (error || data?.ok !== true || String(data?.mobile_status || "").toUpperCase() !== "DELIVERED") {
+        throw new Error(error?.message || data?.message || data?.error || "Driver confirmation was not accepted.");
+      }
+      const success = tx(
+        `${wayId}: Driver confirmation saved. Delivery is DELIVERED.`,
+        `${wayId}: Driver အတည်ပြုမှု သိမ်းဆည်းပြီးပါပြီ။ ပို့ဆောင်မှု ပြီးစီးပါပြီ။`
+      );
+      setDeliveryProgress("success");
+      setDeliveryResult(success);
+      setMsg(success);
+      await load(wayId);
+    } catch (error: any) {
+      const message = error?.message || "Driver confirmation failed.";
+      setDeliveryProgress("error");
+      setDeliveryResult(message);
+      setMsg(tx(
+        `Driver confirmation not completed: ${message}. Sign in as the assigned Driver; do not repeat Helper payment or proof capture.`,
+        `Driver အတည်ပြုမှု မပြီးသေးပါ: ${message}။ သတ်မှတ်ထားသော Driver အကောင့်ဖြင့် ဝင်ပါ။ ငွေနှင့် သက်သေဓာတ်ပုံ ထပ်မလုပ်ပါနှင့်။`
+      ));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function approveAllHelperDeliveries() {
     if (activeRole !== "driver" || busy) return;
     const pending = pickups.filter((job: any) =>
@@ -1248,8 +1288,25 @@ export default function DeliveryPage() {
                 <section className="mt-5 rounded-[26px] border border-slate-200/80 bg-slate-50/80 p-4">
                   <h3 className="text-lg font-black">{tx("Completion / Exception Control","ပို့ဆောင်ပြီး / မအောင်မြင် ထိန်းချုပ်မှု")}</h3>
                   <p className="mt-1 text-xs font-bold text-slate-500">{tx("Successful delivery and failed-delivery return are separate paths.","ပို့ဆောင်အောင်မြင်မှုနှင့် မအောင်မြင်၍ Warehouse ပြန်ပို့မှုကို သီးခြားလုပ်ငန်းစဉ်ဖြင့် ဆောင်ရွက်ပါ။")}</p>
+                  {selectedPendingDriver && (
+                    <div role="region" aria-label="Driver confirmation required" className="mt-3 rounded-2xl border-2 border-indigo-500 bg-indigo-50 p-4 shadow-sm">
+                      <h4 className="text-lg font-black text-indigo-950">{tx("Driver Final Confirmation Required","Driver နောက်ဆုံးအတည်ပြုရန် လိုအပ်သည်")}</h4>
+                      <p className="mt-2 text-sm font-semibold text-indigo-900">{tx(
+                        "Helper has finished the proof, signature and payment checks for this stop. The assigned Driver can confirm delivery without repeating any collection.",
+                        "ဤပါဆယ်အတွက် Helper မှ ဓာတ်ပုံ၊ လက်မှတ်နှင့် ငွေစစ်ဆေးမှုများ ပြီးစီးထားပါသည်။ သတ်မှတ်ထားသော Driver က ငွေထပ်မကောက်ဘဲ အတည်ပြုနိုင်ပါသည်။"
+                      )}</p>
+                      <button type="button" disabled={busy} onClick={() => void confirmSelectedHelperDelivery()}
+                        className="mt-3 w-full min-h-14 rounded-xl bg-indigo-700 px-4 py-3 text-base font-black text-white disabled:cursor-wait disabled:opacity-60">
+                        {busy ? tx("Confirming with server…","Server ဖြင့် အတည်ပြုနေသည်…") : tx("Driver — Confirm This Delivery","Driver — ဤပို့ဆောင်မှုကို အတည်ပြုမည်")}
+                      </button>
+                      <p className="mt-2 text-xs font-semibold text-indigo-800">{tx(
+                        "Only the authenticated Driver assigned to this Wayplan can approve. If the app is signed in as Helper, the server will deny this action; switch to the assigned Driver account.",
+                        "ဤ Wayplan အတွက် သတ်မှတ်ထားသော Driver အကောင့်မှသာ အတည်ပြုနိုင်ပါသည်။ Helper အကောင့်ဖြင့် ဝင်ထားလျှင် Driver အကောင့်သို့ ပြောင်းပါ။"
+                      )}</p>
+                    </div>
+                  )}
                   {selectedPendingDriver && activeRole !== "driver" && (
-                    <div role="status" className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm font-bold text-emerald-950">{tx("Helper verification saved. Continue to the next delivery stop. No Driver approval is needed until the end of the assignment.", "Helper အတည်ပြုမှု သိမ်းပြီးပါပြီ။ နောက်မှတ်တိုင်သို့ ဆက်သွားပါ။ Driver က အလုပ်အားလုံးပြီးမှ တစ်ကြိမ်တည်း အတည်ပြုပါမည်။")}</div>
+                    <div role="status" className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm font-bold text-emerald-950">{tx("Helper verification saved. The assigned Driver must confirm the prepared delivery. No need to repeat payment or evidence.", "Helper အတည်ပြုမှု သိမ်းပြီးပါပြီ။ နောက်မှတ်တိုင်သို့ ဆက်သွားပါ။ Driver က အလုပ်အားလုံးပြီးမှ တစ်ကြိမ်တည်း အတည်ပြုပါမည်။")}</div>
                   )}
                   {!selectedPendingDriver && !canDeliver && !helperPreparedForDriver && selected && (
                     <div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">
