@@ -1,5 +1,6 @@
 import { pendingCashToDeposit, recordedPaymentSummary } from "./deliveryPayments";
 import { supabase } from "@/integrations/supabase/client";
+import { googleDeliveryNavigationUrl } from "@/lib/googleDeliveryNavigation";
 import type {
   Dispatch,
   DispatchStatus,
@@ -306,12 +307,19 @@ export async function submitCodHandover(deliveryWayId: string, input?: { proofPh
   return data;
 }
 
-export function openNavigation(waybill: Waybill) {
-  const loc = waybill.customer.location;
-  const query = loc
-    ? `${loc.latitude},${loc.longitude}`
-    : encodeURIComponent([waybill.customer.address, waybill.customer.township].filter(Boolean).join(", "));
-  window.open(`https://www.google.com/maps/dir/?api=1&destination=${query}`, "_blank", "noopener,noreferrer");
+export function openNavigation(waybill: Waybill, mode: "directions" | "start" = "directions") {
+  const url = googleDeliveryNavigationUrl(
+    waybill.customer.location,
+    mode,
+    [waybill.customer.address, waybill.customer.township].filter(Boolean).join(", "),
+  );
+  if (!url) {
+    window.alert(mode === "start"
+      ? "This delivery has no verified GPS pin. Save or correct the drop-off location before starting navigation."
+      : "This delivery has no usable destination. Check its address or GPS pin.");
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 

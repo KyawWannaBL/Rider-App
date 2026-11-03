@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, Minus, Plus, LocateFixed } from "lucide-react";
+import { MapPin, Minus, Plus, LocateFixed, Navigation, Route } from "lucide-react";
+import { googleDeliveryNavigationUrl } from "@/lib/googleDeliveryNavigation";
 
 export type DropMapPoint = {
   id: string;
@@ -102,6 +103,18 @@ export function AssignedDropsMap({ office, stops }: { office?: DropMapOffice | n
       {focused && <div className="absolute bottom-9 left-2 right-2 z-20 rounded-xl bg-white/95 p-3 text-xs shadow-xl">
         <div className="font-black">Stop #{focused.sequence} · {focused.label}</div>
         <div className="mt-1 text-slate-600">{focused.latitude.toFixed(6)}, {focused.longitude.toFixed(6)}</div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <a target="_blank" rel="noopener noreferrer"
+            href={googleDeliveryNavigationUrl(focused,"directions") || "#"}
+            className="flex min-h-11 items-center justify-center gap-1 rounded-lg border border-blue-300 bg-white text-xs font-black text-blue-900">
+            <Route className="h-4 w-4" /> Directions
+          </a>
+          <a target="_blank" rel="noopener noreferrer"
+            href={googleDeliveryNavigationUrl(focused,"start") || "#"}
+            className="flex min-h-11 items-center justify-center gap-1 rounded-lg bg-blue-900 text-xs font-black text-white">
+            <Navigation className="h-4 w-4" /> Start
+          </a>
+        </div>
         <button type="button" className="mt-2 font-bold text-blue-700" onClick={() => setFocusedId(null)}>Close</button>
       </div>}
       {!points.length && <div className="absolute inset-0 z-10 grid place-items-center bg-white/85 p-5 text-center text-sm font-bold text-slate-700">
