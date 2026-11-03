@@ -23,6 +23,7 @@ import { ProfileDrawer } from "@/components/ProfileDrawer";
 import { EarningsPanel } from "@/components/shared/EarningsPanel";
 import { SupportPanel } from "@/components/shared/SupportPanel";
 import { FinishAssignmentsButton } from "@/components/shared/FinishAssignmentsButton";
+import { FieldTeamRouteOverview } from "@/components/shared/FieldTeamRouteOverview";
 import {
   asMoney,
   codHandover,
@@ -285,6 +286,8 @@ export default function MobileGoLivePage({ role, mode }: { role: MobileRole; mod
               </div>
             </>
           )}
+
+          {mode === "route" && <FieldTeamRouteOverview />}
 
           {mode === "route" && (
             <JobList
