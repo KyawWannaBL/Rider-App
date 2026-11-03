@@ -74,7 +74,18 @@ function safeName(file: File) {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 }
 
+// Non-arrival flows retain the existing optional GPS semantics (e.g. failed
+// delivery and rescheduling). Only customer arrival requires strict fresh GPS.
 async function currentGps() {
+  if (!navigator.geolocation) return {};
+  try {
+    const pos = await new Promise<GeolocationPosition>((resolve,reject) =>
+      navigator.geolocation.getCurrentPosition(resolve,reject,
+        {enableHighAccuracy:true,timeout:8000,maximumAge:15000}));
+    return {gps_lat:pos.coords.latitude,gps_lng:pos.coords.longitude,gps_accuracy_m:pos.coords.accuracy};
+  } catch { return {}; }
+}
+async function freshArrivalGps() {
   if (!navigator.geolocation) throw new Error("GPS is not available on this device. Open the Rider App over HTTPS and enable Location.");
   const acquire = (options: PositionOptions) => new Promise<GeolocationPosition>((resolve, reject) =>
     navigator.geolocation.getCurrentPosition(resolve, reject, options));
@@ -955,7 +966,7 @@ export default function DeliveryPage() {
     if (!selected) { setMsg(tx("Select a delivery stop first.","ပို့ဆောင်မည့် Way ကို အရင်ရွေးပါ။")); return false; }
     setMsg(tx("Acquiring fresh customer-arrival GPS. Please keep the Rider App open.","Customer နေရာရောက်ရှိမှု GPS အသစ် ရယူနေပါသည်။ App ကို ဖွင့်ထားပါ။"));
     try {
-      const gps = await currentGps();
+      const gps = await freshArrivalGps();
       if (!gps.gps_lat || !gps.gps_lng) throw new Error("Precise GPS unavailable.");
       return await act("arrived", gps);
     } catch (error: any) {
