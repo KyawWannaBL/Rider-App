@@ -106,7 +106,7 @@ export function DropoffPinEditor({
     setLocating(true);
     setMessage("Requesting device location… Allow location access if your browser asks.");
     try {
-      const permission = await navigator.permissions?.query({ name: "geolocation" as PermissionName }).catch(() => null);
+      const permission = await navigator.permissions?.query({ name: "geolocation" as PermissionName }).catch((): null => null);
       if (permission?.state === "denied") {
         setMessage("Location is blocked for this site. Click the location/lock icon beside the address bar, set Location to Allow, enable device location, and retry. Manual coordinates remain available.");
         return;
