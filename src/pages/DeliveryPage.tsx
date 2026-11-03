@@ -644,7 +644,7 @@ export default function DeliveryPage() {
     if(error||data?.ok!==true)throw new Error(error?.message||data?.error||"Delivery status refresh unavailable");
     const patch={stop_status:data.stop_status,rider_status:data.rider_status,updated_at:data.updated_at};
     setPickups(current=>current.map(job=>(job.wayplan_id===wayplanId&&job.delivery_way_id===deliveryWayId)?{...job,...patch}:job));
-    setSelected(current=>(current?.wayplan_id===wayplanId&&current?.delivery_way_id===deliveryWayId)?{...current,...patch}:current);
+    setSelected((current:any)=>(current?.wayplan_id===wayplanId&&current?.delivery_way_id===deliveryWayId)?{...current,...patch}:current);
     if(showMessage)setMsg(tx("Current status confirmed by Supabase: ","Supabase မှ စစ်ဆေးပြီး လက်ရှိအခြေအနေ: ")+String(data.stop_status||"UNKNOWN"));
     setStatusRefreshUncertain(false);
     return data;
