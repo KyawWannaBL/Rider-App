@@ -1071,7 +1071,7 @@ export default function DeliveryPage() {
                   <h3 className="font-black text-amber-950">{tx("Parcel weight / financial verification","ပါဆယ်အလေးချိန်နှင့် ငွေစာရင်းစစ်ဆေးခြင်း")}</h3>
                   <p className="mt-1 text-sm font-semibold text-amber-900">{tx("Registered weight:", "စာရင်းသွင်းထားသည့် အလေးချိန်:")} {Number(selected.weight_kg ?? selected.actual_weight_kg ?? 0) > 0 ? `${Number(selected.weight_kg ?? selected.actual_weight_kg)} kg` : tx("Not provided in delivery data — ask Data Entry/Finance to verify the actual parcel weight.","Delivery data တွင် မပါရှိပါ — အမှန်တကယ်အလေးချိန်ကို Data Entry / Finance နှင့် စစ်ဆေးပါ။")}</p>
                   <p className="mt-1 text-xs font-semibold text-amber-800">{tx("If the weight or expected COD is incorrect, request an audited correction in Enterprise Portal before financial closure. Do not change the collected cash amount or submit duplicate payment.","အလေးချိန် သို့မဟုတ် COD မှားနေပါက Finance/Data Entry မှ audit ပါသော correction ပြုလုပ်ရန် တောင်းဆိုပါ။ ငွေထပ်မကောက်ခံပါနှင့်။")}</p>
-                </section>}
+                </section>
                 <section className="mt-4 rounded-[26px] border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50/50 p-4 shadow-sm">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div>
