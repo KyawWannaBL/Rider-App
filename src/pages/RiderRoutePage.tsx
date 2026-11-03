@@ -44,6 +44,16 @@ export default function RiderRoutePage() {
     void load();
   }, [load]);
 
+  // The verification page can change stop status while this route remains mounted.
+  // Refresh authoritative assignments when staff return to the route tab.
+  useEffect(() => {
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => document.removeEventListener("visibilitychange", refreshVisible);
+  }, [load]);
+
   useRiderRealtime({
     riderId: dispatch?.riderId,
     onWaybillChange: load,
