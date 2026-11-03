@@ -105,6 +105,9 @@ export default function DeliveryPage() {
   const [proofPreview, setProofPreview] = useState("");
   const [signaturePreview, setSignaturePreview] = useState("");
   const [busy, setBusy] = useState(false);
+  const [measuredWeight, setMeasuredWeight] = useState("");
+  const [weightReviewReason, setWeightReviewReason] = useState("");
+  const [weightReviewMessage, setWeightReviewMessage] = useState("");
   const [failureMode, setFailureMode] = useState(false);
   const [deliveryProgress, setDeliveryProgress] = useState<"idle"|"validating"|"uploading"|"gps"|"confirming"|"success"|"error">("idle");
   const [deliveryResult, setDeliveryResult] = useState("");
@@ -256,6 +259,9 @@ export default function DeliveryPage() {
     selectedDeliveryRef.current = deliveryId;
     selectedScopeRef.current = scopeKey;
     setSelected(job);
+    setMeasuredWeight("");
+    setWeightReviewReason("");
+    setWeightReviewMessage("");
     const helperPrepared = activeRole === "driver" && String(job.rider_status || job.stop_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
     const delivered = [job.stop_status, job.rider_status].some(status => String(status || "").toUpperCase() === "DELIVERED");
     if (changed || helperPrepared || delivered) initializePayments(job);
@@ -1072,6 +1078,21 @@ export default function DeliveryPage() {
                   <h3 className="font-black text-amber-950">{tx("Parcel weight / financial verification","ပါဆယ်အလေးချိန်နှင့် ငွေစာရင်းစစ်ဆေးခြင်း")}</h3>
                   <p className="mt-1 text-sm font-semibold text-amber-900">{tx("Registered weight:", "စာရင်းသွင်းထားသည့် အလေးချိန်:")} {Number(selected.parcel_weight_kg ?? selected.weight_kg ?? selected.actual_weight_kg ?? 0) > 0 ? `${Number(selected.parcel_weight_kg ?? selected.weight_kg ?? selected.actual_weight_kg)} kg` : tx("Not provided in delivery data — ask Data Entry/Finance to verify the actual parcel weight.","Delivery data တွင် မပါရှိပါ — အမှန်တကယ်အလေးချိန်ကို Data Entry / Finance နှင့် စစ်ဆေးပါ။")}</p>
                   <p className="mt-1 text-xs font-semibold text-amber-800">{tx("If the weight or expected COD is incorrect, request an audited correction in Enterprise Portal before financial closure. Do not change the collected cash amount or submit duplicate payment.","အလေးချိန် သို့မဟုတ် COD မှားနေပါက Finance/Data Entry မှ audit ပါသော correction ပြုလုပ်ရန် တောင်းဆိုပါ။ ငွေထပ်မကောက်ခံပါနှင့်။")}</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+                    <input aria-label="Measured parcel weight in kilograms" type="number" min="0.001" max="5000" step="0.001" value={measuredWeight} onChange={e=>setMeasuredWeight(e.target.value)} className="rounded-xl border border-amber-300 bg-white p-3 text-slate-900" placeholder={tx("Measured kg","အလေးချိန် kg")}/>
+                    <input aria-label="Weight correction reason" value={weightReviewReason} onChange={e=>setWeightReviewReason(e.target.value)} className="rounded-xl border border-amber-300 bg-white p-3 text-slate-900" placeholder={tx("Why is weight incorrect?","အလေးချိန်ပြင်ရန်အကြောင်းရင်း")}/>
+                    <button type="button" disabled={busy || !(Number(measuredWeight)>0) || weightReviewReason.trim().length<5} onClick={async()=>{
+                      if(!selected?.wayplan_id||!selected?.delivery_way_id)return;
+                      setBusy(true);setWeightReviewMessage("");
+                      try{
+                        const {data,error}=await (supabase as any).rpc("be_field_request_weight_review_v1",{p_wayplan:selected.wayplan_id,p_way:selected.delivery_way_id,p_weight:Number(measuredWeight),p_reason:weightReviewReason.trim()});
+                        if(error||data?.ok!==true)throw new Error(error?.message||data?.error||"Weight review could not be submitted.");
+                        setWeightReviewMessage(tx("Weight correction request submitted for Finance review. Collection amount has NOT changed.","အလေးချိန်ပြင်ဆင်ရန် တောင်းဆိုချက်ကို Finance စစ်ဆေးရန် ပို့ပြီးပါပြီ။ COD မပြောင်းလဲပါ။"));
+                      }catch(e:any){setWeightReviewMessage(e?.message||"Weight request failed.");}finally{setBusy(false);}
+                    }} className="rounded-xl bg-amber-700 px-4 py-3 font-bold text-white disabled:opacity-50">{tx("Request Weight Review","အလေးချိန်ပြင်ဆင်ရန်တင်ပြမည်")}</button>
+                  </div>
+                  {weightReviewMessage&&<p role="status" className="mt-2 rounded-xl bg-white p-3 font-semibold text-amber-900">{weightReviewMessage}</p>}
+
                 </section>
                 <section className="mt-4 rounded-[26px] border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50/50 p-4 shadow-sm">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
