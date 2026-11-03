@@ -170,14 +170,30 @@ export default function DeliveryPage() {
         if (!recorded) throw new Error("Delivery not found in refreshed jobs or completed handovers. Contact Operations before retrying.");
         job = {...selected, ...recorded};
       }
-      const latest = String(job.stop_status || job.rider_status || "").toUpperCase();
-      if (["DELIVERED", "HELPER_COMPLETED_PENDING_DRIVER"].includes(latest)) clearPaymentDraft(localStorage, paymentScope());
-      else if (["RIDER_ACCEPTED", "DELIVERY_ACCEPTED", "ACCEPTED_FOR_DELIVERY", "OUT_FOR_DELIVERY", "ARRIVED_AT_CUSTOMER"].includes(latest)) writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "editing"});
-      else throw new Error("Delivery status requires Operations review before retrying.");
+      const statuses = [job.stop_status, job.rider_status].map((value: unknown) => String(value || "").toUpperCase());
+      const confirmedDelivered = statuses.some(value => ["DELIVERED", "DELIVERY_COMPLETED", "POD_VERIFIED"].includes(value));
+      const waitingDriver = statuses.includes("HELPER_COMPLETED_PENDING_DRIVER");
+      if (confirmedDelivered || waitingDriver) {
+        // A confirmed server-side result resolves an interrupted submission without
+        // creating another payment or proof upload.
+        clearPaymentDraft(localStorage, paymentScope());
+        selectJob(job);
+        setPaymentUncertain(false);
+        setMsg(confirmedDelivered
+          ? "Server confirms DELIVERED. Existing payment and proof were saved. Do not collect again."
+          : "Server confirms Helper checks are saved. Only the assigned Driver should confirm; do not repeat payment or proof.");
+        return true;
+      }
+
+      // An unchanged active stop is not proof that the prior mutation was rejected:
+      // a committed response can be delayed or temporarily absent from this queue.
+      // Keep the original draft in its uncertain state and prohibit a second submit.
       selectJob(job);
-      setPaymentUncertain(false);
-      setMsg("Status refreshed. Use the saved payment details; do not collect payment again.");
-      return true;
+      writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "uncertain"});
+      setPaymentUncertain(true);
+      const latest = statuses.find(Boolean) || "UNKNOWN";
+      setMsg(`Server currently reports ${latest}, but the prior delivery confirmation is still unresolved. Do not collect COD, resubmit proof, or press Delivered again. Ask Operations/Finance to verify this Waybill before any authorized retry.`);
+      return false;
     } catch (error: any) {
       setMsg(error?.message || "Status refresh failed.");
       return false;
@@ -1302,7 +1318,7 @@ export default function DeliveryPage() {
                   </div>
                   {requiredCod === 0 && <p className="mt-2 text-sm">{tx("No collection is required. No payment rows will be recorded.", "ငွေကောက်ခံရန် မလိုအပ်ပါ။")}</p>}
                   {paymentUncertain && <div role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-bold">
-                    {tx("Previous confirmation is unresolved. Check the latest status before retrying; do not collect again.", "ယခင်အတည်ပြုမှု အခြေအနေကို ပြန်စစ်ပါ။ ငွေထပ်မကောက်ခံပါနှင့်။")}
+                    {tx("Previous confirmation is unresolved. Do not collect COD or submit delivery again. Refresh to check the server. If the result remains uncertain, contact Operations/Finance for reconciliation.", "ယခင်ပို့ဆောင်မှုအတည်ပြုချက် မသေချာသေးပါ။ ငွေထပ်မကောက်ပါနှင့်။ ထပ်မံအတည်မပြုပါနှင့်။ Server အခြေအနေကို ပြန်စစ်ပါ။ မသေချာသေးပါက Operations/Finance သို့ ဆက်သွယ်ပါ။")}
                     <button type="button" disabled={busy} className="mt-2 block rounded-xl border p-3" onClick={refreshDeliveryStatus}>{tx("Refresh delivery status", "ပို့ဆောင်မှုအခြေအနေ ပြန်စစ်မည်")}</button>
                   </div>}
                 </section>
