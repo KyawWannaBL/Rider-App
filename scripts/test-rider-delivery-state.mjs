@@ -49,8 +49,36 @@ test('unconfirmed or failed actions never receive a success indicator',async()=>
 });
 test('return-to-warehouse backend rejection returns false',async()=>{
   let message='';
-  const result=await production('failAndReturnToWarehouse',{selected:{delivery_way_id:'D-A',wayplan_id:'W-A'},failureMode:true,form:{failed_reason:'NO_ANSWER',remarks:''},currentGps:async()=>({}),setBusy:()=>{},supabase:{rpc:async()=>({data:{ok:false,error:'Server rejected return'}})},setMsg:v=>message=v,tx}) ();
+  const result=await production('failAndReturnToWarehouse',{selected:{delivery_way_id:'D-A',wayplan_id:'W-A'},failureMode:true,form:{failed_reason:'NO_ANSWER',remarks:'Called customer multiple times'},busy:false,failureSubmissionRef:{current:false},failureOperationRef:{current:null},classifyFailureReason:()=> 'VALID_REASON',readScopedDeliveryStatus:async()=>({stop_status:'OUT_FOR_DELIVERY'}),currentGps:async()=>({}),setBusy:()=>{},supabase:{rpc:async()=>({data:{ok:false,error:'Server rejected return'}})},setMsg:v=>message=v,tx}) ();
   assert.equal(result,false);assert.match(message,/Server rejected return/);
+});
+test('Way Failed avoids a duplicate submission when the stop is already failed',async()=>{
+  let mutations=0,message='';
+  const result=await production('failAndReturnToWarehouse',{
+    selected:{delivery_way_id:'D-A',wayplan_id:'W-A'},failureMode:true,
+    form:{failed_reason:'NO_ANSWER',remarks:'Called twice'},busy:false,
+    failureSubmissionRef:{current:false},failureOperationRef:{current:null},
+    classifyFailureReason:()=> 'VALID_REASON',
+    readScopedDeliveryStatus:async()=>({stop_status:'FAILED_DELIVERY'}),
+    setBusy:()=>{},setFailureMode:()=>{},setMsg:v=>message=v,tx,
+    supabase:{rpc:async()=>{mutations++;return {data:{ok:true}}}}
+  })();
+  assert.equal(result,true);
+  assert.equal(mutations,0);
+  assert.match(message,/already saved/);
+});
+test('Direct RTO is referred for evidence review before failure mutation',async()=>{
+  let mutations=0,message='';
+  const result=await production('failAndReturnToWarehouse',{
+    selected:{delivery_way_id:'D-A',wayplan_id:'W-A'},failureMode:true,
+    form:{failed_reason:'CUSTOMER_REFUSED',remarks:'Customer refused'},busy:false,
+    failureSubmissionRef:{current:false},classifyFailureReason:()=> 'DIRECT_RTO',
+    setMsg:v=>message=v,tx,
+    supabase:{rpc:async()=>{mutations++;return {data:{ok:true}}}}
+  })();
+  assert.equal(result,false);
+  assert.equal(mutations,0);
+  assert.match(message,/Direct RTO/);
 });
 test('unsuccessful GPS checks return false',async()=>{
   const result=await production('sendGps',{selected:{delivery_way_id:'D-A'},currentGps:async()=>({}),setMsg:()=>{},tx})();
@@ -61,7 +89,7 @@ test('postponement errors return false rather than confirming warehouse return',
   assert.equal(result,false);
 });
 test('a successful postponement returns its actual result through the return action',async()=>{
-  const result=await production('failAndReturnToWarehouse',{selected:{delivery_way_id:'D-A'},failureMode:true,form:{failed_reason:'CUSTOMER_REQUESTED_RESCHEDULE',remarks:''},failDelivery:async()=>true,setMsg:()=>{},tx})();
+  const result=await production('failAndReturnToWarehouse',{selected:{delivery_way_id:'D-A'},failureMode:true,form:{failed_reason:'CUSTOMER_REQUESTED_RESCHEDULE',remarks:''},busy:false,failureSubmissionRef:{current:false},failDelivery:async()=>true,setMsg:()=>{},tx})();
   assert.equal(result,true);
 });
 test('late signature encoding cannot cache another delivery signature',async()=>{
