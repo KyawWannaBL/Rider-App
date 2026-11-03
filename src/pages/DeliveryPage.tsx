@@ -224,11 +224,26 @@ export default function DeliveryPage() {
       if (error || data?.ok !== true || String(data?.mobile_status || "").toUpperCase() !== "DELIVERED") {
         throw new Error(error?.message || data?.message || data?.error || "Driver confirmation was not accepted.");
       }
-      const success = tx(
-        `${wayId}: Driver confirmation saved. Delivery is DELIVERED.`,
-        `${wayId}: Driver အတည်ပြုမှု သိမ်းဆည်းပြီးပါပြီ။ ပို့ဆောင်မှု ပြီးစီးပါပြီ။`
-      );
-      setDeliveryProgress("success");
+      // Do not declare synchronized success from the mutation response alone.
+      // This read-only RPC checks the persisted stop, parcel, membership, route,
+      // proof, signature, and Helper confirmation for the assigned Driver.
+      let sync: any = null;
+      let syncError = "";
+      try {
+        const checked = await (supabase as any).rpc("be_driver_delivery_sync_status_v1",{
+          p_wayplan:selected.wayplan_id,p_way:wayId
+        });
+        if (checked.error || checked.data?.ok!==true) throw new Error(checked.error?.message||checked.data?.error||"Sync check unavailable");
+        sync=checked.data;
+      } catch (checkError:any) {
+        syncError=checkError?.message||"Sync check unavailable";
+      }
+      const success = sync?.synced===true
+        ? tx(`${wayId}: Driver approved. Delivery, proof, route and parcel records synchronized.`,
+             `${wayId}: Driver အတည်ပြုမှု ပြီးစီးပြီး ပို့ဆောင်မှုနှင့် မှတ်တမ်းများ ချိတ်ဆက်ပြီးပါပြီ။`)
+        : tx(`${wayId}: Driver action accepted, but record synchronization needs review (${syncError||"some records are not yet synchronized"}). Refresh status or contact Operations. Do NOT collect payment again.`,
+             `${wayId}: Driver လုပ်ဆောင်ချက်ကို လက်ခံပြီးဖြစ်သော်လည်း မှတ်တမ်းချိတ်ဆက်မှုကို စစ်ဆေးရန်လိုပါသည်။ ငွေထပ်မကောက်ပါနှင့်။`);
+      setDeliveryProgress(sync?.synced===true?"success":"error");
       setDeliveryResult(success);
       setMsg(success);
       await load(wayId);
@@ -270,7 +285,12 @@ export default function DeliveryPage() {
           });
           if (error || data?.ok !== true || String(data?.mobile_status || "").toUpperCase() !== "DELIVERED")
             throw new Error(error?.message || data?.error || "Driver acceptance was not confirmed.");
-          approved++;
+          const verification=await (supabase as any).rpc("be_driver_delivery_sync_status_v1",{
+            p_wayplan:job.wayplan_id,p_way:job.delivery_way_id
+          });
+          if(verification.error||verification.data?.ok!==true||verification.data?.synced!==true){
+            failures.push(`${job.delivery_way_id}: Driver action accepted but synchronized status not verified. Do not collect again.`);
+          } else approved++;
         } catch (error: any) {
           failures.push(`${job.delivery_way_id}: ${error?.message || "Failed"}`);
         }
