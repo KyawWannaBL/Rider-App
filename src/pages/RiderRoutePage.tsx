@@ -12,6 +12,8 @@ export default function RiderRoutePage() {
   const [dispatch, setDispatch] = useState<Dispatch | null>(null);
   const [waybills, setWaybills] = useState<Waybill[]>([]);
   const [selectedId, setSelectedId] = useState("");
+  const [selectedWayplanId, setSelectedWayplanId] = useState("");
+  const [wayplanIds, setWayplanIds] = useState<string[]>([]);
   const [showStopDetails, setShowStopDetails] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -20,7 +22,9 @@ export default function RiderRoutePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const next = await loadRiderRoute();
+      const next = await loadRiderRoute(selectedWayplanId || undefined);
+      setWayplanIds(next.wayplanIds);
+      setSelectedWayplanId(next.dispatch?.id || "");
       setDispatch(next.dispatch);
       setWaybills(next.waybills);
       setSelectedId((current) =>
@@ -34,7 +38,7 @@ export default function RiderRoutePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedWayplanId]);
 
   useEffect(() => {
     void load();
@@ -108,6 +112,14 @@ export default function RiderRoutePage() {
         </div>
       </div>
       {message && <div className="mx-auto max-w-7xl px-4 py-2 text-xs font-bold text-blue-900" role="status">{message}</div>}
+      {wayplanIds.length > 1 && <div className="mx-auto max-w-7xl px-4 pt-3">
+        <label className="block text-sm font-black text-slate-800">Assigned Wayplan
+          <select className="mt-1 min-h-12 w-full max-w-xl rounded-xl border border-blue-200 bg-white px-3 font-bold text-slate-900"
+            value={selectedWayplanId} onChange={event => { setSelectedWayplanId(event.target.value); setSelectedId(""); }}>
+            {wayplanIds.map(id => <option key={id} value={id}>{id}</option>)}
+          </select>
+        </label>
+      </div>}
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-4 px-3 py-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.9fr)] lg:px-5">
         <div className="min-w-0 space-y-4">
           <RiderRouteOverview dispatch={dispatch} waybills={waybills} />

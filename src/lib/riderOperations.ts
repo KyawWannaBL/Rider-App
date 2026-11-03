@@ -109,8 +109,8 @@ function mapWaybill(row: any): Waybill {
   };
 }
 
-export async function loadRiderRoute(): Promise<{ dispatch: Dispatch | null; waybills: Waybill[] }> {
-  if (!supabase) return { dispatch: null, waybills: [] };
+export async function loadRiderRoute(preferredWayplanId?: string): Promise<{ dispatch: Dispatch | null; waybills: Waybill[]; wayplanIds: string[] }> {
+  if (!supabase) return { dispatch: null, waybills: [], wayplanIds: [] };
 
   const { data, error } = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {
     p_rider_code: null,
@@ -119,11 +119,14 @@ export async function loadRiderRoute(): Promise<{ dispatch: Dispatch | null; way
   if (error) throw error;
   if (data?.ok === false) throw new Error(data?.error || "Unable to load Rider route.");
 
-  const rows = Array.isArray(data?.jobs) ? data.jobs : [];
+  const rows: any[] = Array.isArray(data?.jobs) ? data.jobs : [];
+  const wayplanIds: string[] = Array.from(new Set(rows.map((row: any) => String(row?.wayplan_id || "ACTIVE"))));
+  const wayplanId = preferredWayplanId && wayplanIds.includes(preferredWayplanId) ? preferredWayplanId : wayplanIds[0];
+  const stopRows = rows.filter((row: any) => String(row?.wayplan_id || "ACTIVE") === wayplanId);
   let locationByWay = new Map<string, any>();
 
-  if (rows.length) {
-    const deliveryWayIds = rows.map((row: any) => String(row?.delivery_way_id || "")).filter(Boolean);
+  if (stopRows.length) {
+    const deliveryWayIds = stopRows.map((row: any) => String(row?.delivery_way_id || "")).filter(Boolean);
     const { data: locations, error: locationError } = await (supabase as any).rpc("be_field_assigned_delivery_locations_v1", {
       p_delivery_way_ids: deliveryWayIds,
     });
@@ -135,7 +138,7 @@ export async function loadRiderRoute(): Promise<{ dispatch: Dispatch | null; way
     }
   }
 
-  const waybills = rows.map((row: any) => {
+  const waybills = stopRows.map((row: any) => {
     const location = locationByWay.get(String(row?.delivery_way_id || "").toUpperCase());
     const enriched = location?.latitude && location?.longitude
       ? {
@@ -153,11 +156,9 @@ export async function loadRiderRoute(): Promise<{ dispatch: Dispatch | null; way
     return mapWaybill(enriched);
   });
 
-  if (!rows.length) return { dispatch: null, waybills };
+  if (!stopRows.length) return { dispatch: null, waybills, wayplanIds };
 
-  const first = rows[0];
-  const wayplanId = String(first?.wayplan_id || "ACTIVE");
-  const stopRows = rows.filter((row: any) => String(row?.wayplan_id || "") === wayplanId);
+  const first = stopRows[0];
   const statusValue = String(first?.wayplan_status || "IN_PROGRESS").toUpperCase();
   const dispatchStatus: DispatchStatus =
     statusValue === "COMPLETED" ? "COMPLETED" :
@@ -195,7 +196,7 @@ export async function loadRiderRoute(): Promise<{ dispatch: Dispatch | null; way
     updatedAt: iso(first?.dispatched_at || first?.wayplan_created_at),
   };
 
-  return { dispatch, waybills };
+  return { dispatch, waybills, wayplanIds };
 }
 
 function settlementStatus(value: unknown): SettlementStatus {
