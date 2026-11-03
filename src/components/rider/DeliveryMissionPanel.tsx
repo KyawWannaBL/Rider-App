@@ -1,7 +1,7 @@
 import { ArrowRight, CheckCircle2, Clock3, MapPin, Navigation, Phone, RefreshCw, ScanLine, Wallet } from "lucide-react";
 import type { Waybill } from "@/types/rider";
 
-const terminal = new Set(["DELIVERED", "FAILED", "RETURN_SCANNED", "RTO"]);
+const terminal = new Set(["DELIVERED", "FAILED", "RETURN_PENDING", "RETURN_SCANNED", "RTO", "PENDING_DRIVER_CONFIRMATION"]);
 const currency = (amount:number) => new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(amount || 0);
 
 export function DeliveryMissionPanel({
@@ -17,9 +17,11 @@ export function DeliveryMissionPanel({
 }) {
   const ordered=[...waybills].sort((a,b)=>(a.sequenceNo||9999)-(b.sequenceNo||9999));
   const delivered=ordered.filter(w=>w.status==="DELIVERED").length;
+  const pendingDriver=ordered.filter(w=>w.status==="PENDING_DRIVER_CONFIRMATION").length;
   const outstanding=ordered.filter(w=>!terminal.has(w.status));
   const next=outstanding[0] || null;
   const amount=outstanding.reduce((sum,waybill)=>sum+Number(waybill.tariff?.expectedCod||0),0);
+  const verificationLocked=selected.status==="PENDING_DRIVER_CONFIRMATION" || selected.status==="DELIVERED";
   const selectedNumber=selected.sequenceNo || ordered.indexOf(selected)+1;
   const hasPhone=Boolean(selected.customer.phone?.trim());
   const hasLocation=Boolean(selected.customer.location && Number.isFinite(selected.customer.location.latitude) && Number.isFinite(selected.customer.location.longitude));
@@ -40,6 +42,7 @@ export function DeliveryMissionPanel({
       <div className="rounded-xl bg-emerald-50 p-3"><p className="text-[10px] font-bold text-emerald-800">Delivered</p><p className="mt-1 text-xl font-black text-emerald-950">{delivered}</p></div>
       <div className="rounded-xl bg-amber-50 p-3"><p className="text-[10px] font-bold text-amber-800">Open</p><p className="mt-1 text-xl font-black text-amber-950">{outstanding.length}</p></div>
     </div>
+    {pendingDriver > 0 && <p role="status" className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs font-bold text-violet-900">{pendingDriver} Helper-completed deliveries are awaiting assigned Driver confirmation. Do not collect payment or capture proof again.</p>}
     <div className="h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={delivered} aria-valuemin={0} aria-valuemax={ordered.length} aria-label="Completed deliveries">
       <div className="h-full rounded-full bg-emerald-500" style={{width:`${ordered.length ? delivered/ordered.length*100 : 0}%`}}/>
     </div>
@@ -73,8 +76,9 @@ export function DeliveryMissionPanel({
       </div>
       <button type="button" onClick={()=>onVerify(selected)}
         className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 text-sm font-black text-white">
-        <ScanLine className="h-5 w-5"/> Open Delivery Verification <ArrowRight className="h-4 w-4"/>
+        <ScanLine className="h-5 w-5"/> {selected.status==="PENDING_DRIVER_CONFIRMATION" ? "Open Driver Approval (No Recollection)" : selected.status==="DELIVERED" ? "View Completed Delivery" : "Open Delivery Verification"} <ArrowRight className="h-4 w-4"/>
       </button>
+      {verificationLocked && <p className="rounded-xl bg-violet-50 px-3 py-2 text-xs font-bold text-violet-900">Existing proof and payment must be reused. Do not collect or upload a second time.</p>}
       <p className="flex items-start gap-2 text-[11px] leading-5 text-slate-500"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0"/> Delivery success, payment capture, failure reasons and proof are confirmed in the existing secure verification flow—not by this overview.</p>
     </section>
     <div>
@@ -84,7 +88,7 @@ export function DeliveryMissionPanel({
           className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left ${w.id===selected.id?"border-blue-500 bg-blue-50":"border-slate-100 bg-white"}`}>
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-xs font-black text-white">{w.sequenceNo||"–"}</span>
           <span className="min-w-0 flex-1"><span className="block truncate text-xs font-black text-slate-900">{w.customer.name}</span><span className="block truncate font-mono text-[10px] text-slate-500">{w.deliveryWayId}</span></span>
-          <span className={`text-[10px] font-bold ${w.status==="DELIVERED"?"text-emerald-700":"text-amber-700"}`}>{w.status==="DELIVERED"?"Done":w.status.replace(/_/g," ")}</span>
+          <span className={`text-[10px] font-bold ${w.status==="DELIVERED"?"text-emerald-700":"text-amber-700"}`}>{w.status==="DELIVERED"?"Done":w.status==="PENDING_DRIVER_CONFIRMATION"?"Driver approval pending":w.status.replace(/_/g," ")}</span>
         </button>)}
       </div>
     </div>
