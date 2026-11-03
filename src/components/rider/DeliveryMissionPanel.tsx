@@ -54,7 +54,7 @@ export function DeliveryMissionPanel({
     <section className="space-y-3 rounded-2xl border border-blue-100 bg-slate-50 p-3" aria-label="Selected delivery stop">
       <div className="flex items-center justify-between gap-2">
         <span className="rounded-full bg-blue-900 px-3 py-1 text-xs font-black text-white">STOP #{selectedNumber}</span>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700">{selected.status.replaceAll("_"," ")}</span>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700">{selected.status.replace(/_/g," ")}</span>
       </div>
       <div>
         <h3 className="text-base font-black text-slate-950">{selected.customer.name}</h3>
@@ -84,7 +84,7 @@ export function DeliveryMissionPanel({
           className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left ${w.id===selected.id?"border-blue-500 bg-blue-50":"border-slate-100 bg-white"}`}>
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-xs font-black text-white">{w.sequenceNo||"–"}</span>
           <span className="min-w-0 flex-1"><span className="block truncate text-xs font-black text-slate-900">{w.customer.name}</span><span className="block truncate font-mono text-[10px] text-slate-500">{w.deliveryWayId}</span></span>
-          <span className={`text-[10px] font-bold ${w.status==="DELIVERED"?"text-emerald-700":"text-amber-700"}`}>{w.status==="DELIVERED"?"Done":w.status.replaceAll("_"," ")}</span>
+          <span className={`text-[10px] font-bold ${w.status==="DELIVERED"?"text-emerald-700":"text-amber-700"}`}>{w.status==="DELIVERED"?"Done":w.status.replace(/_/g," ")}</span>
         </button>)}
       </div>
     </div>
