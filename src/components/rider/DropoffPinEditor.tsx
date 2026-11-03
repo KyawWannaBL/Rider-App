@@ -87,42 +87,63 @@ export function DropoffPinEditor({
 
   const typedCoordinatesChanged = !!pin && (latitudeText.trim() !== String(pin.latitude) || longitudeText.trim() !== String(pin.longitude));
 
-  function useCurrentLocation() {
+  async function useCurrentLocation() {
+    setMessage("Checking location access…");
+    if (typeof window === "undefined" || !window.isSecureContext) {
+      setMessage("GPS needs a secure HTTPS connection. Open https://www.britiumexpress.app directly, then retry. You may also apply coordinates manually.");
+      return;
+    }
     if (!navigator.geolocation) {
-      setMessage("GPS is not available on this device.");
+      setMessage("This browser does not offer GPS location. Enable device location services or apply coordinates manually.");
+      return;
+    }
+    const locationPolicy = (document as Document & { permissionsPolicy?: { allowsFeature: (feature: string) => boolean } }).permissionsPolicy;
+    if (locationPolicy && !locationPolicy.allowsFeature("geolocation")) {
+      setMessage("This browser page blocks GPS access. Open the Rider App directly rather than inside another app or embedded window.");
       return;
     }
 
     setLocating(true);
-    setMessage("Finding your current GPS position…");
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const next = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        };
-        selectPin(next);
-        setLocating(false);
-        setMessage(
-          `Current location selected. GPS accuracy is about ±${Math.round(position.coords.accuracy)} m. Fine-adjust the pin if needed, then save.`,
+    setMessage("Requesting device location… Allow location access if your browser asks.");
+    try {
+      const permission = await navigator.permissions?.query({ name: "geolocation" as PermissionName }).catch((): null => null);
+      if (permission?.state === "denied") {
+        setMessage("Location is blocked for this site. Click the location/lock icon beside the address bar, set Location to Allow, enable device location, and retry. Manual coordinates remain available.");
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const next = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+            };
+            if (!Number.isFinite(next.latitude) || !Number.isFinite(next.longitude)) {
+              setMessage("GPS returned invalid coordinates. Please retry outdoors or enter coordinates manually.");
+            } else {
+              selectPin(next);
+              setMessage(`Current location selected. GPS accuracy is about ±${Math.round(position.coords.accuracy)} m. Verify the entrance on the map, then Save Drop-off Pin.`);
+            }
+            resolve();
+          },
+          (error) => {
+            const details = error.code === error.PERMISSION_DENIED
+              ? "Location access was denied. Enable Location for this site in browser settings and device settings, then retry."
+              : error.code === error.TIMEOUT
+                ? "GPS timed out. Move outdoors, enable device location services, then retry."
+                : "GPS position is unavailable. Turn on device location services, retry, or enter exact coordinates manually.";
+            setMessage(details);
+            resolve();
+          },
+          { enableHighAccuracy: true, timeout: 20_000, maximumAge: 10_000 },
         );
-      },
-      (error) => {
-        setLocating(false);
-        setMessage(
-          error.code === error.PERMISSION_DENIED
-            ? "Location permission is required. Allow precise location for the Rider App and try again."
-            : "Unable to read current GPS. Move outdoors or near a window and try again.",
-        );
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 12_000,
-        maximumAge: 5_000,
-      },
-    );
+      });
+    } catch (error) {
+      setMessage("Could not request device location. Review browser location permission or enter coordinates manually.");
+    } finally {
+      setLocating(false);
+    }
   }
 
   async function save() {
@@ -220,7 +241,7 @@ export function DropoffPinEditor({
           type="button"
           onClick={useCurrentLocation}
           disabled={locating}
-          className="v142-jelly flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 font-black text-slate-950 shadow-[0_14px_32px_rgba(34,211,238,.18)] disabled:opacity-50"
+          className="v142-jelly relative z-10 flex min-h-14 w-full touch-manipulation items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 font-black text-slate-950 shadow-[0_14px_32px_rgba(34,211,238,.18)] disabled:opacity-50"
         >
           <LocateFixed className={`h-5 w-5 ${locating ? "animate-pulse" : ""}`} />
           {locating ? "Finding precise GPS…" : "Use My Current Location"}
