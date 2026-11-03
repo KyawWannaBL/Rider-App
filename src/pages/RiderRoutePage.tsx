@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw, Route as RouteIcon } from "lucide-react";
 import { ActiveRouteScreen } from "@/components/rider/ActiveRouteScreen";
 import { DeliveryMissionPanel } from "@/components/rider/DeliveryMissionPanel";
+import { RouteLivePosition } from "@/components/rider/RouteLivePosition";
 import { RiderRouteOverview } from "@/components/rider/RiderRouteOverview";
 import { RiderNotification } from "@/components/rider/RiderNotification";
 import { loadRiderRoute, openNavigation } from "@/lib/riderOperations";
@@ -133,6 +134,7 @@ export default function RiderRoutePage() {
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-4 px-3 py-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.9fr)] lg:px-5">
         <div className="min-w-0 space-y-4">
           <RiderRouteOverview dispatch={dispatch} waybills={waybills} selectedWaybillId={selected.id} onSelectWaybill={setSelectedId} />
+          <RouteLivePosition key={dispatch.id} wayplanId={dispatch.id} />
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
             <button type="button" className="w-full px-4 py-3 text-left font-black text-slate-900"
               onClick={() => setShowStopDetails(value => !value)}>
