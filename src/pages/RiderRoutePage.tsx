@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw, Route as RouteIcon } from "lucide-react";
 import { ActiveRouteScreen } from "@/components/rider/ActiveRouteScreen";
+import { RiderRouteOverview } from "@/components/rider/RiderRouteOverview";
 import { RiderNotification } from "@/components/rider/RiderNotification";
 import { loadRiderRoute, openNavigation } from "@/lib/riderOperations";
 import { useRiderRealtime } from "@/hooks/useRiderRealtime";
@@ -124,6 +125,7 @@ export default function RiderRoutePage() {
         </div>
       )}
 
+      <RiderRouteOverview dispatch={dispatch} waybills={waybills} />
       <ActiveRouteScreen
         dispatch={dispatch}
         waybill={selected}
