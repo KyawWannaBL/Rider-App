@@ -132,7 +132,7 @@ export default function RiderRoutePage() {
       </div>}
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-start gap-4 px-3 py-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.9fr)] lg:px-5">
         <div className="min-w-0 space-y-4">
-          <RiderRouteOverview dispatch={dispatch} waybills={waybills} />
+          <RiderRouteOverview dispatch={dispatch} waybills={waybills} selectedWaybillId={selected.id} onSelectWaybill={setSelectedId} />
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
             <button type="button" className="w-full px-4 py-3 text-left font-black text-slate-900"
               onClick={() => setShowStopDetails(value => !value)}>
