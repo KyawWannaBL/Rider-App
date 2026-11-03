@@ -25,7 +25,7 @@ const isPoint = (lat: number, lng: number) => Number.isFinite(lat) && Number.isF
   && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
 
 /** On-screen geographical overview, not a road-geometry claim. Google Maps links provide road directions. */
-export function AssignedDropsMap({ office, stops }: { office?: DropMapOffice | null; stops: DropMapPoint[] }) {
+export function AssignedDropsMap({ office, stops, selectedStopId, onSelectStop }: { office?: DropMapOffice | null; stops: DropMapPoint[]; selectedStopId?: string; onSelectStop?: (stopId: string) => void }) {
   const element = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 360, height: 340 });
   const [zoomDelta, setZoomDelta] = useState(0);
@@ -76,6 +76,7 @@ export function AssignedDropsMap({ office, stops }: { office?: DropMapOffice | n
   const officePoint = office && isPoint(office.latitude, office.longitude) ? place(office.latitude, office.longitude) : null;
   const points = validStops.map(stop => ({ ...stop, xy: place(stop.latitude, stop.longitude) }));
   const focused = points.find(point => point.id === focusedId);
+  const selectedPoint = points.find(point => point.id === selectedStopId);
   return <section className="space-y-2" aria-label="All delivery drops overview">
     <div className="flex items-center justify-between gap-2">
       <h3 className="flex items-center gap-2 text-sm font-black text-slate-950"><MapPin className="h-4 w-4 text-blue-700" /> Delivery drops on map</h3>
@@ -90,10 +91,10 @@ export function AssignedDropsMap({ office, stops }: { office?: DropMapOffice | n
       {officePoint && <div className="absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-emerald-700 p-2 text-white shadow-lg" style={{left:officePoint.x,top:officePoint.y}} title={office?.label || "Office"}>
         <LocateFixed className="h-5 w-5" />
       </div>}
-      {points.map(point => <button key={point.id} type="button" onClick={() => setFocusedId(point.id)}
+      {points.map(point => <button key={point.id} type="button" onClick={() => { setFocusedId(point.id); onSelectStop?.(point.id); }}
         title={`Stop ${point.sequence}: ${point.label}`}
         aria-label={`Show stop ${point.sequence}: ${point.label}`}
-        className="absolute z-10 flex h-9 min-w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-blue-800 px-1 text-xs font-black text-white shadow-lg focus-visible:outline-4 focus-visible:outline-amber-400"
+        className={`absolute z-10 flex h-9 min-w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white px-1 text-xs font-black text-white shadow-lg focus-visible:outline-4 focus-visible:outline-amber-400 ${selectedStopId === point.id ? "bg-amber-600 ring-4 ring-amber-300" : "bg-blue-800"}`}
         style={{left:point.xy.x,top:point.xy.y}}>{point.sequence}</button>)}
       <div className="absolute right-2 top-2 z-20 flex flex-col gap-2">
         <button type="button" onClick={() => setZoomDelta(z => Math.min(z + 1, 6))} className="grid h-11 w-11 place-items-center rounded-xl bg-white shadow" aria-label="Zoom in"><Plus className="h-5 w-5"/></button>
@@ -122,6 +123,7 @@ export function AssignedDropsMap({ office, stops }: { office?: DropMapOffice | n
       </div>}
       <div className="pointer-events-none absolute bottom-1 left-2 z-10 rounded bg-white/85 px-2 text-[10px] text-slate-700">© OpenStreetMap contributors</div>
     </div>
+    {selectedPoint && <p role="status" className="text-xs font-bold text-amber-800">Selected for delivery actions: stop #{selectedPoint.sequence} · {selectedPoint.label}</p>}
     <p className="text-[11px] leading-5 text-slate-600">Green marker: selected departure office. Blue numbered markers: delivery sequence. Dashed lines show stop order, not actual road geometry. Use the Google Maps buttons for road navigation.</p>
   </section>;
 }
