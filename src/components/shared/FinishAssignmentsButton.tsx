@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Link } from "react-router-dom";
 
 export function FinishAssignmentsButton({ onFinished }: { onFinished?: () => void | Promise<void> }) {
   const [busy, setBusy] = useState(false);
@@ -88,6 +89,7 @@ export function FinishAssignmentsButton({ onFinished }: { onFinished?: () => voi
         </div>
       )}
       {message && !confirmedWorker && <div role="alert" aria-live="assertive" className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700">{message}</div>}
+      {message && !confirmedWorker && <Link to="/delivery" className="mt-3 inline-flex rounded-xl bg-indigo-700 px-4 py-3 text-sm font-black text-white">Open Delivery — Review &amp; Confirm Pending Stops / ပို့ဆောင်မှု အတည်ပြုရန်</Link>}
     </section>
   );
 }
