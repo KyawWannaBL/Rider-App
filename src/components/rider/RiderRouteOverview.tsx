@@ -4,6 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Dispatch, Waybill } from "@/types/rider";
 
 type Office = { branch_code: string; branch_name: string; lat: number; lng: number };
+const REFERENCE_OFFICES: Office[] = [
+  { branch_code: "YGN", branch_name: "Yangon Head Office (reference)", lat: 16.8409, lng: 96.1735 },
+  { branch_code: "MDY", branch_name: "Mandalay Branch Office (reference)", lat: 21.920487832867, lng: 96.1161929959684 },
+  { branch_code: "NPT", branch_name: "Naypyidaw Branch Office (reference)", lat: 19.7353744598781, lng: 96.1527056747248 },
+];
 type OrderedStop = { sequence: number; waybill: Waybill; lat: number; lng: number };
 
 function numberCoordinate(value: unknown) {
@@ -22,7 +27,7 @@ function directionsUrl(origin: string, stops: OrderedStop[]) {
 }
 
 export function RiderRouteOverview({ dispatch, waybills }: { dispatch: Dispatch; waybills: Waybill[] }) {
-  const [offices, setOffices] = useState<Office[]>([]);
+  const [offices, setOffices] = useState<Office[]>(REFERENCE_OFFICES);
   const [selectedOffice, setSelectedOffice] = useState("");
   const [officeMessage, setOfficeMessage] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -45,9 +50,9 @@ export function RiderRouteOverview({ dispatch, waybills }: { dispatch: Dispatch;
           lat: Number(row.lat), lng: Number(row.lng),
         }));
         setOffices(valid);
-        if (!valid.length) setOfficeMessage("Branch coordinates are unavailable. Select a departure office once the branch register is accessible.");
+        if (!valid.length) { setOffices(REFERENCE_OFFICES); setOfficeMessage("Office register unavailable. Showing reference coordinates; confirm departure location before navigation."); }
       } catch {
-        if (!cancelled) setOfficeMessage("Could not load branch origins. The route stop list remains available.");
+        if (!cancelled) { setOffices(REFERENCE_OFFICES); setOfficeMessage("Could not read office registry. Reference coordinates are shown; confirm departure point before navigation."); }
       }
     })();
     return () => { cancelled = true; };
