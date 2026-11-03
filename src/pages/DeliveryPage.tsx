@@ -108,6 +108,11 @@ export default function DeliveryPage() {
   const [measuredWeight, setMeasuredWeight] = useState("");
   const [weightReviewReason, setWeightReviewReason] = useState("");
   const [weightReviewMessage, setWeightReviewMessage] = useState("");
+  useEffect(() => {
+    setMeasuredWeight("");
+    setWeightReviewReason("");
+    setWeightReviewMessage("");
+  }, [selected?.delivery_way_id]);
   const [failureMode, setFailureMode] = useState(false);
   const [deliveryProgress, setDeliveryProgress] = useState<"idle"|"validating"|"uploading"|"gps"|"confirming"|"success"|"error">("idle");
   const [deliveryResult, setDeliveryResult] = useState("");
@@ -259,9 +264,6 @@ export default function DeliveryPage() {
     selectedDeliveryRef.current = deliveryId;
     selectedScopeRef.current = scopeKey;
     setSelected(job);
-    setMeasuredWeight("");
-    setWeightReviewReason("");
-    setWeightReviewMessage("");
     const helperPrepared = activeRole === "driver" && String(job.rider_status || job.stop_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
     const delivered = [job.stop_status, job.rider_status].some(status => String(status || "").toUpperCase() === "DELIVERED");
     if (changed || helperPrepared || delivered) initializePayments(job);
