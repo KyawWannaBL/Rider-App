@@ -750,25 +750,27 @@ export default function DeliveryPage() {
 
     setBusy(true);
     try {
+      // Validate GPS before uploading proof/signature so a denied or timed-out
+      // geolocation request does not create unnecessary remote files. The actual
+      // delivery mutation still happens only after all checks have succeeded.
+      setDeliveryProgress("gps");
+      setDeliveryResult(tx("Checking current GPS before uploading delivery proof...","ဓာတ်ပုံမတင်မီ လက်ရှိ GPS ကို စစ်ဆေးနေပါသည်..."));
+      const gps = await currentGps();
+      if (!gps.gps_lat || !gps.gps_lng) {
+        throw new Error(tx(
+          "Current GPS is required to complete delivery. Enable location services and allow location permission. Your approved photo and payment draft are kept for retry.",
+          "ပို့ဆောင်ပြီး အတည်ပြုရန် လက်ရှိ GPS လိုအပ်ပါသည်။ Location ခွင့်ပြုချက်ပေးပါ။ အတည်ပြုထားသော ဓာတ်ပုံနှင့် ငွေပေးချေမှု Draft ကို ထိန်းသိမ်းထားပါသည်။"
+        ));
+      }
+
       setDeliveryProgress("uploading");
       setDeliveryResult(tx("Uploading proof and signature...","သက်သေဓာတ်ပုံနှင့် လက်မှတ်ကို Upload တင်နေပါသည်..."));
-
       const prefix = `${selected.wayplan_id}/${selected.delivery_way_id}`;
       const proof_url = await upload("rider-proofs", approvedProofFile, prefix);
       const finalSignatureFile = signatureFile || drawnSignature;
       const signature_path = finalSignatureFile
         ? await upload("ops-signatures", finalSignatureFile, prefix)
         : null;
-
-      setDeliveryProgress("gps");
-      setDeliveryResult(tx("Checking current GPS and arrival state...","လက်ရှိ GPS နှင့် ရောက်ရှိမှုအခြေအနေကို စစ်ဆေးနေပါသည်..."));
-      const gps = await currentGps();
-      if (!gps.gps_lat || !gps.gps_lng) {
-        throw new Error(tx(
-          "Current GPS is required to complete delivery. Allow location permission and try again.",
-          "ပို့ဆောင်ပြီး အတည်ပြုရန် လက်ရှိ GPS လိုအပ်ပါသည်။ Location Permission ကို ခွင့်ပြုပြီး ပြန်စမ်းပါ။"
-        ));
-      }
 
       const signature_payload = form.signature_name.trim()
         ? {
