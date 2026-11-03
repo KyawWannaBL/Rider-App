@@ -120,6 +120,7 @@ export default function DeliveryPage() {
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [activeActions, setActiveActions] = useState<Record<string, boolean>>({});
   const [statusRefreshUncertain,setStatusRefreshUncertain] = useState(false);
+  useEffect(()=>{setStatusRefreshUncertain(false)},[selected?.delivery_way_id]);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const signatureRevision = useRef(0);
   const drawingRef = useRef(false);
@@ -341,7 +342,6 @@ export default function DeliveryPage() {
     selectedDeliveryRef.current = deliveryId;
     selectedScopeRef.current = scopeKey;
     setSelected(job);
-    setStatusRefreshUncertain(false);
     const helperPrepared = activeRole === "driver" && String(job.rider_status || job.stop_status || "").toUpperCase() === "HELPER_COMPLETED_PENDING_DRIVER";
     const delivered = [job.stop_status, job.rider_status].some(status => String(status || "").toUpperCase() === "DELIVERED");
     if (changed || helperPrepared || delivered) initializePayments(job);
