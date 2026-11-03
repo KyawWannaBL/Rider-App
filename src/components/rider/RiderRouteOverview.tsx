@@ -27,7 +27,7 @@ function directionsUrl(origin: string, stops: OrderedStop[]) {
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
-export function RiderRouteOverview({ dispatch, waybills }: { dispatch: Dispatch; waybills: Waybill[] }) {
+export function RiderRouteOverview({ dispatch, waybills, selectedWaybillId, onSelectWaybill }: { dispatch: Dispatch; waybills: Waybill[]; selectedWaybillId?: string; onSelectWaybill?: (waybillId: string) => void }) {
   const [offices, setOffices] = useState<Office[]>(REFERENCE_OFFICES);
   const [selectedOffice, setSelectedOffice] = useState("");
   const [officeMessage, setOfficeMessage] = useState("");
@@ -97,6 +97,8 @@ export function RiderRouteOverview({ dispatch, waybills }: { dispatch: Dispatch;
     </button>
     {expanded && <div className="mt-3 space-y-3">
       <AssignedDropsMap
+        selectedStopId={selectedWaybillId}
+        onSelectStop={onSelectWaybill}
         office={selected ? { label: selected.branch_name, latitude: selected.lat, longitude: selected.lng } : null}
         stops={mapped.map(stop => ({
           id: stop.waybill.id, latitude: stop.lat, longitude: stop.lng,
