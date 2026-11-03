@@ -19,7 +19,7 @@ export function RouteLivePosition({ wayplanId }: { wayplanId: string }) {
     setStatus("Sharing stopped. Saved position expires automatically.");
     void (supabase as any).rpc("be_field_live_position_update_v1", {
       p_wayplan_id: wayplanId, p_stop: true,
-    }).then(() => undefined, () => undefined);
+    }).then((): void => {}, (): void => {});
   };
 
   const start = () => {
@@ -45,7 +45,7 @@ export function RouteLivePosition({ wayplanId }: { wayplanId: string }) {
           p_longitude: longitude, p_accuracy_m: accuracy, p_stop: false,
         });
         if (!active.current || session.current !== thisSession) {
-          void (supabase as any).rpc("be_field_live_position_update_v1", {p_wayplan_id: wayplanId, p_stop: true}).then(() => undefined, () => undefined);
+          void (supabase as any).rpc("be_field_live_position_update_v1", {p_wayplan_id: wayplanId, p_stop: true}).then((): void => {}, (): void => {});
           return;
         }
         if (response.error || response.data?.ok !== true) {
@@ -71,7 +71,7 @@ export function RouteLivePosition({ wayplanId }: { wayplanId: string }) {
       if (watch.current !== null) navigator.geolocation.clearWatch(watch.current);
       void (supabase as any).rpc("be_field_live_position_update_v1", {
         p_wayplan_id: wayplanId, p_stop: true,
-      }).then(() => undefined, () => undefined);
+      }).then((): void => {}, (): void => {});
     };
   }, [wayplanId]);
 
