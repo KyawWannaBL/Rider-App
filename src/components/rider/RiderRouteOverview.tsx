@@ -89,7 +89,7 @@ export function RiderRouteOverview({ dispatch, waybills }: { dispatch: Dispatch;
     return result;
   }, [selected, mapped, ordered.length]);
 
-  return <section className="mx-auto max-w-lg border-b border-blue-100 bg-white px-4 py-4" data-rider-branch-route-overview="true">
+  return <section className="w-full min-w-0 rounded-3xl border border-blue-100 bg-white px-3 py-4 shadow-[0_12px_36px_rgba(15,23,42,.06)] sm:px-4" data-rider-branch-route-overview="true">
     <button type="button" onClick={() => setExpanded((value) => !value)}
       className="flex min-h-12 w-full items-center justify-between rounded-xl bg-blue-50 px-4 text-left font-black text-blue-950">
       <span className="flex items-center gap-2"><RouteIcon className="h-5 w-5"/> Full Wayplan Route · {ordered.length} stops</span>
@@ -122,13 +122,13 @@ export function RiderRouteOverview({ dispatch, waybills }: { dispatch: Dispatch;
         <span><MapPinned className="mr-2 inline h-4 w-4"/> Open map · stops {segment.from}–{segment.to}</span>
         <ExternalLink className="h-4 w-4"/>
       </a>)}
-      <ol className="max-h-72 space-y-2 overflow-y-auto">
+      <details className="rounded-xl border border-slate-200 bg-slate-50 p-3"><summary className="cursor-pointer text-xs font-black text-slate-900">View complete Waybill stop list</summary><ol className="mt-3 max-h-72 space-y-2 overflow-y-auto">
         {ordered.map(({sequence, waybill, lat, lng}) => <li key={waybill.id} className="rounded-xl border border-slate-200 p-3 text-xs">
           <div className="font-black text-slate-900">#{sequence} · {waybill.deliveryWayId}</div>
           <div className="mt-1 text-slate-600">{waybill.customer.name} · {waybill.customer.address || waybill.customer.township || "No address"}</div>
           {lat === null || lng === null ? <span className="font-bold text-amber-700">Location pending</span> : null}
         </li>)}
-      </ol>
+      </ol></details>
       <p className="text-[11px] text-slate-500">Google Maps displays road directions for each segment. It may offer different routes due to live road conditions; it does not change the approved Wayplan sequence.</p>
     </div>}
   </section>;
