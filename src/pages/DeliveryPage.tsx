@@ -167,6 +167,8 @@ export default function DeliveryPage() {
   const [failureReasons, setFailureReasons] = useState<any[]>(FALLBACK_FAILED_REASONS);
   const [msg, setMsg] = useState(language === "my" ? "ပို့ဆောင်ရေးအလုပ်များကို ဖွင့်နေသည်..." : "Loading delivery jobs...");
 
+  const [assignedWayplanReadiness, setAssignedWayplanReadiness] = useState<any[]>([]);
+  const [readinessWarning, setReadinessWarning] = useState("");
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);
   const [paymentUncertain, setPaymentUncertain] = useState(false);
   const [authenticatedPaymentActor, setAuthenticatedPaymentActor] = useState("");
@@ -398,7 +400,8 @@ export default function DeliveryPage() {
 
   async function load(preferredDeliveryWayId?: string) {
     setMsg(tx("Loading assigned Wayplan deliveries...","တာဝန်ပေးထားသော Wayplan ပို့ဆောင်မှုများကို ဖွင့်နေသည်..."));
-    const [jobsResult, reasonResult] = await Promise.all([
+    const [jobsResult, reasonResult, readinessResult] = await Promise.all([
+      (supabase as any).rpc("be_field_assigned_wayplan_readiness_v1"),
       (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {
         p_rider_code: null,
         p_limit: 200,
@@ -420,6 +423,13 @@ export default function DeliveryPage() {
       );
     }
 
+    if (!readinessResult.error && readinessResult.data?.ok === true) {
+      setAssignedWayplanReadiness(Array.isArray(readinessResult.data.rows) ? readinessResult.data.rows : []);
+      setReadinessWarning("");
+    } else {
+      setAssignedWayplanReadiness([]);
+      setReadinessWarning(readinessResult.error?.message || readinessResult.data?.error || tx("Assignment readiness is unavailable. Contact dispatch.", "Wayplan အခြေအနေမရနိုင်ပါ။ Dispatch နှင့် ဆက်သွယ်ပါ။"));
+    }
     const list = jobsFromResponse(jobsResult.data);
     setPickups(list);
     const next =
@@ -1213,6 +1223,34 @@ export default function DeliveryPage() {
              <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900">✓ {pickups.filter((p:any)=>["DELIVERED","DELIVERY_COMPLETED","POD_VERIFIED","HELPER_COMPLETED_PENDING_DRIVER"].includes(String(p.rider_status || p.stop_status || "").toUpperCase())).length} {tx("completed / Helper verified","ပြီးစီး / Helper အတည်ပြုပြီး")}</span>
           </div>
           <div className="mt-3 rounded-2xl bg-blue-50 p-3 font-bold text-blue-900">{msg}</div>
+          {readinessWarning && <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{readinessWarning}</p>}
+          {assignedWayplanReadiness.some((w:any) => String(w.wayplan_status || "").toUpperCase() !== "DISPATCHED") && (
+            <section className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" aria-label="Assigned wayplans awaiting dispatch">
+              <h3 className="font-black">{tx("Assigned wayplans awaiting Warehouse release","Warehouse မှ ထုတ်ပေးရန်စောင့်ဆိုင်းနေသော Wayplan များ")}</h3>
+              <p className="mt-1">{tx("These are assigned to your account but not yet available for delivery actions. Supervisor approval, complete warehouse scanning and dispatch publication are required.","သင့်အကောင့်သို့ တာဝန်ပေးထားသော်လည်း Supervisor အတည်ပြုမှု၊ Warehouse Scan နှင့် Dispatch ထုတ်ပြန်မှု မပြီးသေးပါ။")}</p>
+              <div className="mt-3 space-y-3">
+                {assignedWayplanReadiness.filter((w:any) => String(w.wayplan_status || "").toUpperCase() !== "DISPATCHED").map((w:any) => (
+                  <div key={w.wayplan_id} className="rounded-xl border border-amber-200 bg-white p-3">
+                    <div className="break-all font-bold">{w.wayplan_id}</div>
+                    <div>{tx("Status","အခြေအနေ")}: <b>{w.readiness_status}</b></div>
+                    <div>{tx("Warehouse scans","Warehouse Scan")}: <b>{w.dispatch_scanned_count}/{w.total_stops}</b></div>
+                    <div>{tx("Assigned crew","တာဝန်ပေးထားသူ")}: {[w.rider_code,w.driver_code,w.helper_code].filter(Boolean).join(" / ") || "-"}</div>
+                    {Array.isArray(w.missing_dispatch_way_ids) && w.missing_dispatch_way_ids.length > 0 && (
+                      <div className="mt-1 break-words text-xs">{tx("Still to scan","Scan မပြီးသေးသော Way များ")}: {w.missing_dispatch_way_ids.join(", ")}</div>
+                    )}
+                    <div className="mt-2 text-xs">{w.readiness_status === "WAREHOUSE_DISPATCH_SCANS_REQUIRED"
+                      ? tx("Ask Warehouse to scan the remaining parcels, then have an authorized dispatcher publish the route.","ကျန်သော ပါဆယ်များကို Warehouse တွင် Scan ပြီးမှ Dispatch ထုတ်ပြန်ပါ။")
+                      : w.readiness_status === "AUTHORIZED_DISPATCH_PUBLISH_REQUIRED"
+                      ? tx("Scans are complete. Ask the authorized dispatcher to publish this approved wayplan.","Scan ပြီးပါပြီ။ အတည်ပြုထားသော Wayplan ကို Dispatch ထုတ်ပြန်ရန် လိုအပ်ပါသည်။")
+                      : tx("Supervisor and Dispatch must finish the required approval and release steps.","Supervisor နှင့် Dispatch တို့မှ အတည်ပြုထုတ်ပေးရန် လိုအပ်ပါသည်။")}</div>
+                  </div>
+                ))}
+              </div>
+              <button type="button" className="mt-3 rounded-xl bg-blue-800 px-4 py-2 font-bold text-white" onClick={() => void load(selected?.delivery_way_id)}>
+                {tx("Refresh assignment status","တာဝန်အခြေအနေ ပြန်ဖွင့်ရန်")}
+              </button>
+            </section>
+          )}
           {activeRole === "driver" && <div className="mt-4"><FinishAssignmentsButton onFinished={() => load(selected?.delivery_way_id)} /></div>}
         </section>
 
