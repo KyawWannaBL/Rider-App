@@ -300,12 +300,34 @@ export default function DeliveryPage() {
       await load(wayId);
     } catch (error: any) {
       const message = error?.message || "Driver confirmation failed.";
-      setDeliveryProgress("error");
-      setDeliveryResult(message);
-      setMsg(tx(
-        `Driver confirmation not completed: ${message}. Sign in as the assigned Driver; do not repeat Helper payment or proof capture.`,
-        `Driver အတည်ပြုမှု မပြီးသေးပါ: ${message}။ သတ်မှတ်ထားသော Driver အကောင့်ဖြင့် ဝင်ပါ။ ငွေနှင့် သက်သေဓာတ်ပုံ ထပ်မလုပ်ပါနှင့်။`
-      ));
+      // A statement timeout is indeterminate to the browser: do not infer
+      // either payment failure or delivery success from the thrown RPC alone.
+      // Read back authoritative, assigned-Driver-only persisted state.
+      let recovered = false;
+      try {
+        const checked = await (supabase as any).rpc("be_driver_delivery_sync_status_v1", {
+          p_wayplan: selected.wayplan_id, p_way: wayId,
+        });
+        recovered = !checked.error && checked.data?.ok === true && checked.data?.synced === true;
+      } catch { /* Readback unavailable; leave status unconfirmed. */ }
+      if (recovered) {
+        const success = tx(
+          `${wayId}: Driver confirmation completed and all delivery records are synchronized.`,
+          `${wayId}: Driver အတည်ပြုမှုနှင့် ပို့ဆောင်မှုမှတ်တမ်းအားလုံး ချိတ်ဆက်ပြီးပါပြီ။`
+        );
+        setDeliveryProgress("success");
+        setDeliveryResult(success);
+        setMsg(success);
+        await load(wayId);
+      } else {
+        const pending = tx(
+          `${wayId}: Driver confirmation could not be verified (${message}). Check status before retrying. Do not collect payment or capture proof again.`,
+          `${wayId}: Driver အတည်ပြုမှု မစစ်ဆေးနိုင်သေးပါ (${message})။ ထပ်မံမနှိပ်မီ အခြေအနေစစ်ပါ။ ငွေထပ်မကောက်ပါနှင့်။`
+        );
+        setDeliveryProgress("error");
+        setDeliveryResult(pending);
+        setMsg(pending);
+      }
     } finally {
       setBusy(false);
     }

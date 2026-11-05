@@ -97,8 +97,8 @@ try {
   for(let attempt=0;attempt<2;attempt++){
     await page.getByText('Delivered',{exact:true}).click();
     await page.getByText('Yes',{exact:true}).click();
-    await page.getByText('Current GPS is required to complete delivery. Allow location permission and try again.',{exact:true}).first().waitFor();
-    assert.equal(await page.evaluate(()=>window.__photoFixture.uploads.length),2,'retry reuses unchanged proof AND drawn signature uploads');
+    await page.getByText(/Current GPS is required to complete delivery\./).first().waitFor();
+    assert.equal(await page.evaluate(()=>window.__photoFixture.uploads.length),0,'denied GPS must not upload proof or signature; retry retains the local draft');
   }
   await page.getByLabel('Payment 1 method',{exact:true}).selectOption('BANK_TRANSFER');
   await page.getByRole('button').filter({hasText:'D1'}).click();
