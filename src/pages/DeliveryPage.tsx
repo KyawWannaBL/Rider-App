@@ -400,7 +400,7 @@ export default function DeliveryPage() {
 
   async function load(preferredDeliveryWayId?: string) {
     setMsg(tx("Loading assigned Wayplan deliveries...","တာဝန်ပေးထားသော Wayplan ပို့ဆောင်မှုများကို ဖွင့်နေသည်..."));
-    const [jobsResult, reasonResult, readinessResult] = await Promise.all([
+    const [readinessResult, jobsResult, reasonResult] = await Promise.all([
       (supabase as any).rpc("be_field_assigned_wayplan_readiness_v1"),
       (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {
         p_rider_code: null,
