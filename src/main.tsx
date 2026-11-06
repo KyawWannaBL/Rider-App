@@ -4,7 +4,9 @@ import './index.css'
 import { installNativePhotoRestoreHandler, restorePendingNativePhotoRoute } from './lib/nativePhoto'
 import { installGlobalRiderNotificationFeedback } from './lib/riderFeedback'
 
-const UI_CACHE_VERSION = 'rider-ui-v186-20260930';
+// Bump whenever the live Rider flow changes so old SW/CacheStorage bundles
+// cannot silently reintroduce a fixed UI. Does not clear login or payment drafts.
+const UI_CACHE_VERSION = 'rider-ui-v20261107-delivery-recovery';
 
 async function clearLegacyUiCaches() {
   try {
