@@ -186,7 +186,7 @@ test('uncertain refresh resolves committed delivery from assigned handover queue
   const calls=[];let refreshed,uncertain=true;
   const selected={delivery_way_id:'D-A',wayplan_id:'W-A',receiver_name:'Original'};
   const delivered={...selected,stop_status:'DELIVERED',payment_allocations:[{method:'CASH',amount:40,reference:''},{method:'QR',amount:60,reference:'Q-1'}]};
-  const env={selected,setBusy:()=>{},setMsg:()=>{},jobsFromResponse:production('jobsFromResponse',{}),selectJob:job=>refreshed=job,setPaymentUncertain:v=>uncertain=v,clearPaymentDraft:()=>{},localStorage:{},paymentScope:()=>({}),supabase:{rpc:async(name)=>{calls.push(name);return {data:{jobs:name==='be_field_team_cod_handover_queue_v1'?[delivered]:[]}};}}};
+  const env={selected,setBusy:()=>{},setMsg:()=>{},readScopedDeliveryStatus:async()=>({stop_status:'ARRIVED_AT_CUSTOMER',rider_status:'ARRIVED_AT_CUSTOMER'}),jobsFromResponse:production('jobsFromResponse',{}),selectJob:job=>refreshed=job,setPaymentUncertain:v=>uncertain=v,clearPaymentDraft:()=>{},localStorage:{},paymentScope:()=>({}),supabase:{rpc:async(name)=>{calls.push(name);return {data:{jobs:name==='be_field_team_cod_handover_queue_v1'?[delivered]:[]}};}}};
   assert.equal(await production('refreshDeliveryStatus',env)(),true);
   assert.deepEqual(calls,['be_rider_delivery_wayplan_jobs_v187','be_field_team_cod_handover_queue_v1']);
   assert.equal(refreshed.stop_status,'DELIVERED');assert.deepEqual(refreshed.payment_allocations,delivered.payment_allocations);assert.equal(uncertain,false);
@@ -194,7 +194,22 @@ test('uncertain refresh resolves committed delivery from assigned handover queue
 test('uncertain refresh stays blocked when neither assigned read proves delivery',async()=>{
   for(const fallback of [[],[{delivery_way_id:'D-A',wayplan_id:'W-OTHER',stop_status:'DELIVERED'}],[{delivery_way_id:'D-A',wayplan_id:'W-A',stop_status:'ARRIVED_AT_CUSTOMER'}]]) {
     let refreshed=false,uncertain=true,message='';
-    const env={selected:{delivery_way_id:'D-A',wayplan_id:'W-A'},setBusy:()=>{},setMsg:v=>message=v,jobsFromResponse:production('jobsFromResponse',{}),selectJob:()=>refreshed=true,setPaymentUncertain:v=>uncertain=v,supabase:{rpc:async(name)=>({data:{jobs:name==='be_field_team_cod_handover_queue_v1'?fallback:[]}})}};
+    const env={selected:{delivery_way_id:'D-A',wayplan_id:'W-A'},setBusy:()=>{},setMsg:v=>message=v,readScopedDeliveryStatus:async()=>({stop_status:'ARRIVED_AT_CUSTOMER',rider_status:'ARRIVED_AT_CUSTOMER'}),jobsFromResponse:production('jobsFromResponse',{}),selectJob:()=>refreshed=true,setPaymentUncertain:v=>uncertain=v,supabase:{rpc:async(name)=>({data:{jobs:name==='be_field_team_cod_handover_queue_v1'?fallback:[]}})}};
     assert.equal(await production('refreshDeliveryStatus',env)(),false);assert.equal(refreshed,false);assert.equal(uncertain,true);assert.match(message,/Operations/);
   }
+});
+
+test('scoped delivered status clears uncertain COD without a global queue query',async()=>{
+  let calls=0,cleared=false,uncertain=true,message='';
+  const selected={delivery_way_id:'D-A',wayplan_id:'W-A'};
+  const env={
+    selected,setBusy:()=>{},setMsg:v=>message=v,
+    readScopedDeliveryStatus:async()=>({delivery_completed:true,stop_status:'DELIVERED',rider_status:'DELIVERED',updated_at:'2026-11-07T00:00:00Z'}),
+    supabase:{rpc:async()=>{calls++;throw Error('global query should not run');}},
+    selectJob:()=>{},clearPaymentDraft:()=>{cleared=true;},localStorage:{},paymentScope:()=>({}),
+    setPaymentUncertain:v=>uncertain=v,setDeliveryProgress:()=>{}
+  };
+  assert.equal(await production('refreshDeliveryStatus',env)(),true);
+  assert.equal(calls,0);assert.equal(cleared,true);assert.equal(uncertain,false);
+  assert.match(message,/DELIVERED/);
 });
