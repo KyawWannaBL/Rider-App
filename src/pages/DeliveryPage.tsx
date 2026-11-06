@@ -860,7 +860,33 @@ export default function DeliveryPage() {
 
     let paymentPayload: ReturnType<typeof buildPaymentPayload>;
     try {
-      if (paymentUncertain) throw new Error("A previous delivery request may have reached the server. Refresh the delivery status before retrying. Do not collect payment again.");
+      if (paymentUncertain) {
+        // Confirm the authoritative assigned stop before reporting a stale
+        // payment warning. Never repeat the delivery or COD mutation here.
+        try {
+          const verified = await readScopedDeliveryStatus(
+            String(selected.wayplan_id || ""),
+            String(selected.delivery_way_id || ""),
+          );
+          if (verified.delivery_completed === true ||
+              ["DELIVERED", "COMPLETED", "POD_VERIFIED"].includes(String(verified.stop_status || "").toUpperCase())) {
+            clearPaymentDraft(localStorage, paymentScope());
+            setPaymentUncertain(false);
+            const recovered = tx(
+              `${selected.delivery_way_id}: Server confirms DELIVERED. Previous payment and proof are already recorded; do not collect again.`,
+              `${selected.delivery_way_id}: Server တွင် ပို့ဆောင်ပြီးဖြစ်ကြောင်း အတည်ပြုပြီးပါပြီ။ ငွေထပ်မကောက်ပါနှင့်။`,
+            );
+            setDeliveryProgress("success");
+            setDeliveryResult(recovered);
+            setMsg(recovered);
+            await load(selected.delivery_way_id);
+            return true;
+          }
+        } catch {
+          // A failed read does not authorize resubmission.
+        }
+        throw new Error("A previous delivery request may have reached the server. Refresh the delivery status before retrying. Do not collect payment again.");
+      }
       paymentPayload = buildPaymentPayload(paymentRows, requiredCod);
       writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "editing"});
     } catch (error: any) {
@@ -868,6 +894,7 @@ export default function DeliveryPage() {
       setMsg(message); setDeliveryResult(message); setDeliveryProgress("error"); return false;
     }
 
+    let confirmationRequestSent = false;
     setBusy(true);
     try {
       // Validate GPS before uploading proof/signature so a denied or timed-out
@@ -909,6 +936,7 @@ export default function DeliveryPage() {
       // Persist before the mutation: an interrupted connection must not silently replay a collection.
       writePaymentDraft(localStorage, paymentScope(), {rows: paymentRows, submission: "uncertain"});
       setPaymentUncertain(true);
+      confirmationRequestSent = true;
       const { data, error } = await (supabase as any).rpc("be_field_team_confirm_delivery_v146", {
         p_payload: {
           wayplan_id: selected.wayplan_id,
@@ -974,6 +1002,35 @@ export default function DeliveryPage() {
       await load(selected.delivery_way_id);
       return true;
     } catch (error: any) {
+      // A network/statement timeout is ambiguous to the caller. Verify the
+      // persisted stop once, without replaying proof, payment or delivery.
+      if (confirmationRequestSent && selected) {
+        try {
+          const verified = await readScopedDeliveryStatus(
+            String(selected.wayplan_id || ""),
+            String(selected.delivery_way_id || ""),
+          );
+          if (verified.delivery_completed === true ||
+              ["DELIVERED", "COMPLETED", "POD_VERIFIED"].includes(String(verified.stop_status || "").toUpperCase())) {
+            clearPaymentDraft(localStorage, paymentScope());
+            setPaymentUncertain(false);
+            const recovered = tx(
+              `${selected.delivery_way_id}: Server confirmed delivery after the interrupted response. Do not collect payment again.`,
+              `${selected.delivery_way_id}: Server မှ ပို့ဆောင်ပြီးကြောင်း အတည်ပြုထားပါသည်။ ငွေထပ်မကောက်ပါနှင့်။`,
+            );
+            setDeliveryProgress("success");
+            setDeliveryResult(recovered);
+            setMsg(recovered);
+            markActionActive("delivered");
+            resetProofs();
+            await load(selected.delivery_way_id);
+            return true;
+          }
+        } catch {
+          // Preserve the uncertain payment guard until a later authenticated
+          // status refresh verifies the saved server record.
+        }
+      }
       const rawMessage = error?.message || tx("Delivery confirmation failed.","ပို့ဆောင်ပြီး အတည်ပြုမှု မအောင်မြင်ပါ။");
       const isGeofence = String(rawMessage).includes("GEOFENCE_OUTSIDE_RADIUS");
       if (isGeofence) {
