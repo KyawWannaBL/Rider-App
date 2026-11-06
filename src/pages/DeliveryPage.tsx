@@ -192,6 +192,37 @@ export default function DeliveryPage() {
     if (!selected) return false;
     setBusy(true);
     try {
+      // Prefer a single authoritative, assignment-scoped stop read. The full
+      // 200-stop snapshot/Finance fallback may be slow and may omit a completed
+      // stop, leaving an already-delivered waybill locked as uncertain.
+      const scoped = await readScopedDeliveryStatus(
+        String(selected.wayplan_id || ""),
+        String(selected.delivery_way_id || ""),
+      );
+      const exactStatuses = [scoped.stop_status, scoped.rider_status]
+        .map((value: unknown) => String(value || "").toUpperCase());
+      if (scoped.delivery_completed === true ||
+          exactStatuses.some(value => ["DELIVERED", "COMPLETED", "POD_VERIFIED"].includes(value))) {
+        clearPaymentDraft(localStorage, paymentScope());
+        setPaymentUncertain(false);
+        const confirmed = {
+          ...selected,
+          stop_status: scoped.stop_status,
+          rider_status: scoped.rider_status,
+          updated_at: scoped.updated_at,
+        };
+        selectJob(confirmed);
+        setDeliveryProgress("success");
+        setMsg(`${selected.delivery_way_id}: Server confirms DELIVERED. Do not collect payment or upload proof again.`);
+        return true;
+      }
+      if (exactStatuses.includes("HELPER_COMPLETED_PENDING_DRIVER")) {
+        clearPaymentDraft(localStorage, paymentScope());
+        setPaymentUncertain(false);
+        setMsg(`${selected.delivery_way_id}: Helper checks are saved. Assigned Driver must confirm; do not collect COD again.`);
+        return true;
+      }
+
       const {data, error} = await (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {p_rider_code: null, p_limit: 200});
       if (error || data?.ok === false) throw new Error(error?.message || data?.error || "Status refresh failed.");
       const sameStop = (item: any) => item.delivery_way_id === selected.delivery_way_id && item.wayplan_id === selected.wayplan_id;
