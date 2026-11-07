@@ -455,32 +455,36 @@ export default function DeliveryPage() {
 
   async function load(preferredDeliveryWayId?: string) {
     setMsg(tx("Loading assigned Wayplan deliveries...","တာဝန်ပေးထားသော Wayplan ပို့ဆောင်မှုများကို ဖွင့်နေသည်..."));
-    const [readinessResult, jobsResult, reasonResult, categoriesResult] = await Promise.all([
+    const [readinessResult, jobsResult, initialReasonResult] = await Promise.all([
       (supabase as any).rpc("be_field_assigned_wayplan_readiness_v1"),
       (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {
         p_rider_code: null,
         p_limit: 200,
       }),
-      (supabase as any).rpc("be_field_delivery_failure_reasons_v92"),
-      supabase.from("be_delivery_failure_reasons").select("reason_code,failure_category,active").eq("active",true),
+      (supabase as any).rpc("be_field_delivery_failure_reasons_v214"),
     ]);
     if (jobsResult.error || jobsResult.data?.ok === false) {
       setMsg(jobsResult.error?.message || jobsResult.data?.error || jobsResult.data?.message || tx("Unable to load assigned deliveries.","တာဝန်ပေးထားသော ပို့ဆောင်မှုများကို ဖွင့်မရပါ။"));
       return;
     }
 
-    // The server owns classifications. Do not silently redefine valid/invalid
-    // reasons in separate rider, driver and helper screens.
-    if (!categoriesResult.error && Array.isArray(categoriesResult.data)) {
+    // Legacy deployments retain the read-only V92 endpoint. V214 adds
+    // classifications without exposing protected database tables directly.
+    const reasonResult = initialReasonResult.error
+      ? await (supabase as any).rpc("be_field_delivery_failure_reasons_v92")
+      : initialReasonResult;
+    const enterpriseReasons = Array.isArray(reasonResult.data?.reasons) ? reasonResult.data.reasons : [];
+    if (!reasonResult.error && enterpriseReasons.length) {
       const categories: Record<string, "DIRECT_RTO" | "VALID_REASON" | "INVALID_REASON"> = {};
-      for (const row of categoriesResult.data as any[]) {
-        const code = String(row.reason_code || "").toUpperCase();
+      for (const row of enterpriseReasons) {
+        const code = String(row.code || "").toUpperCase();
         const category = String(row.failure_category || "").toUpperCase();
-        if (code && ["DIRECT_RTO", "VALID_REASON", "INVALID_REASON"].includes(category)) categories[code] = category as "DIRECT_RTO" | "VALID_REASON" | "INVALID_REASON";
+        if (code && ["DIRECT_RTO", "VALID_REASON", "INVALID_REASON"].includes(category)) {
+          categories[code] = category as "DIRECT_RTO" | "VALID_REASON" | "INVALID_REASON";
+        }
       }
       setServerFailureCategories(categories);
     }
-    const enterpriseReasons = Array.isArray(reasonResult.data?.reasons) ? reasonResult.data.reasons : [];
     if (!reasonResult.error && enterpriseReasons.length) {
       setFailureReasons(
         enterpriseReasons.map((r: any) => [
