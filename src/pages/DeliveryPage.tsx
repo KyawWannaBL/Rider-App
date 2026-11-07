@@ -165,6 +165,8 @@ export default function DeliveryPage() {
     reschedule_date: "",
   });
   const [failureReasons, setFailureReasons] = useState<any[]>(FALLBACK_FAILED_REASONS);
+  const [serverFailureCategories, setServerFailureCategories] = useState<Record<string, "DIRECT_RTO" | "VALID_REASON" | "INVALID_REASON">>({});
+  const reasonCategory = (code: string) => serverFailureCategories[String(code || "").toUpperCase()] || classifyFailureReason(code);
   const [msg, setMsg] = useState(language === "my" ? "ပို့ဆောင်ရေးအလုပ်များကို ဖွင့်နေသည်..." : "Loading delivery jobs...");
 
   const [assignedWayplanReadiness, setAssignedWayplanReadiness] = useState<any[]>([]);
@@ -453,19 +455,31 @@ export default function DeliveryPage() {
 
   async function load(preferredDeliveryWayId?: string) {
     setMsg(tx("Loading assigned Wayplan deliveries...","တာဝန်ပေးထားသော Wayplan ပို့ဆောင်မှုများကို ဖွင့်နေသည်..."));
-    const [readinessResult, jobsResult, reasonResult] = await Promise.all([
+    const [readinessResult, jobsResult, reasonResult, categoriesResult] = await Promise.all([
       (supabase as any).rpc("be_field_assigned_wayplan_readiness_v1"),
       (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {
         p_rider_code: null,
         p_limit: 200,
       }),
       (supabase as any).rpc("be_field_delivery_failure_reasons_v92"),
+      supabase.from("be_delivery_failure_reasons").select("reason_code,failure_category,active").eq("active",true),
     ]);
     if (jobsResult.error || jobsResult.data?.ok === false) {
       setMsg(jobsResult.error?.message || jobsResult.data?.error || jobsResult.data?.message || tx("Unable to load assigned deliveries.","တာဝန်ပေးထားသော ပို့ဆောင်မှုများကို ဖွင့်မရပါ။"));
       return;
     }
 
+    // The server owns classifications. Do not silently redefine valid/invalid
+    // reasons in separate rider, driver and helper screens.
+    if (!categoriesResult.error && Array.isArray(categoriesResult.data)) {
+      const categories: Record<string, "DIRECT_RTO" | "VALID_REASON" | "INVALID_REASON"> = {};
+      for (const row of categoriesResult.data as any[]) {
+        const code = String(row.reason_code || "").toUpperCase();
+        const category = String(row.failure_category || "").toUpperCase();
+        if (code && ["DIRECT_RTO", "VALID_REASON", "INVALID_REASON"].includes(category)) categories[code] = category as "DIRECT_RTO" | "VALID_REASON" | "INVALID_REASON";
+      }
+      setServerFailureCategories(categories);
+    }
     const enterpriseReasons = Array.isArray(reasonResult.data?.reasons) ? reasonResult.data.reasons : [];
     if (!reasonResult.error && enterpriseReasons.length) {
       setFailureReasons(
@@ -1213,7 +1227,7 @@ export default function DeliveryPage() {
       setMsg(tx("Enter the supporting failure details (at least 3 characters).","မအောင်မြင်ရသည့် အသေးစိတ်အကြောင်းပြချက် ရေးပါ။"));return false;
     }
     if (reason==="CUSTOMER_REQUESTED_RESCHEDULE")return await failDelivery();
-    if (classifyFailureReason(reason)==="DIRECT_RTO") {
+    if (reasonCategory(reason)==="DIRECT_RTO") {
       setMsg(tx("This is a Direct RTO reason. Contact Customer Service/Supervisor for evidence review; this screen cannot finalize RTO.",
         "ချက်ချင်း RTO အမျိုးအစားဖြစ်ပါသည်။ Customer Service/Supervisor က သက်သေစစ်ဆေးအတည်ပြုရန် လိုအပ်သည်။"));return false;
     }
@@ -1649,7 +1663,7 @@ export default function DeliveryPage() {
                       onChange={(e) => setForm({ ...form, failed_reason: e.target.value })}
                     >
                       <option value="">{tx("Choose failed reason","မအောင်မြင်ရသည့်အကြောင်းပြချက် ရွေးပါ")}</option>
-                      {(["DIRECT_RTO","VALID_REASON","INVALID_REASON"] as const).map(category => <optgroup key={category} label={category === "DIRECT_RTO" ? "Direct RTO / ချက်ချင်းပြန်ပို့" : category === "VALID_REASON" ? "Valid Reason / သုံးကြိမ်" : "Invalid Reason / မတွက်ပါ"}>{failureReasons.filter(([code]) => classifyFailureReason(String(code)) === category).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</optgroup>)}
+                      {(["DIRECT_RTO","VALID_REASON","INVALID_REASON"] as const).map(category => <optgroup key={category} label={category === "DIRECT_RTO" ? "Direct RTO / ချက်ချင်းပြန်ပို့" : category === "VALID_REASON" ? "Valid Reason / သုံးကြိမ်" : "Invalid Reason / မတွက်ပါ"}>{failureReasons.filter(([code]) => reasonCategory(String(code)) === category).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</optgroup>)}
                     </select>
                   </div>
                   {failureMode && (
@@ -1685,7 +1699,7 @@ export default function DeliveryPage() {
 
 
 
-                  {failureMode && classifyFailureReason(form.failed_reason)==="DIRECT_RTO" &&
+                  {failureMode && reasonCategory(form.failed_reason)==="DIRECT_RTO" &&
                     <p role="alert" className="mt-3 rounded-xl border border-amber-400 bg-amber-50 p-3 font-bold text-amber-950">
                       {tx("Direct RTO requires Supervisor/CS evidence review. Do not use ordinary Failed Delivery to bypass RTO authorization.",
                           "ချက်ချင်း RTO လုပ်ရန် Supervisor/CS မှ သက်သေစစ်ဆေးအတည်ပြုရန် လိုအပ်သည်။")}
