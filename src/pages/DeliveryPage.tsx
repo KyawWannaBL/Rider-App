@@ -1227,7 +1227,7 @@ export default function DeliveryPage() {
       setMsg(tx("Enter the supporting failure details (at least 3 characters).","မအောင်မြင်ရသည့် အသေးစိတ်အကြောင်းပြချက် ရေးပါ။"));return false;
     }
     if (reason==="CUSTOMER_REQUESTED_RESCHEDULE")return await failDelivery();
-    if (reasonCategory(reason)==="DIRECT_RTO") {
+    if (classifyFailureReason(reason)==="DIRECT_RTO") {
       setMsg(tx("This is a Direct RTO reason. Contact Customer Service/Supervisor for evidence review; this screen cannot finalize RTO.",
         "ချက်ချင်း RTO အမျိုးအစားဖြစ်ပါသည်။ Customer Service/Supervisor က သက်သေစစ်ဆေးအတည်ပြုရန် လိုအပ်သည်။"));return false;
     }
@@ -1699,7 +1699,7 @@ export default function DeliveryPage() {
 
 
 
-                  {failureMode && reasonCategory(form.failed_reason)==="DIRECT_RTO" &&
+                  {failureMode && classifyFailureReason(form.failed_reason)==="DIRECT_RTO" &&
                     <p role="alert" className="mt-3 rounded-xl border border-amber-400 bg-amber-50 p-3 font-bold text-amber-950">
                       {tx("Direct RTO requires Supervisor/CS evidence review. Do not use ordinary Failed Delivery to bypass RTO authorization.",
                           "ချက်ချင်း RTO လုပ်ရန် Supervisor/CS မှ သက်သေစစ်ဆေးအတည်ပြုရန် လိုအပ်သည်။")}
