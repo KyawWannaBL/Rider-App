@@ -165,6 +165,8 @@ export default function DeliveryPage() {
     reschedule_date: "",
   });
   const [failureReasons, setFailureReasons] = useState<any[]>(FALLBACK_FAILED_REASONS);
+  const [serverFailureCategories, setServerFailureCategories] = useState<Record<string, "DIRECT_RTO" | "VALID_REASON" | "INVALID_REASON">>({});
+  const reasonCategory = (code: string) => serverFailureCategories[String(code || "").toUpperCase()] || classifyFailureReason(code);
   const [msg, setMsg] = useState(language === "my" ? "ပို့ဆောင်ရေးအလုပ်များကို ဖွင့်နေသည်..." : "Loading delivery jobs...");
 
   const [assignedWayplanReadiness, setAssignedWayplanReadiness] = useState<any[]>([]);
@@ -453,20 +455,36 @@ export default function DeliveryPage() {
 
   async function load(preferredDeliveryWayId?: string) {
     setMsg(tx("Loading assigned Wayplan deliveries...","တာဝန်ပေးထားသော Wayplan ပို့ဆောင်မှုများကို ဖွင့်နေသည်..."));
-    const [readinessResult, jobsResult, reasonResult] = await Promise.all([
+    const [readinessResult, jobsResult, initialReasonResult] = await Promise.all([
       (supabase as any).rpc("be_field_assigned_wayplan_readiness_v1"),
       (supabase as any).rpc("be_rider_delivery_wayplan_jobs_v187", {
         p_rider_code: null,
         p_limit: 200,
       }),
-      (supabase as any).rpc("be_field_delivery_failure_reasons_v92"),
+      (supabase as any).rpc("be_field_delivery_failure_reasons_v214"),
     ]);
     if (jobsResult.error || jobsResult.data?.ok === false) {
       setMsg(jobsResult.error?.message || jobsResult.data?.error || jobsResult.data?.message || tx("Unable to load assigned deliveries.","တာဝန်ပေးထားသော ပို့ဆောင်မှုများကို ဖွင့်မရပါ။"));
       return;
     }
 
+    // Legacy deployments retain the read-only V92 endpoint. V214 adds
+    // classifications without exposing protected database tables directly.
+    const reasonResult = initialReasonResult.error
+      ? await (supabase as any).rpc("be_field_delivery_failure_reasons_v92")
+      : initialReasonResult;
     const enterpriseReasons = Array.isArray(reasonResult.data?.reasons) ? reasonResult.data.reasons : [];
+    if (!reasonResult.error && enterpriseReasons.length) {
+      const categories: Record<string, "DIRECT_RTO" | "VALID_REASON" | "INVALID_REASON"> = {};
+      for (const row of enterpriseReasons) {
+        const code = String(row.code || "").toUpperCase();
+        const category = String(row.failure_category || "").toUpperCase();
+        if (code && ["DIRECT_RTO", "VALID_REASON", "INVALID_REASON"].includes(category)) {
+          categories[code] = category as "DIRECT_RTO" | "VALID_REASON" | "INVALID_REASON";
+        }
+      }
+      setServerFailureCategories(categories);
+    }
     if (!reasonResult.error && enterpriseReasons.length) {
       setFailureReasons(
         enterpriseReasons.map((r: any) => [
@@ -1649,7 +1667,7 @@ export default function DeliveryPage() {
                       onChange={(e) => setForm({ ...form, failed_reason: e.target.value })}
                     >
                       <option value="">{tx("Choose failed reason","မအောင်မြင်ရသည့်အကြောင်းပြချက် ရွေးပါ")}</option>
-                      {(["DIRECT_RTO","VALID_REASON","INVALID_REASON"] as const).map(category => <optgroup key={category} label={category === "DIRECT_RTO" ? "Direct RTO / ချက်ချင်းပြန်ပို့" : category === "VALID_REASON" ? "Valid Reason / သုံးကြိမ်" : "Invalid Reason / မတွက်ပါ"}>{failureReasons.filter(([code]) => classifyFailureReason(String(code)) === category).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</optgroup>)}
+                      {(["DIRECT_RTO","VALID_REASON","INVALID_REASON"] as const).map(category => <optgroup key={category} label={category === "DIRECT_RTO" ? "Direct RTO / ချက်ချင်းပြန်ပို့" : category === "VALID_REASON" ? "Valid Reason / သုံးကြိမ်" : "Invalid Reason / မတွက်ပါ"}>{failureReasons.filter(([code]) => reasonCategory(String(code)) === category).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</optgroup>)}
                     </select>
                   </div>
                   {failureMode && (
