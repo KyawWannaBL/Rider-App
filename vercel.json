@@ -63,8 +63,23 @@
           "value": "v186-android8-compatible"
         }
       ]
+    },
+    {
+      "source": "/supabase/:path*",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
     }
   ],
   "installCommand": "npm install --no-audit --no-fund",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "rewrites": [
+    {
+      "source": "/supabase/:path*",
+      "destination": "https://dltavabvjwocknkyvwgz.supabase.co/:path*"
+    }
+  ]
 }
