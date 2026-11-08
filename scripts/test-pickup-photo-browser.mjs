@@ -85,7 +85,8 @@ try {
   await page.getByLabel('Payment 1 reference',{exact:true}).fill('D2-REF');
   await page.getByRole('button',{name:'Add payment',exact:true}).click();
   await page.getByLabel('Payment 2 amount',{exact:true}).fill('40');
-  assert.equal(await page.getByLabel('Payment 2 method',{exact:true}).inputValue(),'CASH');
+  assert.equal(await page.getByLabel('Payment 2 method',{exact:true}).inputValue(),'','new payment must require an explicit method');
+  await page.getByLabel('Payment 2 method',{exact:true}).selectOption('CASH');
   await page.getByText('Total: 100 MMK',{exact:true}).waitFor();
   await page.getByRole('button').filter({hasText:'D2'}).click();
   await page.getByText('Photo approved',{exact:true}).waitFor();
@@ -102,7 +103,7 @@ try {
   }
   await page.getByLabel('Payment 1 method',{exact:true}).selectOption('BANK_TRANSFER');
   await page.getByRole('button').filter({hasText:'D1'}).click();
-  assert.equal(await page.getByLabel('Payment 1 method',{exact:true}).inputValue(),'CASH','another stop starts with its own payment state');
+  assert.equal(await page.getByLabel('Payment 1 method',{exact:true}).inputValue(),'','another stop must require an explicit method');
   assert.equal(await page.getByLabel('Payment 1 reference',{exact:true}).count(),0,'another stop cannot inherit the prior bank reference');
   assert.equal(await page.getByLabel('Payment 1 amount',{exact:true}).inputValue(),'100','another stop has its own expected amount');
   assert.equal(await page.getByLabel('Payment 2 amount',{exact:true}).count(),0,'another stop cannot inherit prior split rows');
