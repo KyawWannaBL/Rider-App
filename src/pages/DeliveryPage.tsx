@@ -1589,7 +1589,7 @@ export default function DeliveryPage() {
                     <label className="font-bold">{tx("Amount (MMK)", "ငွေပမာဏ (ကျပ်)")}
                       <input aria-label={`Payment ${index + 1} amount`} disabled={paymentReadOnly} className="mt-1 w-full rounded-xl border p-3" inputMode="decimal" value={row.amount} onChange={e => changePayments(paymentRows.map((item, i) => i === index ? {...item, amount: e.target.value} : item))} />
                     </label>
-                    {row.method !== "CASH" && <label className="font-bold sm:col-span-2">{tx("Transaction reference (required)", "ငွေလွှဲအမှတ် (လိုအပ်သည်)")}
+                    {Boolean(row.method) && row.method !== "CASH" && <label className="font-bold sm:col-span-2">{tx("Transaction reference (required)", "ငွေလွှဲအမှတ် (လိုအပ်သည်)")}
                       <input aria-label={`Payment ${index + 1} reference`} disabled={paymentReadOnly} className="mt-1 w-full rounded-xl border p-3" value={row.reference} onChange={e => changePayments(paymentRows.map((item, i) => i === index ? {...item, reference: e.target.value} : item))} />
                     </label>}
                     <button type="button" disabled={paymentReadOnly} className="rounded-xl border p-3 font-bold text-red-700 disabled:opacity-50" onClick={() => changePayments(paymentRows.filter((_, i) => i !== index))}>{tx("Remove payment", "ငွေပေးချေမှု ဖယ်ရှားမည်")}</button>
