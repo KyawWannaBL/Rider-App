@@ -2,7 +2,7 @@ name: Build Rider Android Release
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/rider-same-domain-supabase-proxy-20261107]
     paths:
       - "src/**"
       - "index.html"
@@ -376,6 +376,7 @@ jobs:
             rider-release-sha256.txt
           retention-days: 30
       - name: Commit signed public APK
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
