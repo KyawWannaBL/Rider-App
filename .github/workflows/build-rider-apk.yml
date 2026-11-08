@@ -318,7 +318,27 @@ jobs:
           RIDER_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RIDER_ANDROID_KEYSTORE_PASSWORD }}
           RIDER_ANDROID_KEY_ALIAS: ${{ secrets.RIDER_ANDROID_KEY_ALIAS }}
           RIDER_ANDROID_KEY_PASSWORD: ${{ secrets.RIDER_ANDROID_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon assembleRelease bundleRelease
+        run: |
+          set -euo pipefail
+          # Capacitor generates a fresh Gradle wrapper. The default 10-second
+          # timeout repeatedly failed while downloading the official Gradle ZIP.
+          # The binary distribution is sufficient to build APK/AAB and smaller.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("gradle/wrapper/gradle-wrapper.properties")
+          source = path.read_text()
+          if "distributionUrl=" not in source:
+              raise SystemExit("Gradle wrapper distribution URL is missing")
+          source = source.replace("-all.zip", "-bin.zip")
+          if "networkTimeout=" in source:
+              import re
+              source = re.sub(r"(?m)^networkTimeout=.*$", "networkTimeout=120000", source)
+          else:
+              source += "\\nnetworkTimeout=120000\\n"
+          path.write_text(source)
+          print("Gradle distribution configured for binary ZIP with 120-second download timeout.")
+          PY
+          ./gradlew --no-daemon assembleRelease bundleRelease
 
       - name: Verify packaged APK has no broad media permissions
         run: |
