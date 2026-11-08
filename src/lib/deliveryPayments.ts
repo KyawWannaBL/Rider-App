@@ -52,7 +52,10 @@ export function initialPaymentRows(row: any, expected: number): PaymentRow[] {
   if (PAYMENT_METHODS.includes(method as PaymentMethod) && expected > 0)
     return [{method, amount: String(expected), reference: String(row?.transaction_reference || '')}];
   const recorded = /DELIVERED|COMPLETED|PENDING_DRIVER/.test(String(row?.stop_status || row?.rider_status || '').toUpperCase()) || Number(row?.authoritative_cod_collected ?? row?.reported_collected ?? row?.cod_collected ?? 0) > 0;
-  return !recorded && expected > 0 ? [{method: 'CASH', amount: String(expected), reference: ''}] : [];
+  // Do not silently classify a new collection as cash. Riders must actively
+  // choose Cash or a digital method before confirming, and digital receipts
+  // must provide a transaction reference for reconciliation.
+  return !recorded && expected > 0 ? [{method: '', amount: String(expected), reference: ''}] : [];
 }
 export function recordedPaymentSummary(row: any): {method: PaymentMethod | 'MIXED' | 'UNKNOWN'; cash: number} {
   const saved = allocations(row);
