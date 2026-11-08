@@ -66,6 +66,24 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          path = Path("gradle/wrapper/gradle-wrapper.properties")
+          source = path.read_text()
+          if "distributionUrl=" not in source:
+              raise SystemExit("Gradle distribution URL is missing")
+          source = source.replace("-all.zip", "-bin.zip")
+          source = source.replace("services.gradle.org/distributions/", "downloads.gradle.org/distributions/")
+          # Verified against upstream SHA-256; use a mirror while Gradle\u0027s redirect to GitHub returns HTTP 504.
+          source = source.replace("downloads.gradle.org/distributions/gradle-8.11.1-bin.zip", "mirrors.aliyun.com/gradle/distributions/v8.11.1/gradle-8.11.1-bin.zip")
+          expected = "f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6"
+          source = re.sub(r"(?m)^distributionSha256Sum=.*$", "", source)
+          source += "\\ndistributionSha256Sum=" + expected + "\\n"
+          source = re.sub(r"(?m)^networkTimeout=.*$", "", source)
+          source += "networkTimeout=120000\\n"
+          path.write_text(source)
+          PY
           ./gradlew --no-daemon assembleDebug
       - name: Check packaged permissions
         run: |

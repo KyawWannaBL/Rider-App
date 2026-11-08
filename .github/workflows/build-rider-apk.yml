@@ -330,6 +330,18 @@ jobs:
           if "distributionUrl=" not in source:
               raise SystemExit("Gradle wrapper distribution URL is missing")
           source = source.replace("-all.zip", "-bin.zip")
+          # Use Gradle's direct distribution CDN, avoiding services.gradle.org
+          # redirects to the GitHub release endpoint that returned HTTP 504.
+          source = source.replace("services.gradle.org/distributions/", "downloads.gradle.org/distributions/")
+          # Verified against upstream SHA-256; use a mirror while Gradle\u0027s redirect to GitHub returns HTTP 504.
+          source = source.replace("downloads.gradle.org/distributions/gradle-8.11.1-bin.zip", "mirrors.aliyun.com/gradle/distributions/v8.11.1/gradle-8.11.1-bin.zip")
+          expected = "f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6"
+          import re
+          if re.search(r"(?m)^distributionSha256Sum=", source):
+              source = re.sub(r"(?m)^distributionSha256Sum=.*$", "distributionSha256Sum=" + expected, source)
+          else:
+              source += "\\ndistributionSha256Sum=" + expected + "\\n"
+
           if "networkTimeout=" in source:
               import re
               source = re.sub(r"(?m)^networkTimeout=.*$", "networkTimeout=120000", source)
