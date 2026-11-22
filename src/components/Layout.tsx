@@ -47,7 +47,7 @@ function desktopNavClass({ isActive }: { isActive: boolean }) {
 
 function mobileNavClass({ isActive }: { isActive: boolean }) {
   return [
-    "be-mobile-nav-item relative flex min-w-[64px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-black transition-all duration-200 sm:min-w-[72px] sm:flex-1",
+    "be-mobile-nav-item relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[10px] font-black transition-all duration-200",
     isActive ? "text-blue-700" : "text-slate-500 active:bg-slate-100",
   ].join(" ");
 }
