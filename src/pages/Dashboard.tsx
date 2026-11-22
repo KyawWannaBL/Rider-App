@@ -8,7 +8,6 @@ import {
   MapPin,
   Phone,
   Search,
-  ShieldCheck,
   Bell,
   Building2,
   CheckCircle2,
@@ -141,7 +140,6 @@ export default function Dashboard() {
     return matchesKind && (!q || [job.pickup_id,job.pickup_way_id,job.delivery_way_id,job.tracking_no,job.recipient_name,job.recipient_phone,job.recipient_town,job.merchant_name,job.pickup_address,job.delivery_address].some(x=>String(x||"").toLowerCase().includes(q)));
   });
   const unreadNotifications=mobileNotifications.filter((n:any)=>!(n.is_read||n.read_at)).length;
-  const selectedRow=filteredJobs.find((j:any)=>String(j.id||j.delivery_way_id||j.pickup_id||j.tracking_no)===selectedTask);
   const taskId=(j:any)=>String(j.id||j.delivery_way_id||j.pickup_id||j.tracking_no||"");
   const taskHref=(j:any)=>String(j.job_kind||"PICKUP").toUpperCase()==="DELIVERY"
     ? "/delivery?"+new URLSearchParams({deliveryWayId:String(j.delivery_way_id||j.tracking_no||"")}).toString()
