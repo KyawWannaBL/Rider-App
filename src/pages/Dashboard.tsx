@@ -216,6 +216,46 @@ export default function Dashboard() {
         </nav>
         {fieldSnapshotError&&<div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">{fieldSnapshotError} <button type="button" onClick={load} className="ml-2 underline">{tx("Retry","ပြန်စမ်းရန်")}</button></div>}
 
+
+        {workspaceTab==="overview"&&<div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><p className="text-[10px] font-bold uppercase tracking-[.17em] text-blue-700">{tx("INBOX","စာတိုက်")} · {unreadNotices.length} {tx("unread","မဖတ်ရသေး")}</p><h2 className="mt-1 text-lg font-bold text-slate-950">{tx("Notifications & announcements","အသိပေးချက်နှင့် ကြေညာချက်များ")}</h2><p className="mt-1 text-xs leading-5 text-slate-500">{tx("Messages, updates and shift instructions sent to your account.","သင့်အကောင့်သို့ ပို့ထားသော လုပ်ငန်းဆိုင်ရာ အကြောင်းကြားချက်များ")}</p></div>
+              <button type="button" onClick={()=>setWorkspaceTab("messages")} className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Bell className="h-4 w-4"/>{tx("View messages","စာများကြည့်ရန်")}</button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {fieldNotices.slice(0,3).map((notice:any,i:number)=><article key={notice.id||i} className="rounded-xl border border-blue-100 bg-blue-50/50 p-3"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-slate-900">{notice.title||tx("New notice","အသိပေးစာ")}</h3>{!(notice.is_read||notice.read_at)&&<span aria-label="Unread" className="h-2 w-2 shrink-0 rounded-full bg-blue-600"/>}</div><p className="mt-1 text-xs leading-5 text-slate-600">{notice.message||notice.body||"-"}</p></article>)}
+              {fieldNotices.length===0&&<div className="flex min-h-44 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-5 text-center"><span className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-slate-700 shadow-sm"><Bell className="h-6 w-6"/></span><p className="mt-3 text-sm font-bold text-slate-800">{tx("You're all caught up","အသိပေးချက် မရှိသေးပါ")}</p><p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">{tx("Dispatch updates, team notices and settlement messages will appear here.","Dispatch နှင့် အဖွဲ့အသိပေးချက်များကို ဤနေရာတွင် ပြသပါမည်။")}</p></div>}
+            </div>
+            <div className="mt-4 grid grid-cols-3 divide-x divide-slate-200 border-t border-slate-100 pt-3 text-center text-[11px] font-semibold text-slate-600">
+              <button type="button" onClick={()=>{setWorkspaceTab("tasks");setTaskFilter("all")}} className="flex items-center justify-center gap-1 py-2 hover:text-blue-700"><ClipboardList className="h-4 w-4"/>{tx("Tasks","တာဝန်များ")}</button>
+              <Link to="/cod-settlement" className="flex items-center justify-center gap-1 py-2 hover:text-blue-700"><WalletCards className="h-4 w-4"/>COD</Link>
+              <Link to="/route" className="flex items-center justify-center gap-1 py-2 hover:text-blue-700"><MapPin className="h-4 w-4"/>{tx("Route","လမ်းကြောင်း")}</Link>
+            </div>
+          </section>
+          <aside className="space-y-3">
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">{tx("My account","အကောင့်")}</p><span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">{tx("Signed in","ဝင်ထားသည်")}</span></div>
+              <dl className="mt-4 space-y-2 text-xs">{[[tx("Rider ID","Rider ID"),fieldIdentity.worker_code||"-"],[tx("Branch","ဌာနခွဲ"),fieldIdentity.branch_code||"-"],[tx("Role","ရာထူး"),fieldIdentity.role||"-"]].map(([key,value])=><div key={key} className="flex justify-between gap-2 border-b border-dashed border-slate-100 pb-2"><dt className="text-slate-500">{key}</dt><dd className="font-semibold text-slate-900">{value}</dd></div>)}</dl>
+              <Link to="/profile" className="mt-3 flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50">{tx("View profile","ပရိုဖိုင်ကြည့်ရန်")}<ChevronRight className="h-4 w-4"/></Link>
+            </section>
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-center gap-2"><Headphones className="h-5 w-5 text-cyan-700"/><h3 className="text-sm font-bold">{tx("Operations support","လုပ်ငန်းအကူအညီ")}</h3></div><p className="mt-2 text-xs leading-5 text-slate-500">{tx("Need help with dispatch, task progress or photo proof? Contact support.","Dispatch၊ တာဝန် သို့မဟုတ် ဓာတ်ပုံသက်သေအတွက် အကူအညီတောင်းပါ။")}</p><Link to="/support" className="mt-3 flex min-h-10 items-center justify-center rounded-xl bg-[#10213d] text-xs font-semibold text-white">{tx("Contact support","အကူအညီတောင်းရန်")}</Link></section>
+          </aside>
+        </div>}
+
+        {workspaceTab==="tasks"&&<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold text-slate-900">{tx("My assigned tasks","ပေးအပ်ထားသော တာဝန်များ")} · {taskRows.length}</h2><p className="mt-1 text-xs text-slate-500">{tx("Select a waybill to expand job details and open the workflow.","Waybill ကိုနှိပ်၍ အလုပ်အသေးစိတ်ကြည့်ရှုပါ။")}</p></div><Link to="/route" className="inline-flex items-center gap-2 text-xs font-bold text-blue-700"><MapPin className="h-4 w-4"/>{tx("View route","လမ်းကြောင်း")}</Link></div>
+          <div className="mt-4 flex flex-wrap gap-2">{(["all","pickup","delivery"] as const).map(kind=><button type="button" key={kind} aria-pressed={taskFilter===kind} onClick={()=>{setTaskFilter(kind);setExpandedTask("")}} className={`min-h-10 rounded-xl px-4 text-xs font-bold ${taskFilter===kind?"bg-blue-700 text-white":"bg-slate-100 text-slate-600"}`}>{kind==="all"?tx("All","အားလုံး"):kind==="pickup"?tx("Pickup","ပစ္စည်းယူ"):tx("Delivery","ပို့ဆောင်")}</button>)}</div>
+          <label className="mt-3 flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3"><Search className="h-4 w-4 text-slate-400"/><input value={taskQuery} onChange={e=>setTaskQuery(e.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder={tx("Search waybill, recipient or township","Waybill၊ လက်ခံသူ၊ မြို့နယ် ရှာရန်")}/></label>
+          <div className="mt-4 space-y-2">{taskRows.map((job:any,i:number)=>{const id=String(job.id||job.delivery_way_id||job.pickup_id||i);const open=expandedTask===id;const delivery=String(job.job_kind||"PICKUP").toUpperCase()==="DELIVERY";const way=job.display_way_id||job.delivery_way_id||job.pickup_way_id||job.pickup_id||id;return <article key={id} className="overflow-hidden rounded-xl border border-slate-200"><button type="button" aria-expanded={open} onClick={()=>setExpandedTask(open?"":id)} className="flex min-h-16 w-full items-center gap-3 p-3 text-left hover:bg-slate-50"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">{delivery?<Truck className="h-5 w-5"/>:<Package className="h-5 w-5"/>}</span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{way}</strong><span className="block truncate text-xs text-slate-500">{job.recipient_name||job.merchant_name||job.sender_name||tx("Assigned task","တာဝန်")} · {job.mobile_status||job.status||tx("Assigned","တာဝန်ပေးထား")}</span></span><ChevronRight className={`h-5 w-5 text-slate-400 transition ${open?"rotate-90":""}`}/></button>{open&&<div className="space-y-3 border-t border-slate-200 bg-slate-50 p-4 text-sm"><p><span className="text-slate-500">{tx("Address","လိပ်စာ")}:</span> {job.delivery_address||job.pickup_address||job.address||job.township||"-"}</p><p><span className="text-slate-500">{tx("Contact","ဆက်သွယ်ရန်")}:</span> {job.recipient_phone||job.sender_phone||"-"}</p><Link to={delivery?"/delivery":job.pickup_id?"/jobs/"+encodeURIComponent(String(job.pickup_id)):"/jobs"} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-700 px-4 text-sm font-bold text-white">{tx("Open workflow","လုပ်ငန်းဖွင့်ရန်")}<ArrowRight className="h-4 w-4"/></Link></div>}</article>})}</div>
+          {!taskRows.length&&<p className="mt-4 rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">{tx("No tasks match this filter.","ကိုက်ညီသောတာဝန် မရှိပါ။")}</p>}
+        </section>}
+
+        {workspaceTab==="messages"&&<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex justify-between gap-3"><div><h2 className="text-xl font-bold">{tx("Notifications & messages","အသိပေးချက်များ")}</h2><p className="mt-1 text-xs text-slate-500">{tx("Delivered to your authenticated field-team account.","သင့်အကောင့်သို့ ပေးပို့ထားသော စာများ")}</p></div><span className="text-xs font-bold text-blue-700">{unreadNotices.length} {tx("unread","မဖတ်ရသေး")}</span></div>
+          <div className="mt-4 space-y-3">{fieldNotices.map((n:any,i:number)=><article key={n.id||i} className={`rounded-xl border p-4 ${n.is_read||n.read_at?"border-slate-200 bg-slate-50":"border-blue-200 bg-blue-50/50"}`}><h3 className="font-bold">{n.title||tx("Notification","အသိပေးစာ")}</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{n.message||n.body||"-"}</p><p className="mt-2 text-xs text-slate-400">{shortDate(n.created_at)}</p>{!(n.is_read||n.read_at)&&n.id&&<button type="button" onClick={()=>void markNoticeRead(n)} disabled={noticeBusy===String(n.id)} className="mt-2 min-h-10 rounded-lg border border-blue-200 bg-white px-3 text-xs font-bold text-blue-700">{tx("Mark as read","ဖတ်ပြီးဟု သတ်မှတ်ရန်")}</button>}</article>)}{!fieldNotices.length&&<p className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">{tx("No messages at the moment.","စာများ မရှိသေးပါ။")}</p>}</div>
+        </section>}
+
+        {workspaceTab==="finance"&&<>
         <FinishAssignmentsButton onFinished={load} />
 
         <section>
@@ -354,6 +394,8 @@ export default function Dashboard() {
           </div>
         </section>
 
+        </>}
+        {workspaceTab==="overview"&&<>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {portalCards.map(([label,value,Icon]:any)=>(
             <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -381,6 +423,7 @@ export default function Dashboard() {
             <p className="mt-2 font-semibold text-slate-600">{tx("View your authenticated branch assignment and branch pickup workload.","သင့်ဌာနခွဲတာဝန်နှင့် Pickup အလုပ်ပမာဏကို ကြည့်ရှုပါ။")}</p>
           </Link>
         </section>
+        </>}
       </div>
     </div>
   );
