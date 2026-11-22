@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
+  ArrowRight,
+  ClipboardList,
+  ChevronRight,
+  MapPin,
+  Phone,
+  Search,
+  ShieldCheck,
   Bell,
   Building2,
   CheckCircle2,
@@ -27,6 +34,14 @@ export default function Dashboard() {
   const [data,setData]=useState<any>({counts:{},wallet:{},pickups:[],deliveries:[],notifications:[],identity:{},branch:{}});
   const [daily,setDaily]=useState<any>({summary:{},payment_channels:{},failure_reasons:[],rows:[],identity:{}});
   const [loading,setLoading]=useState(false);
+  const [activeView,setActiveView]=useState<"home"|"tasks"|"updates"|"reports">("home");
+  const [taskFilter,setTaskFilter]=useState<"all"|"pickup"|"delivery">("all");
+  const [taskSearch,setTaskSearch]=useState("");
+  const [selectedTask,setSelectedTask]=useState("");
+  const [mobile,setMobile]=useState<any>({jobs:[],notifications:[]});
+  const [mobileError,setMobileError]=useState("");
+  const [readBusy,setReadBusy]=useState("");
+
   const [settlements,setSettlements]=useState<any[]>([]);
   const [signerNames,setSignerNames]=useState<Record<string,string>>({});
   const [settlementBusy,setSettlementBusy]=useState("");
@@ -48,6 +63,16 @@ export default function Dashboard() {
       if(!portal.error && portal.data?.ok!==false) setData(portal.data||{});
       if(!dailyResult.error && dailyResult.data?.ok!==false) setDaily(dailyResult.data||{});
       if(!settlementResult.error && settlementResult.data?.ok!==false) setSettlements(Array.isArray(settlementResult.data?.rows)?settlementResult.data.rows:[]);
+      // The mobile snapshot is scoped by the authenticated rider; do not
+      // substitute another rider's assignments if it is unavailable.
+      try {
+        const { data: mobileData, error: mobileFailure } = await (supabase as any).rpc("be_field_team_mobile_snapshot_v187",{p_payload:{limit:200,notification_limit:50}});
+        if(mobileFailure || mobileData?.ok===false) throw mobileFailure || new Error(mobileData?.error || "Unable to load assigned tasks");
+        setMobile({jobs:Array.isArray(mobileData?.jobs)?mobileData.jobs:[],notifications:Array.isArray(mobileData?.notifications)?mobileData.notifications:[]});
+        setMobileError("");
+      } catch(mobileFailure:any) {
+        setMobileError(mobileFailure?.message || "Assigned tasks and notifications are unavailable.");
+      }
       if(failures.length){
         setMessage(failures.map(({ result, fallback }) => result.error?.message || result.data?.error || result.data?.code || fallback).join(" · "));
       } else {
@@ -104,6 +129,35 @@ export default function Dashboard() {
   const mobileBanking = Number(channels.QR||0)+Number(channels.BANK_TRANSFER||0)+Number(channels.MOBILE_WALLET||0);
   const completedRows=useMemo(()=>rows.filter((r:any)=>["SUCCESS","FAILED"].includes(String(r.result||"").toUpperCase())),[rows]);
 
+  const mobileJobs=Array.isArray(mobile.jobs)?mobile.jobs:[];
+  const mobileNotifications=Array.isArray(mobile.notifications)?mobile.notifications:[];
+  const activeJobs=mobileJobs.filter((j:any)=>!["DELIVERED","COMPLETED","FAILED","CANCELLED","CANCELED"].includes(String(j.status||"").toUpperCase()));
+  const pickups=activeJobs.filter((j:any)=>String(j.job_kind||"PICKUP").toUpperCase()==="PICKUP");
+  const deliveries=activeJobs.filter((j:any)=>String(j.job_kind||"").toUpperCase()==="DELIVERY");
+  const filteredJobs=activeJobs.filter((job:any)=>{
+    const kind=String(job.job_kind||"PICKUP").toUpperCase();
+    const matchesKind=taskFilter==="all" || (taskFilter==="pickup"?kind==="PICKUP":kind==="DELIVERY");
+    const q=taskSearch.trim().toLowerCase();
+    return matchesKind && (!q || [job.pickup_id,job.pickup_way_id,job.delivery_way_id,job.tracking_no,job.recipient_name,job.recipient_phone,job.recipient_town,job.merchant_name,job.pickup_address,job.delivery_address].some(x=>String(x||"").toLowerCase().includes(q)));
+  });
+  const unreadNotifications=mobileNotifications.filter((n:any)=>!(n.is_read||n.read_at)).length;
+  const selectedRow=filteredJobs.find((j:any)=>String(j.id||j.delivery_way_id||j.pickup_id||j.tracking_no)===selectedTask);
+  const taskId=(j:any)=>String(j.id||j.delivery_way_id||j.pickup_id||j.tracking_no||"");
+  const taskHref=(j:any)=>String(j.job_kind||"PICKUP").toUpperCase()==="DELIVERY"
+    ? "/delivery?"+new URLSearchParams({deliveryWayId:String(j.delivery_way_id||j.tracking_no||"")}).toString()
+    : "/jobs/"+encodeURIComponent(String(j.pickup_id||""));
+  async function markRead(notification:any){
+    if(!notification.id || notification.is_read || notification.read_at)return;
+    setReadBusy(String(notification.id));
+    try {
+      const {error}=await (supabase as any).rpc("be_mark_app_notification_read",{p_notification_id:notification.id,p_login:null});
+      if(error)throw error;
+      setMobile((prev:any)=>({...prev,notifications:prev.notifications.map((n:any)=>n.id===notification.id?{...n,is_read:true}:n)}));
+    }catch(error:any){setMobileError(error?.message||tx("Could not mark notification read.","အကြောင်းကြားချက်ကို ဖတ်ပြီးဟု သတ်မှတ်မရပါ။"))}
+    finally{setReadBusy("")}
+  }
+  const shortDate=(value:any)=>{if(!value)return "";const d=new Date(value);return Number.isNaN(d.getTime())?"":d.toLocaleString();};
+
   const portalCards=[
     [tx("Assigned Pickups","တာဝန်ပေးထားသော Pickup များ"),counts.pickups||counts.pickup_jobs||0,Truck],
     [tx("Active Delivery Jobs","လက်ရှိ ပို့ဆောင်ရမည့်အလုပ်များ"),summary.active_ways??counts.deliveries??counts.delivery_jobs??0,Package],
@@ -125,6 +179,67 @@ export default function Dashboard() {
   return (
     <div className="v142-portal-bg min-h-screen p-4 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-5">
+
+        <section className="overflow-hidden rounded-[28px] bg-[#0d1b34] p-5 text-white shadow-lg sm:p-7" aria-labelledby="rider-home-heading">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-300">{tx("My workspace","ကျွန်ုပ်၏ လုပ်ငန်းခွင်")}</p>
+              <h1 id="rider-home-heading" className="mt-2 text-2xl font-bold sm:text-3xl">{tx("Good day. Here's your work.","မင်္ဂလာပါ။ ယနေ့တာဝန်များ")}</h1>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">{daily.identity?.display_name||data.identity?.display_name||tx("Field team member","ဝန်ထမ်း")} · {data.identity?.branch_code||tx("Branch not assigned","ဌာနခွဲ မသတ်မှတ်ရသေး")}</p>
+            </div>
+            <button type="button" onClick={()=>void load()} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>{tx("Refresh","ပြန်လည်စစ်ဆေး")}</button>
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {([
+              ["tasks",tx("Active tasks","လက်ရှိတာဝန်"),activeJobs.length,ClipboardList],
+              ["pickup",tx("Pickups","ပစ္စည်းယူ"),pickups.length,Truck],
+              ["delivery",tx("Deliveries","ပို့ဆောင်"),deliveries.length,Package],
+              ["updates",tx("Unread notices","မဖတ်ရသေးသောစာ"),unreadNotifications,Bell],
+            ] as const).map(([kind,label,value,Icon])=>(
+              <button key={kind} type="button" onClick={()=>{if(kind==="updates"){setActiveView("updates")}else{setActiveView("tasks");setTaskFilter(kind==="tasks"?"all":kind)}}} className="group min-h-[112px] rounded-2xl border border-white/15 bg-white/[0.08] p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-300/50 hover:bg-white/[0.13] focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">
+                <div className="flex items-center justify-between"><Icon className="h-5 w-5 text-cyan-300"/><ChevronRight className="h-4 w-4 text-slate-300"/></div>
+                <p className="mt-3 text-3xl font-semibold tabular-nums">{value}</p>
+                <p className="mt-1 text-xs font-medium text-slate-200">{label}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <nav aria-label={tx("Rider work sections","Rider လုပ်ငန်းကဏ္ဍများ")} className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm" role="tablist">
+          {([
+            ["home",tx("Overview","အကျဉ်းချုပ်"),Package],
+            ["tasks",tx("My tasks","ကျွန်ုပ်၏တာဝန်"),ClipboardList],
+            ["updates",tx("Messages","အသိပေးချက်"),Bell],
+            ["reports",tx("Finance & reports","ငွေစာရင်းနှင့် အစီရင်ခံစာ"),WalletCards],
+          ] as const).map(([key,label,Icon])=>(
+            <button key={key} type="button" role="tab" aria-selected={activeView===key} onClick={()=>setActiveView(key)} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${activeView===key?"bg-blue-700 text-white shadow-sm":"text-slate-600 hover:bg-slate-100"}`}><Icon className="h-4 w-4"/>{label}{key==="updates"&&unreadNotifications>0?<span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">{unreadNotifications}</span>:null}</button>
+          ))}
+        </nav>
+
+        {mobileError?<div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">{mobileError} <button onClick={()=>void load()} type="button" className="ml-2 underline">{tx("Retry","ထပ်စမ်းရန်")}</button></div>:null}
+        {activeView==="home"&&<>
+          <section aria-label={tx("Operational notifications","လုပ်ငန်းဆိုင်ရာ အသိပေးချက်များ")} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="flex items-center gap-2 text-lg font-bold text-slate-900"><Bell className="h-5 w-5 text-blue-700"/>{tx("Updates for you","သင့်အတွက် အသိပေးချက်များ")}</h2><p className="mt-1 text-sm text-slate-500">{tx("Team announcements and notifications delivered to your account.","အဖွဲ့ဆိုင်ရာနှင့် သင့်အတွက် ပေးပို့ထားသော အသိပေးချက်များ")}</p></div><button type="button" onClick={()=>setActiveView("updates")} className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-blue-700">{tx("View all","အားလုံးကြည့်ရန်")}<ArrowRight className="h-4 w-4"/></button></div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">{mobileNotifications.slice(0,4).map((n:any,i:number)=><div key={n.id||i} className={`rounded-xl border p-4 ${n.is_read||n.read_at?"border-slate-200 bg-slate-50":"border-blue-200 bg-blue-50/70"}`}><div className="flex items-start justify-between gap-2"><p className="font-semibold text-slate-900">{n.title||tx("New notification","အသိပေးချက်")}</p>{!(n.is_read||n.read_at)&&<span className="h-2 w-2 shrink-0 rounded-full bg-blue-600" aria-label="Unread"/>}</div><p className="mt-1 text-sm leading-6 text-slate-600">{n.message||n.body||"-"}</p><p className="mt-2 text-xs text-slate-400">{shortDate(n.created_at)}</p></div>)}</div>
+            {mobileNotifications.length===0&&<p className="mt-4 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">{tx("No notifications currently available.","ယခုအချိန် အသိပေးချက် မရှိသေးပါ။")}</p>}
+          </section>
+          <section className="grid gap-3 sm:grid-cols-2">
+            <button type="button" onClick={()=>{setTaskFilter("all");setActiveView("tasks")}} className="flex min-h-28 items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-blue-300"><div><h2 className="text-lg font-bold text-slate-900">{tx("View assigned tasks","တာဝန်ပေးထားသော အလုပ်များ")}</h2><p className="mt-1 text-sm text-slate-500">{tx("Open your list and select a job to view details.","အလုပ်စာရင်းမှ တစ်ခုချင်းစီ ဖွင့်ကြည့်ရန်")}</p></div><ArrowRight className="h-6 w-6 shrink-0 text-blue-700"/></button>
+            <Link to="/route" className="flex min-h-28 items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-300"><div><h2 className="text-lg font-bold text-slate-900">{tx("Open my route","ကျွန်ုပ်၏လမ်းကြောင်း")}</h2><p className="mt-1 text-sm text-slate-500">{tx("Review planned stops and directions.","မှတ်တိုင်နှင့် လမ်းညွှန်ချက်များကြည့်ရန်")}</p></div><MapPin className="h-6 w-6 shrink-0 text-blue-700"/></Link>
+          </section>
+        </>}
+
+        {activeView==="tasks"&&<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-bold text-slate-950">{tx("My assigned tasks","ကျွန်ုပ်၏တာဝန်များ")} <span className="ml-2 text-slate-400">{filteredJobs.length}</span></h2><p className="mt-1 text-sm text-slate-500">{tx("Select a task to expand its details, then open the verified operational workflow.","လုပ်ငန်းတစ်ခုကို နှိပ်ပြီး အချက်အလက်အသေးစိတ်ကြည့်ရှုနိုင်ပါသည်။")}</p></div><Link to="/route" className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-blue-700"><MapPin className="h-4 w-4"/>{tx("Route","လမ်းကြောင်း")}</Link></div>
+          <div className="mt-5 flex flex-wrap gap-2">{(["all","pickup","delivery"] as const).map(kind=><button type="button" key={kind} onClick={()=>{setTaskFilter(kind);setSelectedTask("")}} aria-pressed={taskFilter===kind} className={`min-h-10 rounded-xl px-4 text-sm font-semibold ${taskFilter===kind?"bg-blue-700 text-white":"bg-slate-100 text-slate-700"}`}>{kind==="all"?tx("All","အားလုံး"):kind==="pickup"?tx("Pickup","ပစ္စည်းယူ"):tx("Delivery","ပို့ဆောင်")}</button>)}</div>
+          <label className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 px-3"><Search className="h-5 w-5 text-slate-400"/><input value={taskSearch} onChange={e=>setTaskSearch(e.target.value)} placeholder={tx("Search waybill, recipient, merchant or township","Way ID၊ လက်ခံသူ၊ ဆိုင် သို့မဟုတ် မြို့နယ် ရှာရန်")} className="min-h-12 w-full bg-transparent text-sm outline-none"/></label>
+          <div className="mt-4 space-y-2">{filteredJobs.map((job:any,index:number)=>{const id=taskId(job)||String(index);const opened=selectedTask===id;const kind=String(job.job_kind||"PICKUP").toUpperCase();const way=job.delivery_way_id||job.pickup_way_id||job.tracking_no||job.pickup_id||id;return <article key={id} className="overflow-hidden rounded-xl border border-slate-200 bg-white"><button type="button" aria-expanded={opened} onClick={()=>setSelectedTask(opened?"":id)} className="flex min-h-20 w-full items-center gap-3 p-4 text-left hover:bg-slate-50"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">{kind==="DELIVERY"?<Package className="h-5 w-5"/>:<Truck className="h-5 w-5"/>}</div><div className="min-w-0 flex-1"><p className="text-sm font-bold text-slate-950">{way}</p><p className="mt-1 truncate text-sm text-slate-600">{job.recipient_name||job.merchant_name||job.sender_name||tx("Assigned job","တာဝန်ပေးထားသော အလုပ်")}</p><p className="mt-1 text-xs text-slate-500">{kind==="DELIVERY"?tx("Delivery","ပို့ဆောင်"):tx("Pickup","ပစ္စည်းယူ")} · {job.status||tx("Assigned","တာဝန်ပေးထား")}</p></div><ChevronRight className={`h-5 w-5 text-slate-400 transition-transform ${opened?"rotate-90":""}`}/></button>{opened&&<div className="border-t border-slate-200 bg-slate-50 p-4"><dl className="grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-xs text-slate-500">{tx("Waybill / ID","Waybill / ID")}</dt><dd className="mt-1 break-words font-semibold">{way}</dd></div><div><dt className="text-xs text-slate-500">{tx("Status","အခြေအနေ")}</dt><dd className="mt-1 font-semibold">{job.status||"-"}</dd></div><div><dt className="text-xs text-slate-500">{tx("Contact","ဆက်သွယ်ရန်")}</dt><dd className="mt-1 font-semibold">{job.recipient_phone||job.sender_phone||"-"}</dd></div><div><dt className="text-xs text-slate-500">{tx("Address","လိပ်စာ")}</dt><dd className="mt-1 break-words font-semibold">{job.delivery_address||job.pickup_address||job.recipient_town||job.township||"-"}</dd></div></dl><div className="mt-4 flex flex-wrap gap-2"><Link to={taskHref(job)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white">{tx("Open task","လုပ်ငန်းဖွင့်ရန်")}<ArrowRight className="h-4 w-4"/></Link>{(job.recipient_phone||job.sender_phone)&&<a href={`tel:${String(job.recipient_phone||job.sender_phone).replace(/[^+0-9]/g,"")}`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700"><Phone className="h-4 w-4"/>{tx("Call","ဖုန်းဆက်ရန်")}</a>}</div></div>}</article>})}</div>
+          {filteredJobs.length===0&&<p className="mt-4 rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-600">{mobileError||tx("No matching assigned tasks. Pull to refresh or try another filter.","သတ်မှတ်ချက်နှင့် ကိုက်ညီသောတာဝန် မရှိပါ။")}</p>}
+        </section>}
+
+        {activeView==="updates"&&<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-xl font-bold text-slate-900">{tx("Notifications & announcements","အသိပေးချက်နှင့် ကြေညာချက်များ")}</h2><p className="mt-1 text-sm text-slate-500">{tx("Messages received through your authenticated Rider account.","သင့် Rider အကောင့်သို့ ရောက်ရှိလာသော အသိပေးချက်များ")}</p><div className="mt-4 space-y-3">{mobileNotifications.map((n:any,i:number)=><article key={n.id||i} className={`rounded-xl border p-4 ${n.is_read||n.read_at?"border-slate-200":"border-blue-200 bg-blue-50/60"}`}><div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold text-slate-900">{n.title||tx("Notification","အသိပေးချက်")}</h3><span className="text-xs text-slate-500">{shortDate(n.created_at)}</span></div><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{n.message||n.body||"-"}</p>{!(n.is_read||n.read_at)&&n.id&&<button type="button" disabled={readBusy===String(n.id)} onClick={()=>void markRead(n)} className="mt-3 min-h-10 rounded-lg border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 disabled:opacity-50">{tx("Mark as read","ဖတ်ပြီးဟု သတ်မှတ်ရန်")}</button>}</article>)}{mobileNotifications.length===0&&<p className="rounded-xl bg-slate-50 p-6 text-center text-slate-500">{tx("No notifications available.","အသိပေးချက် မရှိသေးပါ။")}</p>}</div></section>}
+
+        {activeView==="reports"&&<>
         <section className="rider-dashboard-hero relative overflow-hidden rounded-[32px] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,.22)]">
           <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" /><div className="pointer-events-none absolute -bottom-16 left-10 h-44 w-44 rounded-full bg-[#d4af37]/10 blur-3xl" /><div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -313,6 +428,7 @@ export default function Dashboard() {
             <p className="mt-2 font-semibold text-slate-600">{tx("View your authenticated branch assignment and branch pickup workload.","သင့်ဌာနခွဲတာဝန်နှင့် Pickup အလုပ်ပမာဏကို ကြည့်ရှုပါ။")}</p>
           </Link>
         </section>
+        </>}
       </div>
     </div>
   );
