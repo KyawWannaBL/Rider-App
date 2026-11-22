@@ -1,3 +1,15 @@
+-- RELEASE BLOCKER (2026-11-23): production's
+-- public.be_app_notification_visible_to_current_user returns TRUE whenever
+-- the authenticated requester has no active field-team mapping. The
+-- be_app_notifications_field_safe_select_v88 RLS policy calls this function;
+-- therefore direct Rider Admin messages could be visible to unrelated
+-- non-field users. The INSERT policy also allows any authenticated user.
+-- Do NOT apply this draft's messaging RPC until a separate reviewed migration
+-- fixes notification visibility and insert permissions; validate with
+-- actual rider, admin, unrelated employee, and anon sessions in isolated UAT.
+-- Moreover, the admin snapshot caps at 1,500 jobs / 750 settlement rows;
+-- the UI must signal truncation and use paging before totals are authoritative.
+--
 -- Review-only Rider Admin control RPCs. DO NOT run against production before
 -- UAT tests, security review and migration-history alignment.
 -- Both functions fail closed unless the logged-in Supabase Auth UID is linked to
