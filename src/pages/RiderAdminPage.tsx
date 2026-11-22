@@ -32,6 +32,7 @@ type Settlement = {
 type Snapshot = {
   ok?: boolean; scope?: string; generated_at?: string;
   workforce?: Worker[]; jobs?: Job[]; settlements?: Settlement[];
+  jobs_may_be_truncated?: boolean; settlements_may_be_truncated?: boolean;
   limitations?: string;
 };
 type Tab = "overview" | "staff" | "ways" | "finance" | "messages";
@@ -175,6 +176,12 @@ export default function RiderAdminPage() {
         <button type="button" onClick={()=>void refresh()} disabled={loading||start>end} className={button+" bg-blue-700 text-white"}><CalendarDays className="h-4 w-4"/>{tx("Apply dates","ရက်စွဲအသုံးပြုရန်")}</button>
       </div>
       {error&&<div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800"><AlertTriangle className="mr-2 inline h-4 w-4"/>{error}<button type="button" className="ml-3 underline" onClick={()=>void refresh()}>{tx("Retry","ထပ်စမ်းရန်")}</button></div>}
+      {snapshot&&(snapshot.jobs_may_be_truncated||snapshot.settlements_may_be_truncated)&&
+        <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950">
+          <AlertTriangle className="mr-2 inline h-5 w-5"/>
+          {tx("The selected report contains more records than this view can display. Counts and exceptions below reflect only returned rows; narrow the date range to review all records.",
+            "ရွေးထားသည့်ကာလအတွက် မှတ်တမ်းအရေအတွက် ကန့်သတ်ချက်ထက်ကျော်နေပါသည်။ အောက်ပါစာရင်းနှင့် အရေအတွက်များမှာ ပြသထားသောမှတ်တမ်းများအတွက်သာဖြစ်သည်။ ရက်စွဲအပိုင်းအခြားကို လျှော့ချပါ။")}
+        </div>}
       {snapshot&&<>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {([
