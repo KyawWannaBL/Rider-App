@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import Layout    from '@/components/Layout';
 import Login     from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
+import RiderAdminPage from '@/pages/RiderAdminPage';
 import Jobs      from '@/pages/Jobs';
 import JobDetail from '@/pages/JobDetail';
 import History   from '@/pages/History';
@@ -91,14 +92,24 @@ function Guard({ children }: { children: React.ReactNode }) {
   if (profileState === "checking") return <Splash />;
   if (profileState === "unapproved") return <Navigate to="/pending-approval" replace />;
   if (!profile) return <ConnectionIssue />;
+  if (profile?.admin_mode===true) return <Navigate to="/admin" replace />;
   return children;
+}
+
+function AdminOnlyGuard(){
+  const {user,profile,profileState,loading}=useAuth();
+  if(loading||profileState==="checking")return <Splash/>;
+  if(!user)return <Navigate to="/login" replace/>;
+  if(profileState==="error")return <ConnectionIssue/>;
+  if(profile?.admin_mode!==true)return <Navigate to="/dashboard" replace/>;
+  return <RiderAdminPage/>;
 }
 
 function LoginPage() {
   const { user, profile, profileState, loading } = useAuth();
   if (loading || (user && profileState === "checking")) return <Splash />;
   if (profileState === "error") return <ConnectionIssue />;
-  if (user && profileState === "approved" && profile) return <Navigate to="/dashboard" replace />;
+  if (user && profileState === "approved" && profile) return <Navigate to={profile?.admin_mode===true?"/admin":"/dashboard"} replace />;
   if (user && profileState === "unapproved") return <Navigate to="/pending-approval" replace />;
   return <Login />;
 }
@@ -110,6 +121,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/pending-approval" element={<PendingApprovalPage />} />
+          <Route path="/admin" element={<AdminOnlyGuard />} />
           <Route path="/" element={<Guard><Layout /></Guard>}>
             <Route index               element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"    element={<Dashboard />} />
