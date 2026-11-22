@@ -176,28 +176,45 @@ export default function Dashboard() {
   return (
     <div className="v142-portal-bg min-h-screen p-4 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-5">
-        <section className="rider-dashboard-hero relative overflow-hidden rounded-[32px] border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,.22)]">
-          <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" /><div className="pointer-events-none absolute -bottom-16 left-10 h-44 w-44 rounded-full bg-[#d4af37]/10 blur-3xl" /><div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-black tracking-[0.35em] text-[#f4d66d]">BRITIUM EXPRESS</p>
-              <h1 className="mt-2 text-3xl font-black text-white">{tx("Field Team Daily Dashboard","Rider / Driver / Helper နေ့စဉ် Dashboard")}</h1>
-              <p className="rider-dashboard-subtext mt-2 font-semibold text-slate-300">
-                {tx(
-                  "Completed and failed delivery stops leave the active work screen and are summarized here for the day, including Finance reconciliation.",
-                  "ပို့ဆောင်အောင်မြင်ပြီးသော Way နှင့် မအောင်မြင်သော Way များကို Active လုပ်ငန်းစာရင်းမှ ဖယ်ရှားပြီး ယနေ့ Dashboard တွင် Finance စာရင်းညှိနှိုင်းမှုနှင့်အတူ စုစည်းပြသပါသည်။"
-                )}
-              </p>
-              <p className="mt-2 text-sm font-bold text-slate-400">
-                {daily.identity?.display_name||data.identity?.display_name||daily.identity?.worker_code||data.identity?.worker_code||"Field Team"} · {daily.identity?.worker_code||data.identity?.worker_code||"-"} · {daily.identity?.role||data.identity?.role||"-"} · {data.identity?.branch_code||"No branch"}
-              </p>
-              <p className="mt-1 text-xs font-black text-cyan-300">{tx("Work date","လုပ်ငန်းရက်")}: {daily.work_date||"-"}</p>
+
+        <section aria-labelledby="shift-title" className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#08162d] via-[#10213d] to-[#103a55] p-5 text-white shadow-[0_14px_35px_rgba(12,27,51,.16)] sm:p-7">
+          <div className="pointer-events-none absolute right-0 top-0 h-full w-1/2 opacity-10" style={{backgroundImage:"linear-gradient(90deg,white 1px,transparent 1px),linear-gradient(white 1px,transparent 1px)",backgroundSize:"35px 35px"}}/>
+          <div className="relative flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-2xl">
+              <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-300"><span className="h-1.5 w-1.5 rounded-full bg-cyan-400"/>{tx("LIVE SHIFT · BRITIUM EXPRESS","ယနေ့တာဝန် · BRITIUM EXPRESS")}</p>
+              <h1 id="shift-title" className="mt-5 text-2xl font-bold sm:text-3xl">{tx("Welcome to your shift","မင်္ဂလာပါ၊ ယနေ့တာဝန်များ")}</h1>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{tx("See your assigned tasks, messages and settlements. Select a card to review the details.","တာဝန်များ၊ အသိပေးချက်များနှင့် ငွေစာရင်းများကို ကြည့်ရှုပါ။")}</p>
+              <p className="mt-3 text-xs font-semibold text-slate-300">{fieldIdentity.display_name||fieldIdentity.worker_code||tx("Field team","လုပ်ငန်းခွင်")} · {fieldIdentity.branch_code||tx("No branch assigned","ဌာနခွဲမရှိ")} · {daily.work_date||tx("Today","ယနေ့")}</p>
             </div>
-            <button onClick={load} disabled={loading} className="v142-button-sheen v142-jelly inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#d4af37] to-[#f4d66d] px-4 text-sm font-black text-slate-950 shadow-[0_14px_30px_rgba(212,175,55,.18)] disabled:opacity-50">
-              <RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`} /> {tx("Sync Enterprise","Enterprise နှင့် Sync")}
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold"><Clock3 className="mr-1 inline h-4 w-4"/>{tx("Today's work","ယနေ့လုပ်ငန်း")}</span>
+              <button type="button" onClick={load} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 text-xs font-bold text-white hover:bg-white/20 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>{tx("Sync Enterprise","Enterprise နှင့် Sync")}</button>
+            </div>
           </div>
-          <div className="rider-dashboard-message mt-4 rounded-2xl bg-blue-50 p-3 text-sm font-bold text-blue-900">{message}</div>
+          <div className="relative mt-6 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+            {([
+              ["all",tx("Assigned tasks","တာဝန်များ"),activeJobs.length,ClipboardList],
+              ["pickup",tx("Pickups","ပစ္စည်းယူ"),pickupJobs.length,Package],
+              ["delivery",tx("Deliveries","ပို့ဆောင်"),deliveryJobs.length,Truck],
+              ["messages",tx("Unread notices","မဖတ်ရသေးသောစာ"),unreadNotices.length,Bell]
+            ] as const).map(([kind,label,value,Icon])=><button type="button" key={kind} onClick={()=>{if(kind==="messages"){setWorkspaceTab("messages")}else{setWorkspaceTab("tasks");setTaskFilter(kind==="all"?"all":kind)}}} className="group min-h-28 rounded-2xl border border-white/10 bg-white/[.07] p-4 text-left transition hover:border-cyan-300/40 hover:bg-white/[.13]"><div className="flex items-center justify-between"><Icon className="h-5 w-5 text-cyan-300"/><ArrowRight className="h-4 w-4 text-cyan-300/70"/></div><p className="mt-3 text-3xl font-bold tabular-nums">{value}</p><p className="mt-1 text-xs font-medium text-slate-300">{label}</p></button>)}
+          </div>
         </section>
+
+        <section role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-white px-4 py-3">
+          <div className="flex min-w-0 items-start gap-3"><ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600"/><div><h2 className="text-sm font-bold text-amber-950">{tx("Enterprise connection & dispatch status","Enterprise ချိတ်ဆက်မှု အခြေအနေ")}</h2><p className="mt-1 break-words text-xs leading-5 text-amber-900">{message}</p></div></div>
+          <button type="button" onClick={load} disabled={loading} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#0d1d36] px-3 text-xs font-semibold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>{tx("Retry sync","ထပ်မံစစ်ဆေး")}</button>
+        </section>
+
+        <nav role="tablist" aria-label={tx("Rider workspace sections","Rider လုပ်ငန်းကဏ္ဍများ")} className="flex gap-1.5 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+          {([
+            ["overview",tx("Overview","အကျဉ်းချုပ်"),Package],
+            ["tasks",tx("My tasks","တာဝန်များ"),ClipboardList],
+            ["messages",tx("Notifications","အသိပေးချက်"),Bell],
+            ["finance",tx("Finance & reports","ငွေစာရင်း"),WalletCards],
+          ] as const).map(([key,label,Icon])=><button type="button" role="tab" aria-selected={workspaceTab===key} key={key} onClick={()=>setWorkspaceTab(key)} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-semibold ${workspaceTab===key?"bg-[#10213d] text-white":"text-slate-600 hover:bg-slate-100"}`}><Icon className="h-4 w-4"/>{label}{key==="messages"&&unreadNotices.length>0?<span className="rounded-full bg-amber-300 px-1.5 text-[10px] text-slate-950">{unreadNotices.length}</span>:null}</button>)}
+        </nav>
+        {fieldSnapshotError&&<div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">{fieldSnapshotError} <button type="button" onClick={load} className="ml-2 underline">{tx("Retry","ပြန်စမ်းရန်")}</button></div>}
 
         <FinishAssignmentsButton onFinished={load} />
 
