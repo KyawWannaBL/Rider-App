@@ -171,6 +171,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthError((current) => current || "Enterprise connection timed out. Please retry.");
     }, 12000);
 
+    // Missing runtime configuration must show an actionable connection error,
+    // not dereference a null auth client and crash the entire Rider UI.
+    if (!supabase) {
+      window.clearTimeout(watchdog);
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setProfileState("error");
+      setAuthError("Rider authentication is not configured for this deployment. Contact the administrator.");
+      setLoading(false);
+      return () => {
+        mountedRef.current = false;
+        window.clearTimeout(watchdog);
+      };
+    }
+
     const handleAuthEvent = (event: string, nextSession: any | null) => {
       if (!mountedRef.current) return;
 
@@ -273,7 +289,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeUserIdRef.current = null;
         approvedUserIdRef.current = null;
         try {
-          await withTimeout(supabase.auth.signOut(), 5000, "Sign out");
+          if (supabase) await withTimeout(supabase.auth.signOut(), 5000, "Sign out");
         } finally {
           if (mountedRef.current) {
             setSession(null);
