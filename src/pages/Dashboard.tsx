@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [selectedTask,setSelectedTask]=useState("");
   const [mobile,setMobile]=useState<any>({jobs:[],notifications:[]});
   const [mobileError,setMobileError]=useState("");
+  const [syncError,setSyncError]=useState("");
   const [readBusy,setReadBusy]=useState("");
 
   const [settlements,setSettlements]=useState<any[]>([]);
@@ -73,13 +74,18 @@ export default function Dashboard() {
         setMobileError(mobileFailure?.message || "Assigned tasks and notifications are unavailable.");
       }
       if(failures.length){
-        setMessage(failures.map(({ result, fallback }) => result.error?.message || result.data?.error || result.data?.code || fallback).join(" · "));
+        const issues=failures.map(({ result, fallback }) => result.error?.message || result.data?.error || result.data?.code || fallback).join(" · ");
+        setSyncError(issues);
+        setMessage(issues);
       } else {
+        setSyncError("");
         riderFeedback("success");
         setMessage(tx("Enterprise Portal and today's field settlement are synchronized.","Enterprise Portal နှင့် ယနေ့ Field Settlement အချက်အလက်များ ချိတ်ဆက်ပြီးပါပြီ။"));
       }
     } catch(error:any) {
-      setMessage(error?.message || tx("Unable to synchronize Enterprise Portal. Please retry.", "Enterprise Portal နှင့် ချိတ်ဆက်၍မရပါ။ ထပ်မံကြိုးစားပါ။"));
+      const issue=error?.message || tx("Unable to synchronize Enterprise Portal. Please retry.", "Enterprise Portal နှင့် ချိတ်ဆက်၍မရပါ။ ထပ်မံကြိုးစားပါ။");
+      setSyncError(issue);
+      setMessage(issue);
       riderFeedback("error");
     } finally {
       setLoading(false);
@@ -214,6 +220,7 @@ export default function Dashboard() {
           ))}
         </nav>
 
+        {syncError?<div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">{tx("Some Enterprise data could not be synchronized: ","Enterprise အချက်အလက်အချို့ ချိတ်ဆက်မရပါ။ ")}{syncError} <button type="button" onClick={()=>void load()} className="ml-2 underline">{tx("Retry","ထပ်စမ်းရန်")}</button></div>:null}
         {mobileError?<div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">{mobileError} <button onClick={()=>void load()} type="button" className="ml-2 underline">{tx("Retry","ထပ်စမ်းရန်")}</button></div>:null}
         {activeView==="home"&&<>
           <section aria-label={tx("Operational notifications","လုပ်ငန်းဆိုင်ရာ အသိပေးချက်များ")} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
