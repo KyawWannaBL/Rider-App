@@ -4,9 +4,9 @@
 -- be_app_notifications_field_safe_select_v88 RLS policy calls this function;
 -- therefore direct Rider Admin messages could be visible to unrelated
 -- non-field users. The INSERT policy also allows any authenticated user.
--- Do NOT apply this draft's messaging RPC until a separate reviewed migration
--- fixes notification visibility and insert permissions; validate with
--- actual rider, admin, unrelated employee, and anon sessions in isolated UAT.
+-- This draft now proposes restrictive recipient and INSERT policies for
+-- RIDER_ADMIN_MESSAGE; they are NOT deployed or security-tested. Validate
+-- with actual rider, admin, unrelated employee, and anon sessions in UAT.
 -- Moreover, the admin snapshot caps at 1,500 jobs / 750 settlement rows;
 -- the UI must signal truncation and use paging before totals are authoritative.
 --
@@ -16,6 +16,54 @@
 -- the APPROVED Rider App superadmin profile for rideradmin@britiumexpress.com.
 -- No cross-rider authorization is granted to ordinary workforce accounts.
 begin;
+
+-- The existing permissive SELECT/UPDATE policies can OR together.
+-- Restrictive policies are ANDed against ALL permissive policies and prevent
+-- Rider Admin message leakage, including to non-field Enterprise accounts.
+-- These policies do not attempt to change legacy notification visibility.
+-- New messages carry the fixed notification_type RIDER_ADMIN_MESSAGE.
+drop policy if exists be_rider_admin_message_recipient_select_v1 on public.be_app_notifications;
+create policy be_rider_admin_message_recipient_select_v1
+on public.be_app_notifications as restrictive
+for select to authenticated
+using (
+  coalesce(notification_type,'') <> 'RIDER_ADMIN_MESSAGE'
+  or target_user_id = (select auth.uid())::text
+);
+
+drop policy if exists be_rider_admin_message_recipient_update_v1 on public.be_app_notifications;
+create policy be_rider_admin_message_recipient_update_v1
+on public.be_app_notifications as restrictive
+for update to authenticated
+using (
+  coalesce(notification_type,'') <> 'RIDER_ADMIN_MESSAGE'
+  or target_user_id = (select auth.uid())::text
+)
+with check (
+  coalesce(notification_type,'') <> 'RIDER_ADMIN_MESSAGE'
+  or target_user_id = (select auth.uid())::text
+);
+
+-- Existing broad INSERT policies would otherwise permit ordinary users to
+-- impersonate an Admin message. Only the active designated Rider Admin may
+-- create rows bearing this reserved notification_type.
+drop policy if exists be_rider_admin_message_authored_insert_v1 on public.be_app_notifications;
+create policy be_rider_admin_message_authored_insert_v1
+on public.be_app_notifications as restrictive
+for insert to authenticated
+with check (
+  coalesce(notification_type,'') <> 'RIDER_ADMIN_MESSAGE'
+  or (
+    (select auth.uid()) is not null
+    and exists (
+      select 1 from public.be_rider_auth_profiles a
+      where a.auth_user_id = (select auth.uid())
+        and lower(a.email) = 'rideradmin@britiumexpress.com'
+        and lower(a.role) = 'superadmin'
+        and lower(a.status) = 'active'
+    )
+  )
+);
 
 create or replace function public.be_rider_admin_control_snapshot_v1(
   p_from date default (current_date - 14),
@@ -89,6 +137,9 @@ begin
     'ok',true,'scope','RIDER_ADMIN_VERIFIED','generated_at',now(),
     'from',v_from,'to',v_to,
     'workforce',v_workers,'jobs',v_jobs,'settlements',v_settlements,
+    'jobs_limit',1500,'settlements_limit',750,
+    'jobs_may_be_truncated',jsonb_array_length(v_jobs)>=1500,
+    'settlements_may_be_truncated',jsonb_array_length(v_settlements)>=750,
     'limitations','Usage exceptions are derived from assigned wayplan progress, not login telemetry. Job and finance rows are bounded.'
   );
 end
@@ -165,3 +216,10 @@ commit;
 --    per active mapped workforce Auth UID; notification read state is per row.
 -- 4. Verify no recipient payload exposes unrelated rider work via RLS.
 -- 5. Test date limits, disabled recipients, unmapped accounts and replay.
+-- 6. Check restrictive SELECT+UPDATE under each existing permissive policy:
+--    admin message targeted to Rider A must never appear to Rider B,
+--    unmapped employee or unrelated admin (even under a broad policy).
+-- 7. Test INSERT impersonation by ordinary authenticated users: rejected.
+-- 8. Confirm legacy non-admin notices remain visible where intended.
+-- 9. Frontend must flag jobs_may_be_truncated/settlements_may_be_truncated
+--    and avoid implying that capped numbers are complete.
