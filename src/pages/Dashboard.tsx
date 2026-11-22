@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Banknote,
   Bell,
-  Building2,
   CheckCircle2,
   Package,
   RefreshCw,
@@ -142,7 +141,7 @@ export default function Dashboard() {
     const text=[job.delivery_way_id,job.pickup_id,job.pickup_way_id,job.recipient_name,job.sender_name,job.merchant_name,job.township,job.address].join(" ").toLowerCase();
     return matches&&text.includes(taskQuery.trim().toLowerCase());
   });
-  const fieldIdentity=daily.identity||data.identity||{};
+  const fieldIdentity=(daily.identity?.worker_code||daily.identity?.display_name?daily.identity:data.identity)||{};
   const shortDate=(value:any)=>{const date=new Date(value);return value&&!Number.isNaN(date.getTime())?date.toLocaleString():"";};
   async function markNoticeRead(n:any){
     if(!n.id||n.is_read||n.read_at)return;
@@ -154,13 +153,6 @@ export default function Dashboard() {
     }catch(error:any){setFieldSnapshotError(error?.message||tx("Unable to mark notification read.","အသိပေးစာ ဖတ်ပြီးဟု မသတ်မှတ်နိုင်ပါ။"));}
     finally{setNoticeBusy("");}
   }
-
-  const portalCards=[
-    [tx("Assigned Pickups","တာဝန်ပေးထားသော Pickup များ"),counts.pickups||counts.pickup_jobs||0,Truck],
-    [tx("Active Delivery Jobs","လက်ရှိ ပို့ဆောင်ရမည့်အလုပ်များ"),summary.active_ways??counts.deliveries??counts.delivery_jobs??0,Package],
-    [tx("Unread / Active Notifications","မဖတ်ရသေးသော အသိပေးချက်များ"),counts.notifications||0,Bell],
-    [tx("COD Balance","COD လက်ကျန်"),money(wallet.cod_balance||0),WalletCards],
-  ];
 
   const dailyCards=[
     [tx("Total Ways","စုစုပေါင်း Way"),summary.total_ways||0,Package],
@@ -394,35 +386,6 @@ export default function Dashboard() {
           </div>
         </section>
 
-        </>}
-        {workspaceTab==="overview"&&<>
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {portalCards.map(([label,value,Icon]:any)=>(
-            <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-amber-50 to-cyan-50 text-[#b38d13] shadow-sm"><Icon className="h-5 w-5"/></div></div>
-              <p className="mt-3 text-2xl font-black text-slate-950">{value}</p>
-            </div>
-          ))}
-        </section>
-
-        <section className="grid gap-4 md:grid-cols-2">
-          <Link to="/jobs" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
-            <h2 className="text-xl font-black text-slate-950">{tx("Pickup Verification","Pickup စစ်ဆေးအတည်ပြုခြင်း")}</h2>
-            <p className="mt-2 font-semibold text-slate-600">{tx("Open Enterprise-assigned pickups, capture proof, weight, and submit parcels for review.","Enterprise မှ တာဝန်ပေးထားသော Pickup များကို ဖွင့်ပြီး ဓာတ်ပုံသက်သေ၊ အလေးချိန် ထည့်သွင်းကာ စစ်ဆေးရန် ပို့ပါ။")}</p>
-          </Link>
-          <Link to="/delivery" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
-            <h2 className="text-xl font-black text-slate-950">{tx("Active Delivery / Drop-Off","လက်ရှိ ပို့ဆောင် / ပစ္စည်းချခြင်း")}</h2>
-            <p className="mt-2 font-semibold text-slate-600">{tx("Only active Wayplan stops remain here; completed and failed stops move to today's dashboard.","Active Wayplan မှတ်တိုင်များကိုသာ ပြသပြီး ပြီးစီး/Failed Way များကို ယနေ့ Dashboard သို့ ရွှေ့ပြပါသည်။")}</p>
-          </Link>
-          <Link to="/cod-settlement" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
-            <h2 className="text-xl font-black text-slate-950">{tx("COD Settlement","COD ငွေစာရင်းရှင်းခြင်း")}</h2>
-            <p className="mt-2 font-semibold text-slate-600">{tx("Submit delivered COD to Finance using authoritative Enterprise values.","ပို့ဆောင်ပြီးသော COD ကို Enterprise သတ်မှတ်ချက်အတိုင်း Finance သို့ တင်သွင်းပါ။")}</p>
-          </Link>
-          <Link to="/branch-sync" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm hover:bg-blue-50">
-            <h2 className="flex items-center gap-2 text-xl font-black text-slate-950"><Building2 className="h-5 w-5"/> {tx("Branch Sync","ဌာနခွဲ ချိတ်ဆက်မှု")}</h2>
-            <p className="mt-2 font-semibold text-slate-600">{tx("View your authenticated branch assignment and branch pickup workload.","သင့်ဌာနခွဲတာဝန်နှင့် Pickup အလုပ်ပမာဏကို ကြည့်ရှုပါ။")}</p>
-          </Link>
-        </section>
         </>}
       </div>
     </div>
