@@ -12,6 +12,14 @@ import {
   Truck,
   WalletCards,
   XCircle,
+  ArrowRight,
+  ChevronRight,
+  ClipboardList,
+  Clock3,
+  Headphones,
+  MapPin,
+  Search,
+  ShieldAlert,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "../integrations/supabase/client";
@@ -30,6 +38,15 @@ export default function Dashboard() {
   const [settlements,setSettlements]=useState<any[]>([]);
   const [signerNames,setSignerNames]=useState<Record<string,string>>({});
   const [settlementBusy,setSettlementBusy]=useState("");
+  const [workspaceTab,setWorkspaceTab]=useState<"overview"|"tasks"|"messages"|"finance">("overview");
+  const [taskFilter,setTaskFilter]=useState<"all"|"pickup"|"delivery">("all");
+  const [taskQuery,setTaskQuery]=useState("");
+  const [expandedTask,setExpandedTask]=useState("");
+  const [fieldJobs,setFieldJobs]=useState<any[]>([]);
+  const [fieldNotices,setFieldNotices]=useState<any[]>([]);
+  const [fieldSnapshotError,setFieldSnapshotError]=useState("");
+  const [noticeBusy,setNoticeBusy]=useState("");
+
   const [message,setMessage]=useState(language === "my" ? "Enterprise Portal အခြေအနေကို ဖွင့်နေသည်..." : "Loading Enterprise Portal status...");
 
   async function load(){
@@ -48,6 +65,17 @@ export default function Dashboard() {
       if(!portal.error && portal.data?.ok!==false) setData(portal.data||{});
       if(!dailyResult.error && dailyResult.data?.ok!==false) setDaily(dailyResult.data||{});
       if(!settlementResult.error && settlementResult.data?.ok!==false) setSettlements(Array.isArray(settlementResult.data?.rows)?settlementResult.data.rows:[]);
+      try {
+        const {data:fieldData,error:fieldError}=await (supabase as any).rpc("be_field_team_mobile_snapshot_v187",{p_payload:{limit:250,notification_limit:60}});
+        if(fieldError||fieldData?.ok===false)throw fieldError||new Error(fieldData?.error||"Field tasks unavailable");
+        setFieldJobs(Array.isArray(fieldData?.jobs)?fieldData.jobs:[]);
+        setFieldNotices(Array.isArray(fieldData?.notifications)?fieldData.notifications:[]);
+        setFieldSnapshotError("");
+      }catch(fieldError:any){
+        setFieldJobs([]);
+        setFieldNotices([]);
+        setFieldSnapshotError(fieldError?.message||tx("Rider tasks and notices could not be loaded.","Rider တာဝန်နှင့် အသိပေးချက်များ မရရှိပါ။"));
+      }
       if(failures.length){
         setMessage(failures.map(({ result, fallback }) => result.error?.message || result.data?.error || result.data?.code || fallback).join(" · "));
       } else {
@@ -103,6 +131,29 @@ export default function Dashboard() {
 
   const mobileBanking = Number(channels.QR||0)+Number(channels.BANK_TRANSFER||0)+Number(channels.MOBILE_WALLET||0);
   const completedRows=useMemo(()=>rows.filter((r:any)=>["SUCCESS","FAILED"].includes(String(r.result||"").toUpperCase())),[rows]);
+
+  const activeJobs=fieldJobs.filter((job:any)=>!["DELIVERED","COMPLETED","FAILED","CANCELLED","CANCELED","RETURNED"].includes(String(job.mobile_status||job.status||"").toUpperCase()));
+  const pickupJobs=activeJobs.filter((job:any)=>String(job.job_kind||"PICKUP").toUpperCase()==="PICKUP");
+  const deliveryJobs=activeJobs.filter((job:any)=>String(job.job_kind||"").toUpperCase()==="DELIVERY");
+  const unreadNotices=fieldNotices.filter((n:any)=>!(n.is_read||n.read_at));
+  const taskRows=activeJobs.filter((job:any)=>{
+    const kind=String(job.job_kind||"PICKUP").toUpperCase();
+    const matches=taskFilter==="all"||(taskFilter==="pickup"?kind==="PICKUP":kind==="DELIVERY");
+    const text=[job.delivery_way_id,job.pickup_id,job.pickup_way_id,job.recipient_name,job.sender_name,job.merchant_name,job.township,job.address].join(" ").toLowerCase();
+    return matches&&text.includes(taskQuery.trim().toLowerCase());
+  });
+  const fieldIdentity=daily.identity||data.identity||{};
+  const shortDate=(value:any)=>{const date=new Date(value);return value&&!Number.isNaN(date.getTime())?date.toLocaleString():"";};
+  async function markNoticeRead(n:any){
+    if(!n.id||n.is_read||n.read_at)return;
+    setNoticeBusy(String(n.id));
+    try{
+      const {error}=await (supabase as any).rpc("be_mark_app_notification_read",{p_notification_id:n.id,p_login:null});
+      if(error)throw error;
+      setFieldNotices(previous=>previous.map((row:any)=>row.id===n.id?{...row,is_read:true}:row));
+    }catch(error:any){setFieldSnapshotError(error?.message||tx("Unable to mark notification read.","အသိပေးစာ ဖတ်ပြီးဟု မသတ်မှတ်နိုင်ပါ။"));}
+    finally{setNoticeBusy("");}
+  }
 
   const portalCards=[
     [tx("Assigned Pickups","တာဝန်ပေးထားသော Pickup များ"),counts.pickups||counts.pickup_jobs||0,Truck],
