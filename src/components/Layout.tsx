@@ -8,6 +8,7 @@ import {
   Home,
   LogOut,
   MapPinned,
+  Menu,
   PackageCheck,
   RefreshCw,
   Route,
@@ -32,6 +33,9 @@ const navItems = [
   { to: "/profile", en: "Profile", my: "ကိုယ်ရေး", icon: UserRound },
 ];
 
+const primaryNav=navItems.filter(item=>["/dashboard","/jobs","/route","/delivery","/cod-settlement"].includes(item.to));
+const secondaryNav=navItems.filter(item=>!primaryNav.includes(item));
+
 function desktopNavClass({ isActive }: { isActive: boolean }) {
   return [
     "group inline-flex min-h-11 items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-black transition-all duration-200",
@@ -54,6 +58,7 @@ export function Layout() {
   const { language, toggleLanguage } = useAppState();
   const tx = (en: string, my: string) => (language === "my" ? my : en);
   const [openNotifications, setOpenNotifications] = useState(false);
+  const [openMore,setOpenMore]=useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const unreadCount = notifications.filter((n) => !(n.is_read || n.read_at)).length;
@@ -198,18 +203,19 @@ export function Layout() {
             </div>
           </div>
 
-          <nav className="be-rider-desktop-nav mt-3 hidden items-center gap-1 rounded-2xl bg-slate-100/80 p-1 lg:flex">
-            {navItems.map(({ to, en, my, icon: Icon }) => (
-              <NavLink key={to} to={to} className={desktopNavClass}>
-                <Icon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
-                {tx(en, my)}
-              </NavLink>
-            ))}
-            <div className="ml-auto flex shrink-0 items-center gap-1 pr-1">
-              <NavLink to="/availability" className={desktopNavClass}>{tx("Availability", "အလုပ်ဆင်းနိုင်မှု")}</NavLink>
-              <NavLink to="/documents" className={desktopNavClass}>{tx("Documents", "စာရွက်စာတမ်း")}</NavLink>
-              <NavLink to="/support" className={desktopNavClass}>{tx("Support", "အကူအညီ")}</NavLink>
-            </div>
+          <nav aria-label={tx("Primary Rider navigation","Rider လုပ်ငန်းမီနူး")} className="be-rider-desktop-nav mt-3 hidden items-center gap-1 rounded-2xl bg-slate-100/80 p-1 lg:flex">
+            {primaryNav.map(({to,en,my,icon:Icon})=><NavLink key={to} to={to} className={desktopNavClass}><Icon className="h-4 w-4"/>{tx(en,my)}</NavLink>)}
+            <details className="group relative ml-auto">
+              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-4 text-sm font-bold text-slate-600 hover:bg-white"><Menu className="h-4 w-4"/>{tx("More","နောက်ထပ်")}</summary>
+              <div className="absolute right-0 top-full z-50 mt-2 grid w-56 gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                {secondaryNav.map(({to,en,my,icon:Icon})=><NavLink key={to} to={to} className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-slate-700 hover:bg-blue-50"><Icon className="h-4 w-4"/>{tx(en,my)}</NavLink>)}
+                {[
+                  ["/availability",tx("Availability","အလုပ်ဆင်းနိုင်မှု")],
+                  ["/documents",tx("Documents","စာရွက်စာတမ်း")],
+                  ["/support",tx("Support","အကူအညီ")]
+                ].map(([to,label])=><NavLink key={to} to={to} className="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-slate-700 hover:bg-blue-50">{label}</NavLink>)}
+              </div>
+            </details>
           </nav>
         </div>
       </header>
@@ -290,21 +296,18 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <nav className="be-mobile-bottom-nav fixed z-40 rounded-[24px] border border-white/70 bg-white/95 p-1.5 shadow-[0_22px_60px_rgba(15,23,42,.20)] backdrop-blur-2xl lg:hidden">
-        <div className="be-mobile-nav-scroll flex items-stretch gap-0.5 overflow-x-auto px-0.5">
-          {navItems.map(({ to, en, my, icon: Icon }) => (
-            <NavLink key={to} to={to} className={mobileNavClass}>
-              {({ isActive }) => (
-                <>
-                  {isActive && <span className="absolute inset-x-2 top-0 h-0.5 rounded-full bg-blue-600" />}
-                  <span className={["grid h-8 w-8 place-items-center rounded-xl transition-all", isActive ? "bg-blue-50" : ""].join(" ")}>
-                    <Icon className="h-[18px] w-[18px]" />
-                  </span>
-                  <span className="max-w-[64px] truncate">{tx(en, my)}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
+      <nav aria-label={tx("Mobile Rider navigation","Rider မီနူး")} className="be-mobile-bottom-nav fixed z-40 rounded-[24px] border border-white/70 bg-white/95 p-1.5 shadow-[0_22px_60px_rgba(15,23,42,.20)] backdrop-blur-2xl lg:hidden">
+        {openMore&&<div className="absolute bottom-full right-0 mb-3 grid w-64 gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+          {secondaryNav.map(({to,en,my,icon:Icon})=><NavLink key={to} to={to} onClick={()=>setOpenMore(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-slate-700 hover:bg-blue-50"><Icon className="h-4 w-4"/>{tx(en,my)}</NavLink>)}
+          {[["/availability",tx("Availability","အလုပ်ဆင်းနိုင်မှု")],["/documents",tx("Documents","စာရွက်စာတမ်း")],["/support",tx("Support","အကူအညီ")]].map(([to,label])=><NavLink key={to} to={to} onClick={()=>setOpenMore(false)} className="flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-slate-700 hover:bg-blue-50">{label}</NavLink>)}
+        </div>}
+        <div className="flex items-stretch gap-0.5 px-0.5">
+          {primaryNav.map(({to,en,my,icon:Icon})=><NavLink key={to} to={to} onClick={()=>setOpenMore(false)} className={mobileNavClass}>{({isActive})=><>
+            {isActive&&<span className="absolute inset-x-2 top-0 h-0.5 rounded-full bg-blue-600"/>}
+            <span className={`grid h-8 w-8 place-items-center rounded-xl ${isActive?"bg-blue-50":""}`}><Icon className="h-[18px] w-[18px]"/></span>
+            <span className="max-w-[64px] truncate">{tx(en,my)}</span>
+          </>}</NavLink>)}
+          <button type="button" aria-expanded={openMore} onClick={()=>setOpenMore(value=>!value)} className="be-mobile-nav-item relative flex min-w-[56px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[10px] font-bold text-slate-600"><Menu className="h-[18px] w-[18px]"/>{tx("More","နောက်ထပ်")}</button>
         </div>
       </nav>
     </div>
