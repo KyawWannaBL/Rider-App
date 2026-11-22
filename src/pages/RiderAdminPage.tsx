@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Activity, AlertTriangle, ArrowRight, Bell, CalendarDays, CheckCircle2,
+  Activity, AlertTriangle, ArrowRight, CalendarDays, CheckCircle2,
   ClipboardList, Globe2, LogOut, MessageSquare, RefreshCw, Search,
-  Send, ShieldCheck, Truck, Users, WalletCards
+  Send, Truck, Users, WalletCards
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useAppState } from "../hooks/useAppState";
@@ -166,7 +166,7 @@ export default function RiderAdminPage() {
             <h2 className="mt-2 text-2xl font-bold sm:text-3xl">{tx("All field operations, one view.","ဝန်ထမ်းအားလုံး၏ လုပ်ငန်းအခြေအနေ")}</h2>
             <p className="mt-2 text-sm text-slate-300">{profile?.identity?.display_name||"Rider Administrator"} · {tx("All branches · Authorized admin only","ဌာနခွဲအားလုံး · အခွင့်အာဏာရှိသူသာ")}</p>
           </div>
-          <button type="button" onClick={()=>void refresh()} disabled={loading} className={button+" bg-amber-300 text-slate-950 hover:bg-amber-200"}><RefreshCw className={\`h-4 w-4 \${loading?"animate-spin":""}\`}/>{tx("Refresh live data","အချက်အလက် ပြန်လည်စစ်ဆေး")}</button>
+          <button type="button" onClick={()=>void refresh()} disabled={loading} className={button+" bg-amber-300 text-slate-950 hover:bg-amber-200"}><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>{tx("Refresh live data","အချက်အလက် ပြန်လည်စစ်ဆေး")}</button>
         </div>
       </section>
       <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4">
@@ -186,7 +186,7 @@ export default function RiderAdminPage() {
           ] as const).map(([label,value,Icon])=><div key={label} className={box}><Icon className="h-5 w-5 text-blue-700"/><p className="mt-3 text-3xl font-bold tabular-nums">{value}</p><p className="mt-1 text-xs font-semibold text-slate-600">{label}</p></div>)}
         </div>
         <nav role="tablist" aria-label={tx("Admin sections","စီမံခန့်ခွဲမှု ကဏ္ဍများ")} className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2">
-          {tabs.map(({key,en,my,icon:Icon})=><button key={key} type="button" role="tab" aria-selected={tab===key} onClick={()=>{setTab(key);setQuery("")}} className={\`flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold \${tab===key?"bg-blue-700 text-white":"text-slate-600 hover:bg-slate-100"}\`}><Icon className="h-4 w-4"/>{tx(en,my)}</button>)}
+          {tabs.map(({key,en,my,icon:Icon})=><button key={key} type="button" role="tab" aria-selected={tab===key} onClick={()=>{setTab(key);setQuery("")}} className={`flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold ${tab===key?"bg-blue-700 text-white":"text-slate-600 hover:bg-slate-100"}`}><Icon className="h-4 w-4"/>{tx(en,my)}</button>)}
         </nav>
         {tab==="overview"&&<div className="grid gap-4 md:grid-cols-2">
           <div className={box}><h3 className="text-lg font-bold">{tx("Work needing attention","စောင့်ကြည့်ရန် လုပ်ငန်းများ")}</h3>
@@ -234,13 +234,13 @@ export default function RiderAdminPage() {
                 {workers.map((w,i)=><option key={w.worker_code||i} value={w.worker_code}>{w.display_name||w.worker_code}</option>)}
               </select></label></div>
           <div className="mt-4 overflow-x-auto"><table className="min-w-[860px] w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Way ID</th><th className="p-3">Wayplan</th><th className="p-3">{tx("Team","အဖွဲ့")}</th><th className="p-3">{tx("Status","အခြေအနေ")}</th><th className="p-3">{tx("Proof","ဓာတ်ပုံ")}</th><th className="p-3">COD</th></tr></thead><tbody>
-            {filteredJobs.map((j,i)=><tr key={(j.delivery_way_id||"")+"-"+i} className="border-b border-slate-100 last:border-0"><td className="p-3 font-mono font-semibold">{j.delivery_way_id||j.pickup_id||"-"}</td><td className="p-3">{j.wayplan_id||"-"}</td><td className="p-3 text-xs">{[j.rider_code,j.driver_code,j.helper_code].filter(Boolean).join(" / ")||"-"}</td><td className="p-3"><span className={\`rounded-lg px-2 py-1 text-xs font-semibold \${isFinished(j)?"bg-emerald-50 text-emerald-800":isFailed(j)?"bg-rose-50 text-rose-800":"bg-amber-50 text-amber-800"}\`}>{j.stop_status||j.rider_status||j.wayplan_status||"-"}</span></td><td className="p-3">{j.has_proof?tx("Yes","ရှိ"):tx("No","မရှိ")}</td><td className="p-3 tabular-nums">{money(j.cod_collected??j.cod_amount)}</td></tr>)}
+            {filteredJobs.map((j,i)=><tr key={(j.delivery_way_id||"")+"-"+i} className="border-b border-slate-100 last:border-0"><td className="p-3 font-mono font-semibold">{j.delivery_way_id||j.pickup_id||"-"}</td><td className="p-3">{j.wayplan_id||"-"}</td><td className="p-3 text-xs">{[j.rider_code,j.driver_code,j.helper_code].filter(Boolean).join(" / ")||"-"}</td><td className="p-3"><span className={`rounded-lg px-2 py-1 text-xs font-semibold ${isFinished(j)?"bg-emerald-50 text-emerald-800":isFailed(j)?"bg-rose-50 text-rose-800":"bg-amber-50 text-amber-800"}`}>{j.stop_status||j.rider_status||j.wayplan_status||"-"}</span></td><td className="p-3">{j.has_proof?tx("Yes","ရှိ"):tx("No","မရှိ")}</td><td className="p-3 tabular-nums">{money(j.cod_collected??j.cod_amount)}</td></tr>)}
           </tbody></table></div>
           {!filteredJobs.length&&<p className="p-5 text-center text-sm text-slate-500">{tx("No matching ways in this date range.","ဤရက်စွဲတွင် ကိုက်ညီသော Way မရှိပါ။")}</p>}
         </section>}
         {tab==="finance"&&<section className={box}><h3 className="text-lg font-bold">{tx("Field settlement reconciliation","လုပ်ငန်းခွင် ငွေစာရင်းနှိုင်းယှဉ်မှု")}</h3><p className="mt-1 text-sm text-slate-500">{tx("Read-only monitoring. Clearing and approval remain with authorized Finance workflows.","ဤနေရာတွင် ကြည့်ရှုရန်သာ။ အတည်ပြု/ရှင်းလင်းခြင်းကို Finance မှသာ ဆောင်ရွက်ပါ။")}</p>
           <div className="mt-4 overflow-x-auto"><table className="min-w-[800px] w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">{tx("Date","ရက်စွဲ")}</th><th className="p-3">Wayplan</th><th className="p-3">{tx("Staff","ဝန်ထမ်း")}</th><th className="p-3">{tx("Expected","မျှော်မှန်း")}</th><th className="p-3">{tx("Collected","ကောက်ခံ")}</th><th className="p-3">{tx("Variance","ကွာဟမှု")}</th><th className="p-3">{tx("Status","အခြေအနေ")}</th></tr></thead><tbody>
-            {settlements.map((f,i)=><tr key={(f.wayplan_id||"")+i} className="border-b border-slate-100"><td className="p-3">{f.work_date||"-"}</td><td className="p-3 font-mono font-semibold">{f.wayplan_id}</td><td className="p-3 text-xs">{[f.rider_code,f.driver_code,f.helper_code].filter(Boolean).join(" / ")||"-"}</td><td className="p-3">{money(f.expected_cod)}</td><td className="p-3">{money(f.actual_collected)}</td><td className={\`p-3 font-semibold \${Math.abs(Number(f.variance_amount||0))>0?"text-rose-700":""}\`}>{money(f.variance_amount)}</td><td className="p-3">{f.status||"-"}</td></tr>)}
+            {settlements.map((f,i)=><tr key={(f.wayplan_id||"")+i} className="border-b border-slate-100"><td className="p-3">{f.work_date||"-"}</td><td className="p-3 font-mono font-semibold">{f.wayplan_id}</td><td className="p-3 text-xs">{[f.rider_code,f.driver_code,f.helper_code].filter(Boolean).join(" / ")||"-"}</td><td className="p-3">{money(f.expected_cod)}</td><td className="p-3">{money(f.actual_collected)}</td><td className={`p-3 font-semibold ${Math.abs(Number(f.variance_amount||0))>0?"text-rose-700":""}`}>{money(f.variance_amount)}</td><td className="p-3">{f.status||"-"}</td></tr>)}
           </tbody></table></div>{settlements.length===0&&<p className="mt-4 text-sm text-slate-500">{tx("No settlement rows within selected period.","ရွေးထားသည့်ကာလတွင် ငွေစာရင်းမရှိပါ။")}</p>}
         </section>}
         {tab==="messages"&&<section className={box}><h3 className="text-lg font-bold">{tx("Send staff notification","ဝန်ထမ်းထံ အသိပေးစာပို့ရန်")}</h3>
