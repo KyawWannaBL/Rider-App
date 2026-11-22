@@ -191,7 +191,7 @@ export default function Dashboard() {
               <h1 id="rider-home-heading" className="mt-2 text-2xl font-bold sm:text-3xl">{tx("Good day. Here's your work.","မင်္ဂလာပါ။ ယနေ့တာဝန်များ")}</h1>
               <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">{daily.identity?.display_name||data.identity?.display_name||tx("Field team member","ဝန်ထမ်း")} · {data.identity?.branch_code||tx("Branch not assigned","ဌာနခွဲ မသတ်မှတ်ရသေး")}</p>
             </div>
-            <button type="button" onClick={()=>void load()} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>{tx("Refresh","ပြန်လည်စစ်ဆေး")}</button>
+            <button type="button" onClick={load} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white hover:bg-white/20 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>{tx("Refresh","ပြန်လည်စစ်ဆေး")}</button>
           </div>
           <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
             {([
@@ -220,7 +220,8 @@ export default function Dashboard() {
           ))}
         </nav>
 
-        {syncError?<div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">{tx("Some Enterprise data could not be synchronized: ","Enterprise အချက်အလက်အချို့ ချိတ်ဆက်မရပါ။ ")}{syncError} <button type="button" onClick={()=>void load()} className="ml-2 underline">{tx("Retry","ထပ်စမ်းရန်")}</button></div>:null}
+        {!syncError&&message?<div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">{message}</div>:null}
+        {syncError?<div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">{tx("Some Enterprise data could not be synchronized: ","Enterprise အချက်အလက်အချို့ ချိတ်ဆက်မရပါ။ ")}{syncError} <button type="button" onClick={load} className="ml-2 underline">{tx("Retry","ထပ်စမ်းရန်")}</button></div>:null}
         {mobileError?<div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">{mobileError} <button onClick={()=>void load()} type="button" className="ml-2 underline">{tx("Retry","ထပ်စမ်းရန်")}</button></div>:null}
         {activeView==="home"&&<>
           <section aria-label={tx("Operational notifications","လုပ်ငန်းဆိုင်ရာ အသိပေးချက်များ")} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
