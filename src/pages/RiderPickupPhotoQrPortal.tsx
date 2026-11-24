@@ -125,6 +125,8 @@ export default function RiderPickupPhotoQrPortal() {
   const [countReason, setCountReason] = useState("");
   const [countRequestPending, setCountRequestPending] = useState(false);
   const [parcels, setParcels] = useState<ParcelDraft[]>([]);
+  const [photoRequired,setPhotoRequired]=useState(true);
+  const [photoPolicyError,setPhotoPolicyError]=useState("");
   const [search, setSearch] = useState(params.pickupId || "");
   const [message, setMessage] = useState(language === "my" ? "တာဝန်ပေးထားသော Pickup များကို ဖွင့်နေသည်..." : "Loading assigned pickups...");
   const [loading, setLoading] = useState(false);
@@ -159,6 +161,16 @@ export default function RiderPickupPhotoQrPortal() {
   const failedDraftLines = useRef(new Map<string, number>());
   const draftWriteVersions = useRef(new Map<string, number>());
   useEffect(() => { parcelDraftsRef.current = parcels; }, [parcels]);
+  useEffect(() => {
+    let active=true;
+    (supabase as any).rpc("be_pickup_photo_required_v1").then(({data,error}:any)=>{
+      if(!active)return;
+      if(error){setPhotoRequired(true);setPhotoPolicyError(error.message||"Could not load photo requirement policy.");}
+      else {setPhotoRequired(data!==false);setPhotoPolicyError("");}
+    }).catch((error:any)=>{if(active){setPhotoRequired(true);setPhotoPolicyError(error?.message||"Photo policy is unavailable.");}});
+    return ()=>{active=false;};
+  }, []);
+
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; for (const url of previewUrls.current.values()) URL.revokeObjectURL(url); previewUrls.current.clear(); }; }, []);
 
   function photoPreview(file: File, _pickup: string, _line: number) {
@@ -777,8 +789,53 @@ export default function RiderPickupPhotoQrPortal() {
     finally {setActionBusy("");}
   }
 
+  async function submitTemporaryWeightOnlyVerification() {
+    if (!selectedPickup || photoRequired || countRequestPending || actionBusy) return;
+    const pickupId=safeText(selectedPickup.pickup_id||selectedPickup.pickup_way_id,"");
+    const input=parcelDraftsRef.current;
+    if (!input.length || input.some(row=>!Number.isFinite(Number(row.parcel_weight)) || Number(row.parcel_weight)<=0)) {
+      setMessage(tx("Enter the actual weight for EVERY parcel before temporary photo-free verification.",
+        "ယာယီဓာတ်ပုံမပါဘဲ အတည်ပြုရန် Parcel အားလုံး၏ အမှန်တကယ်အလေးချိန်ကို ထည့်ပါ။"));
+      return;
+    }
+    if (activePickupRef.current!==pickupId) {
+      setMessage(tx("Pickup changed. Reopen the correct pickup.","Pickup ပြောင်းသွားပါသည်။ ပြန်ဖွင့်ပါ။"));return;
+    }
+    setActionBusy("verify");
+    try {
+      const {data:session,error:sessionError}=await supabase.auth.getSession();
+      if(sessionError)throw sessionError;
+      if(!session.session?.user?.id || session.session.user.id!==draftUserRef.current)throw new Error("Sign in with your assigned field-team account.");
+      const {data:rule,error:ruleError}=await (supabase as any).rpc("be_pickup_photo_required_v1");
+      if(ruleError || rule!==false) {
+        setPhotoRequired(true);
+        throw new Error("Photo requirement has been restored by Super Admin. Upload pickup photos.");
+      }
+      const {data,error}=await (supabase as any).rpc("be_field_team_pickup_action",{
+        p_payload:{
+          pickup_id:pickupId, action:"verify",
+          parcels:input.map(row=>({
+            parcel_sequence:row.line_no,
+            actual_weight_kg:Number(row.parcel_weight),
+            delivery_way_id:row.authoritative_delivery_way_id||null,
+            remarks:row.remarks||"Temporary Super Admin photo waiver — rider training backlog"
+          }))
+        }
+      });
+      if(error)throw error;
+      if(data?.ok!==true || data?.pickup_verified!==true)throw new Error(data?.message||data?.error||"Pickup verification remains incomplete.");
+      const current=await refreshPickupAfterAction(pickupId);
+      setMessage(tx(
+        `${pickupId}: Parcel counts and actual weights verified without photos under the temporary Super Admin waiver. Confirm physical collection next. ${String(current.next_action||"").replace(/_/g," ")}.`,
+        `${pickupId}: ယာယီ Super Admin ခွင့်ပြုချက်ဖြင့် ဓာတ်ပုံမလိုဘဲ အလေးချိန်နှင့်အရေအတွက် အတည်ပြုပြီးပါပြီ။ ပစ္စည်းကောက်ယူမှုကို ဆက်လက်အတည်ပြုပါ။`
+      ));
+    }catch(error:any){setMessage(error?.message||"Temporary photo-free verification failed.");}
+    finally{setActionBusy("");}
+  }
+
   async function submitPickupVerification() {
     if (!selectedPickup) return;
+    if (!photoRequired) { await submitTemporaryWeightOnlyVerification(); return; }
     if (countRequestPending) { setMessage("Pickup count correction is pending supervisor review. Refresh after approval before verifying."); return; }
     const pickupId = safeText(selectedPickup.pickup_id || selectedPickup.pickup_way_id, "");
     const validSaved = parcels.filter((p) => p.saved);
@@ -996,8 +1053,10 @@ export default function RiderPickupPhotoQrPortal() {
     return Number.isFinite(weight) && weight > 0 && hasPhoto && !parcel.saved;
   }).length;
   const nextAction = String(selectedPickup?.next_action || "");
-  const canSubmitVerification = Boolean(selectedPickup?.can_open_workspace) && nextAction === "CAPTURE_AND_VERIFY" && savedCount > 0;
+  const allParcelWeightsReady=parcels.length>0 && parcels.every(p=>Number.isFinite(Number(p.parcel_weight))&&Number(p.parcel_weight)>0);
+  const canSubmitVerification = Boolean(selectedPickup?.can_open_workspace) && nextAction === "CAPTURE_AND_VERIFY" && (photoRequired ? savedCount>0 : allParcelWeightsReady);
   const canReleaseToDataEntry = Boolean(selectedPickup?.can_open_workspace) && nextAction === "COLLECT_PICKUP";
+  const temporaryPhotoNotice=!photoRequired?tx("TEMPORARY SUPER ADMIN RULE: Photo upload is optional. Record actual weight for every parcel; collection confirmation is still mandatory.","SUPER ADMIN ယာယီစည်းမျဉ်း - ဓာတ်ပုံတင်ရန်မလိုသေးပါ။ Parcel အားလုံး၏ အလေးချိန်ထည့်ပြီး ကောက်ယူမှု အတည်ပြုပါ။"):"";
   const finalizationHint = nextAction === "WAIT_FOR_TEAM_ACCEPTANCE"
     ? tx("Waiting for the remaining assigned field worker to accept. Parcel photos can be saved now, but pickup verification must wait.", "တာဝန်ပေးထားသော field team မှ ကျန်သူ၏ တာဝန်လက်ခံမှုကို စောင့်နေသည်။ Parcel ဓာတ်ပုံများကို သိမ်းနိုင်သော်လည်း Pickup Verification ကို စောင့်ရပါမည်။")
     : nextAction === "ACCEPT_ASSIGNMENT"
@@ -1005,8 +1064,8 @@ export default function RiderPickupPhotoQrPortal() {
       : nextAction === "START_PICKUP" || nextAction === "ARRIVE_AT_PICKUP"
         ? tx("Start the trip and confirm arrival at the pickup before submitting verification.", "Verification မတင်မီ ခရီးစတင်ပြီး Pickup နေရာသို့ ရောက်ရှိမှုကို အတည်ပြုပါ။")
         : nextAction === "CAPTURE_AND_VERIFY"
-          ? savedCount === 0
-            ? tx("Save at least one parcel with weight and photo to submit verification.", "Verification တင်ရန် အလေးချိန်နှင့် ဓာတ်ပုံပါ Parcel အနည်းဆုံးတစ်ခု သိမ်းပါ။")
+          ? (photoRequired ? savedCount === 0 : !allParcelWeightsReady)
+            ? photoRequired ? tx("Save at least one parcel with weight and photo to submit verification.", "Verification တင်ရန် အလေးချိန်နှင့် ဓာတ်ပုံပါ Parcel အနည်းဆုံးတစ်ခု သိမ်းပါ။") : tx("Enter actual weights for all parcels. Photos are temporarily optional.", "Parcel အားလုံး၏ အလေးချိန်ထည့်ပါ။ ဓာတ်ပုံ ယာယီမလိုပါ။")
             : tx("Submit verification now. Collection becomes available after the server confirms it.", "ယခု Verification တင်နိုင်ပါပြီ။ Server အတည်ပြုပြီးနောက် Collection ကို လုပ်နိုင်ပါမည်။")
           : nextAction === "COLLECT_PICKUP"
             ? tx("Verification is complete. Confirm physical collection to release this pickup to Data Entry.", "Verification ပြီးပါပြီ။ Data Entry သို့ လွှဲရန် ပစ္စည်းကောက်ယူပြီးကြောင်း အတည်ပြုပါ။")
@@ -1170,7 +1229,7 @@ export default function RiderPickupPhotoQrPortal() {
                       </button>
                     )}
                     {nextAction === "CAPTURE_AND_VERIFY" && (
-                      <button onClick={submitPickupVerification} disabled={!!actionBusy || savedCount === 0 || countRequestPending} className="rounded-2xl bg-violet-700 px-5 py-3 font-black text-white disabled:opacity-40">
+                      <button onClick={submitPickupVerification} disabled={!!actionBusy || !canSubmitVerification || countRequestPending} className="rounded-2xl bg-violet-700 px-5 py-3 font-black text-white disabled:opacity-40">
                         {tx("Submit Verification","Verification တင်သွင်းရန်")}
                       </button>
                     )}
@@ -1518,10 +1577,12 @@ export default function RiderPickupPhotoQrPortal() {
       {selectedPickup && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-blue-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur">
           <div className="mx-auto max-w-[1200px]">
+            {temporaryPhotoNotice&&<div role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-900">{temporaryPhotoNotice}</div>}
+            {photoPolicyError&&<div role="alert" className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{photoPolicyError}</div>}
             <p className="mb-2 text-xs font-bold text-slate-700" role="status">{pickupId} · {finalizationHint}</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-              <button type="button" onClick={submitPickupVerification} disabled={!canSubmitVerification || !!actionBusy} className="rounded-xl bg-violet-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600">
-                {actionBusy === "verify" ? tx("Submitting Verification...", "Verification တင်နေသည်...") : tx("Submit Verification", "Verification တင်သွင်းရန်")}
+              <button type="button" onClick={submitPickupVerification} disabled={!canSubmitVerification || !!actionBusy || countRequestPending} className="rounded-xl bg-violet-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600">
+                {actionBusy === "verify" ? tx("Submitting Verification...", "Verification တင်နေသည်...") : photoRequired ? tx("Submit Verification", "Verification တင်သွင်းရန်") : tx("Verify weights (photos optional)", "ဓာတ်ပုံမလိုဘဲ အလေးချိန်အတည်ပြုရန်")}
               </button>
               <button type="button" onClick={() => performPickupAction("collect_pickup")} disabled={!canReleaseToDataEntry || !!actionBusy} className="rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600">
                 {actionBusy === "collect_pickup" ? tx("Confirming Collection...", "ကောက်ယူမှု အတည်ပြုနေသည်...") : tx("Confirm Collection & Release to Data Entry", "ကောက်ယူပြီး Data Entry သို့ လွှဲရန်")}
